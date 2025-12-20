@@ -2,11 +2,11 @@
 
 The task specification, grading suite and participant guides for the BSc Thesis Case Study evaluating the [Agentic Project Management (APM)](https://github.com/sdi2200262/agentic-project-management) framework against other approaches in AI-assisted software development.
 
-## Current Task Version
+## Task Summary
 
-**Version 1.0.0** - *Get Course Announcements and C Replica*
+*Get Course Announcements and C Replica*
 
-The task requires participants to implement new functionality in a Python MCP server and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that replicates participant's working environment.
+Participants implement new functionality in a Python MCP server (`get_course_announcements` tool) and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that replicates the participant's working environment.
 
 ## Scoring
 

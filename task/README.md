@@ -11,7 +11,7 @@ This directory contains the task specification materials provided to participant
 
 ## Task Overview
 
-**Version 1.0.0** - *Get Course Announcements and C Replica*
+*Get Course Announcements and C Replica*
 
 Participants are tasked with:
 1. Implementing a new `get_course_announcements` tool in the existing Python MCP server: `eclass-mcp-server`

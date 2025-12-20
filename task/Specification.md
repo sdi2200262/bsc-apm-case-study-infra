@@ -129,6 +129,8 @@ The `days_back` parameter is a strict functional requirement.
 
 ## 5. Acceptance Criteria
 
+All responses from the `get_course_announcements` tool must match the exact formats specified below. Deviations in string content, punctuation, or output structure will result in non-conforming behavior.
+
 ### Tool: `get_course_announcements` (Both Implementations)
 
 | WHEN... | THEN... |
@@ -136,8 +138,8 @@ The `days_back` parameter is a strict functional requirement.
 | **User is not logged in** | Must return exact error string: `"Error: Not logged in."` |
 | **Invalid `course_url`** | Must return exact error string: `"Error: Could not extract course code."` |
 | **No announcements found** | Must return exact success string: `"No announcements found."` |
-| **Valid URL + `days_back=X`** | Returns list containing *only* announcements from the last `X` days. |
-| **Valid URL + No `days_back`** | Returns list containing announcements from the last 30 days. |
+| **Valid URL + `days_back=X`** | Returns list containing *only* announcements from the last `X` days. Output must follow the format defined in Section 2 (Feature Specification). |
+| **Valid URL + No `days_back`** | Returns list containing announcements from the last 30 days (default). Output must follow the format defined in Section 2 (Feature Specification). |
 
 ### C Replica System Behavior
 
