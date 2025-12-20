@@ -27,16 +27,16 @@ class BuildTester:
         self.eclass_dir = Path(eclass_dir).resolve()
         self.c_replica_dir = self.eclass_dir / "c-replica"
     
-    def test_python_build(self) -> Tuple[bool, str]:
+    def test_python_build(self) -> Tuple[bool, str, str]:
         """
         Test Python dependency installation with uv sync, falling back to pip.
         
         Returns:
-            (success, message)
+            (success, message, full_output)
         """
         pyproject = self.eclass_dir / "pyproject.toml"
         if not pyproject.exists():
-            return False, "pyproject.toml not found"
+            return False, "pyproject.toml not found", "pyproject.toml not found in eclass-mcp-server directory"
         
         env = _get_extended_env()
         
@@ -51,8 +51,8 @@ class BuildTester:
                 env=env
             )
             if result.returncode == 0:
-                return True, "uv sync completed successfully"
-            return False, f"uv sync failed: {result.stderr[:300]}"
+                return True, "uv sync completed successfully", result.stdout or "uv sync completed"
+            return False, f"uv sync failed: {result.stderr[:300]}", result.stderr
             
         except FileNotFoundError:
             # Fall back to pip
@@ -66,31 +66,31 @@ class BuildTester:
                     env=env
                 )
                 if result.returncode == 0:
-                    return True, "pip install -e . completed (uv not found)"
-                return False, f"pip install failed: {result.stderr[:300]}"
+                    return True, "pip install -e . completed (uv not found)", result.stdout or "pip install completed"
+                return False, f"pip install failed: {result.stderr[:300]}", result.stderr
             except FileNotFoundError:
-                return False, "Neither uv nor pip found"
+                return False, "Neither uv nor pip found", "Neither uv nor pip found in PATH"
             except subprocess.TimeoutExpired:
-                return False, "pip install timed out (120s)"
+                return False, "pip install timed out (120s)", "pip install -e . timed out after 120 seconds"
                 
         except subprocess.TimeoutExpired:
-            return False, "uv sync timed out (120s)"
+            return False, "uv sync timed out (120s)", "uv sync timed out after 120 seconds"
         except Exception as e:
-            return False, f"Build error: {e}"
+            return False, f"Build error: {e}", str(e)
     
-    def test_c_build(self) -> Tuple[bool, str]:
+    def test_c_build(self) -> Tuple[bool, str, str]:
         """
         Test C compilation with make c-server.
         
         Returns:
-            (success, message)
+            (success, message, full_output)
         """
         if not self.c_replica_dir.exists():
-            return False, "c-replica/ directory not found"
+            return False, "c-replica/ directory not found", "c-replica/ directory not found in eclass-mcp-server"
         
         makefile = self.c_replica_dir / "Makefile"
         if not makefile.exists():
-            return False, "Makefile not found in c-replica/"
+            return False, "Makefile not found in c-replica/", "Makefile not found in c-replica/ directory"
         
         # Clean previous builds
         subprocess.run(["make", "clean"], cwd=self.c_replica_dir, 
@@ -108,24 +108,24 @@ class BuildTester:
             if result.returncode != 0:
                 err = result.stderr or result.stdout
                 if "libxml" in err:
-                    return False, "make c-server failed: missing libxml2-dev"
+                    return False, "make c-server failed: missing libxml2-dev", err
                 if "curl" in err:
-                    return False, "make c-server failed: missing libcurl-dev"
-                return False, f"make c-server failed: {err[:300]}"
+                    return False, "make c-server failed: missing libcurl-dev", err
+                return False, f"make c-server failed: {err[:300]}", err
             
             # Verify binary exists
             server_binary = self.c_replica_dir / "server"
             if not server_binary.exists():
-                return False, "Compilation succeeded but 'server' binary not found"
+                return False, "Compilation succeeded but 'server' binary not found", "make c-server completed but server binary was not created"
             
             if not os.access(server_binary, os.X_OK):
-                return False, "'server' binary exists but is not executable"
+                return False, "'server' binary exists but is not executable", "server binary exists but lacks execute permission"
             
-            return True, "make c-server completed, server binary created"
+            return True, "make c-server completed, server binary created", result.stdout or "Compilation successful"
             
         except subprocess.TimeoutExpired:
-            return False, "make c-server timed out (120s)"
+            return False, "make c-server timed out (120s)", "make c-server timed out after 120 seconds"
         except FileNotFoundError:
-            return False, "make command not found"
+            return False, "make command not found", "make command not found in PATH"
         except Exception as e:
-            return False, f"C build error: {e}"
+            return False, f"C build error: {e}", str(e)

@@ -31,23 +31,23 @@ class MemoryTester:
         self.server_binary = self.c_replica_dir / "server"
         self.env_vars = env_vars or {}
     
-    def test_valgrind(self) -> Tuple[bool, str]:
+    def test_valgrind(self) -> Tuple[bool, str, str]:
         """
         Run Valgrind on the C server with a full session sequence.
         
         Tests: initialize -> login -> get_courses -> authstatus -> logout
         
         Returns:
-            (success, message)
+            (success, message, full_output)
         """
         if not self.server_binary.exists():
-            return False, "Server binary not found"
+            return False, "Server binary not found", "Server binary not found at c-replica/server"
         
         # Check Valgrind availability
         try:
             subprocess.run(["valgrind", "--version"], capture_output=True, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            return False, "Valgrind not available"
+            return False, "Valgrind not available", "Valgrind not installed or not in PATH"
         
         # JSON-RPC sequence for testing
         sequence = self._build_test_sequence()
@@ -76,14 +76,14 @@ class MemoryTester:
             indirectly_lost = self._parse_leak(output, "indirectly lost")
             
             if definitely_lost == 0 and indirectly_lost == 0:
-                return True, "Memory clean: 0 bytes definitely lost, 0 bytes indirectly lost"
+                return True, "Memory clean: 0 bytes definitely lost, 0 bytes indirectly lost", output
             
-            return False, f"Memory leaks: {definitely_lost} bytes definitely lost, {indirectly_lost} bytes indirectly lost"
+            return False, f"Memory leaks: {definitely_lost} bytes definitely lost, {indirectly_lost} bytes indirectly lost", output
             
         except subprocess.TimeoutExpired:
-            return False, "Valgrind timed out (60s)"
+            return False, "Valgrind timed out (60s)", "Valgrind timed out after 60 seconds"
         except Exception as e:
-            return False, f"Valgrind error: {e}"
+            return False, f"Valgrind error: {e}", str(e)
     
     def _build_test_sequence(self) -> str:
         """Build JSON-RPC test sequence for memory testing."""

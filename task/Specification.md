@@ -160,5 +160,5 @@ All responses from the `get_course_announcements` tool must match the exact form
 * **Location:** A new directory named `c-replica/` inside the `eclass-mcp-server/` codebase.
 * **Artifacts:**
   * **Implementation:** Source code files (`.c`) and headers (`.h`).
-  * **Makefile:** A valid Makefile with a default target or a specific `c-server` target.
+  * **Makefile:** A valid Makefile with a `c-server` target.
     * **Constraint:** Running `make c-server` must compile the source and produce a binary named `server` in the same directory. It must strictly link against the system libraries (`libcurl`, `libxml2`).

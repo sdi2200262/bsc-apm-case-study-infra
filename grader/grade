@@ -133,8 +133,8 @@ def main():
         # Python build test
         print("\n[3/8] Testing Python build...")
         build_tester = BuildTester(eclass_dir)
-        py_build_ok, py_build_msg = build_tester.test_python_build()
-        scorer.record("B1", py_build_ok, py_build_msg, py_build_msg)
+        py_build_ok, py_build_msg, py_build_full = build_tester.test_python_build()
+        scorer.record("B1", py_build_ok, py_build_msg, py_build_full)
         print(f"  {'OK' if py_build_ok else 'FAIL'}: {py_build_msg[:80]}")
         
         if not py_build_ok:
@@ -175,8 +175,8 @@ def main():
         
         # C build test
         print("\n[6/8] Testing C build...")
-        c_build_ok, c_build_msg = build_tester.test_c_build()
-        scorer.record("B2", c_build_ok, c_build_msg, c_build_msg)
+        c_build_ok, c_build_msg, c_build_full = build_tester.test_c_build()
+        scorer.record("B2", c_build_ok, c_build_msg, c_build_full)
         print(f"  {'OK' if c_build_ok else 'FAIL'}: {c_build_msg[:80]}")
         
         if not c_build_ok:
@@ -192,8 +192,8 @@ def main():
             
             try:
                 memory_tester = MemoryTester(eclass_dir, sso_mock.get_env())
-                mem_ok, mem_msg = memory_tester.test_valgrind()
-                scorer.record("M1", mem_ok, mem_msg, mem_msg)
+                mem_ok, mem_msg, mem_full = memory_tester.test_valgrind()
+                scorer.record("M1", mem_ok, mem_msg, mem_full)
                 print(f"  {'OK' if mem_ok else 'FAIL'}: {mem_msg[:80]}")
             finally:
                 sso_mock.stop()
