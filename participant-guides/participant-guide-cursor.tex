@@ -1,0 +1,607 @@
+%!TEX program = pdflatex
+%!TEX encoding = UTF-8 Unicode
+
+\documentclass[11pt, a4paper]{article}
+
+% ============================================================================
+% PACKAGES
+% ============================================================================
+
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage[most]{tcolorbox}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{titlesec}
+
+% ============================================================================
+% CONFIGURATION
+% ============================================================================
+
+% Colors
+\definecolor{codebackground}{RGB}{246, 248, 250}
+\definecolor{codebordercolor}{RGB}{87, 178, 255}
+\definecolor{codekeyword}{RGB}{207, 34, 46}
+\definecolor{codestring}{RGB}{3, 47, 98}
+\definecolor{codecomment}{RGB}{87, 96, 106}
+\definecolor{codetextcolor}{RGB}{31, 35, 40}
+
+% Clean modern code listing style (GitHub-inspired)
+\newtcblisting{codebox}{
+    enhanced,
+    listing only,
+    colback=codebackground,
+    colframe=codebordercolor,
+    coltext=codetextcolor,
+    boxrule=0.8pt,
+    arc=3pt,
+    boxsep=0pt,
+    left=2.5mm,
+    right=2.5mm,
+    top=1.5mm,
+    bottom=1.5mm,
+    listing options={
+        language=bash,
+        basicstyle=\ttfamily\small\color{codetextcolor},
+        keywordstyle=\color{codekeyword}\bfseries,
+        stringstyle=\color{codestring},
+        commentstyle=\color{codecomment}\itshape,
+        breaklines=true,
+        breakatwhitespace=true,
+        tabsize=4,
+        showspaces=false,
+        showstringspaces=false,
+        columns=fixed,
+        basewidth=0.5em,
+        keepspaces=true,
+        escapeinside={(*@}{@*)},
+        literate=
+            {\#}{{\#}}1
+            {\_}{{{\textunderscore}}}1
+    }
+}
+
+% Inline code style (matches codebox)
+\newcommand{\inlinecode}[1]{%
+    \raisebox{-0.2ex}{%
+    \tcbox[
+        enhanced,
+        nobeforeafter,
+        colback=codebackground,
+        colframe=codebordercolor,
+        coltext=codetextcolor,
+        boxrule=0.5pt,
+        arc=2pt,
+        boxsep=0pt,
+        left=0.8mm,
+        right=0.8mm,
+        top=0.3mm,
+        bottom=0.3mm,
+        fontupper=\ttfamily\small\color{codetextcolor}
+    ]{#1}%
+    }%
+}
+
+% Notebox style (clean modern boxes)
+\tcbset {
+  base/.style={
+    arc=0mm, 
+    bottomtitle=0.5mm,
+    boxrule=0mm,
+    colbacktitle=black!10!white, 
+    coltitle=black, 
+    fonttitle=\bfseries, 
+    left=2.5mm,
+    leftrule=1mm,
+    right=3.5mm,
+    title={#1},
+    toptitle=0.75mm, 
+  }
+}
+
+\definecolor{brandblue}{rgb}{0.34, 0.7, 1}
+\newtcolorbox{mainbox}[1]{
+  colframe=brandblue, 
+  base={#1}
+}
+
+\newtcolorbox{subbox}[1]{
+  colframe=black!30!white,
+  base={#1}
+}
+
+% Hyperref package and styling (must be loaded near the end)
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=blue,
+    urlcolor=blue,
+    citecolor=blue,
+    pdftitle={Agentic Project Management - Research Study Participation Guide},
+    pdfauthor={Konstantinos Chaidemenos}
+}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small Participation Guide (Cursor)}
+\lhead{\small Agentic Project Management Research Study}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% Line spacing
+\onehalfspacing
+
+% Section formatting
+\titleformat{\section}[hang]{\Large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}[hang]{\large\bfseries}{\thesubsection.}{0.5em}{}
+
+% ============================================================================
+% DOCUMENT
+% ============================================================================
+
+\begin{document}
+
+% Title Page
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+
+    {\fontsize{26}{30}\selectfont\bfseries Agentic Project Management}\par
+    \vspace{0.2cm}
+    {\fontsize{16}{20}\selectfont \mdseries An enhancement of the emerging paradigm of\\Spec-Driven Development}\par
+    \vspace{2cm}
+    {\fontsize{18}{22}\selectfont \underline{Research Study Participation Guide}}\par
+    \vspace{0.5cm}
+    {\fontsize{16}{20}\selectfont \mdseries \underline{Sub-Study A: Cursor}}\par
+
+    \vspace{1cm}
+    
+    {\normalsize \textbf{Conducted by:}\\Konstantinos Chaidemenos - CobuterMan}\par
+    \vspace{0.5cm}
+    {\normalsize \textbf{Institution:}\\National and Kapodistrian University of Athens}\par
+    \vspace{0.2cm}
+    \begin{center}
+        \includegraphics[width=0.3\textwidth]{assets/common/uoa-logo.jpeg}
+    \end{center}
+    \vfill
+    
+    {\small November 2025}\par
+    
+\end{titlepage}
+
+% ============================================================================
+
+\section{Welcome \& Introduction}
+
+Thank you for participating in this research study. Your participation is essential for evaluating how effectively modern AI-powered development tools support Spec-Driven Development (SDD) workflows.\newline\newline
+The goal of this study is to compare how different AI-assisted frameworks perform on a practical, well-defined coding task. Please be assured that \textbf{you are not being tested}; the AI tools are. All data, including incomplete or non-functional code, is valuable to this research.
+
+\subsection*{Data Privacy \& Anonymity}
+All data that you will submit will be handled with strict confidentiality. Your name or any personal identifiers will not be linked to the data. The research artifacts you will provide will be used exclusively for this academic research and will be anonymized in any resulting publications. You have been assigned a unique participant ID for this study, which you must include in your submission file names as described in the submission instructions. By proceeding, you consent to the anonymous collection and use of this data as described.
+
+% ============================================================================
+
+\section{Study Overview}
+
+\subsection{Your Task}
+
+Your task is to research an existing legacy PHP codebase and implement a new feature in an existing Python codebase based on your findings. You will receive a detailed \textbf{Product Requirements Document (PRD)} as the sole source of truth for the specification, guiding both you and the AI tools.
+
+\subsection{Your Tools}
+
+You will complete this task \textbf{twice}, each time using a different AI-coding framework (e.g., APM, Spec-kit, Cursor's Plan Mode). Sessions will be \textbf{time-boxed and isolated on separate branches}. Between sessions, you will submit your code changes, chat logs, and a brief survey.
+\begin{mainbox}{Learning Effects Note}
+We acknowledge that performing the task twice may introduce learning effects. To mitigate this, some participants will begin with Tool A, others with Tool B. This counterbalancing aims to ensure fair assessments across the study.
+\end{mainbox}
+
+\subsection{Your Time}
+
+Each session is strictly time-boxed to \textbf{three (3) hours}. It is important that you stop at the 3-hour mark, regardless of whether you are finished. Committing unfinished work is a perfectly valid and expected outcome.
+
+\newpage
+
+\subsection{Your Environment}
+\label{sec:your-environment}
+To ensure the two sessions are completed in a controlled environment, set up your environment according to the following specifications:
+\begin{itemize}
+    \item \textbf{Operating System:} POSIX-compliant systems such as Linux (e.g., Ubuntu 22.04+) or macOS (latest versions). For Windows, we recommend using Windows Subsystem for Linux (WSL) with a recent Ubuntu distribution.
+    \item \textbf{Workspace:} A dedicated directory with the following repositories cloned:
+    \begin{itemize}
+        \item \href{https://github.com/sdi2200262/eclass-mcp-server}{\texttt{eclass-mcp-server}} (the main codebase where you will implement the new feature).\\
+        Install dependencies using:
+        \begin{codebox}
+cd eclass-mcp-server
+uv sync --dev --all-extras
+        \end{codebox}
+        \item \href{https://github.com/gunet/openeclass}{\texttt{openeclass}} (the legacy PHP codebase where you will conduct research)
+    \end{itemize}
+    \item \textbf{Python Version: 3.10+}
+    This will include all of its \href{https://www.npmjs.com/package/agentic-pm?activeTab=dependencies}{dependencies}.
+    \item \href{https://cursor.com/?from=home}{\textbf{IDE: Cursor 2.0+}}
+    \begin{mainbox}{Important Cursor Access Note}
+        This study requires access to Cursor's premium AI features. If you do not have a Pro account, you can sign up for a \textbf{7-day free trial}. Please be aware that activating this trial \textbf{requires you to enter credit card information}.
+        \newline\newline
+        Please ensure you have a \textbf{Cursor Pro or higher-tier account} before starting your sessions.
+    \end{mainbox}
+\end{itemize}
+
+\subsection{What You Will Deliver}
+At the end of each session, you will submit:
+\begin{itemize}
+    \item A \textbf{submission zip file} containing a code patch and AI interaction logs. For example, \verb|id_X_tool_a_submission.zip| for Tool A and \verb|id_X_tool_b_submission.zip| for Tool B (where X is your participant ID).
+    See \hyperref[sec:creating-patch]{Section~\ref*{sec:creating-patch}} for instructions on creating the patch file and \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} for exporting AI interaction logs from Cursor.
+    \item A brief \textbf{post-session survey} about your experience using each AI-coding framework.
+    See Sections \hyperref[sec:tool-a-survey]{\ref*{sec:tool-a-survey}} and \hyperref[sec:session-2-tool-b]{\ref*{sec:session-2-tool-b}} for links to the surveys.
+\end{itemize}
+
+
+\newpage
+% ============================================================================
+
+\section{AI Tools: Setup \& Instructions}
+\label{sec:ai-tools}
+
+Before starting your sessions, familiarize yourself with your assigned tools. Below are setup instructions and usage guidelines for each tool.
+
+\subsection{APM in Cursor}
+
+\subsubsection*{Description:}
+
+\href{https://github.com/sdi2200262/agentic-project-management/}{\textbf{Agentic Project Management (APM)}} is designed to enhance your development process by decomposing specifications into actionable tasks and coordinating their execution across multiple AI agents; aiming to improve efficiency and context management.
+
+\subsubsection*{Setup Instructions:}
+
+\begin{itemize}
+    \item Ensure you have \inlinecode{npm} installed on your system.
+    \item Install the \inlinecode{agentic-pm} package globally using the following command:
+    \begin{codebox}
+npm install -g agentic-pm
+    \end{codebox}
+    \item Once installed, use the \inlinecode{apm init} command within your working directory's root (alongside the other codebases) and select \inlinecode{Cursor}.
+\end{itemize}
+
+\subsubsection*{Familiarization:}
+
+To get acquainted with APM, visit the \href{https://agentic-project-management.dev}{official documentation} which includes video tutorials and getting started guides before starting your timed session.
+
+\subsection{Spec-kit in Cursor}
+
+\subsubsection*{Description:}
+
+\href{https://github.com/github/spec-kit}{\textbf{Spec-kit}} is another AI-powered development framework designed to enhance the specification and planning stages of software development, ensuring a spec-first approach throughout the implementation process.
+
+\subsubsection*{Setup Instructions:}
+
+\begin{itemize}
+    \item Ensure \inlinecode{uv} has been installed and set up on your system.
+    \item Install the \inlinecode{specify-cli} using their official recommended installation command:
+    \begin{codebox}
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+    \end{codebox}
+    \item Once installed, use the \inlinecode{specify init <your-project-name>} command within your working directory's root (alongside the other codebases) and select \inlinecode{Cursor}.
+\end{itemize}
+
+\newpage
+% ============================================================================
+
+\subsubsection*{Familiarization:}
+
+To get acquainted with Spec-kit watch this \href{https://www.youtube.com/watch?v=a9eR1xsfvHg}{tutorial} and/or read the \href{https://github.github.com/spec-kit/}{official documentation} before starting your timed session.
+
+\subsection{Plan Mode in Cursor}
+
+\subsubsection*{Description:}
+
+Cursor's \textbf{Plan Mode} offers a streamlined implementation of Spec-Driven Development principles by emphasizing a "first-plan-then-execute" workflow. It enables your AI assistant to break down tasks into manageable steps before execution.\newline\newline
+After your plan has been finalized in Plan Mode, you may switch to Agent Mode if you need to further iterate on task execution. Alternatively, you can save the plan locally from Plan Mode and start a new chat in Agent Mode to execute it there.
+
+\subsubsection*{Setup Instructions:}
+
+No additional setup is required beyond having Cursor 2.0+ installed. To enable Plan Mode simply select it in the chat mode modal:
+\begin{center}
+    \includegraphics[width=1\textwidth]{assets/cursor/cursor-plan-mode.png}
+\end{center}
+
+\subsubsection*{Familiarization:}
+
+Plan Mode is integrated directly into Cursor. Use Cursor as you would normally use your AI assistant but ensure you have selected \textbf{Plan Mode}. For a brief overview, see Cursor's official \href{https://www.youtube.com/watch?v=WInPBmCK3l4}{introduction video}.
+
+\vspace{1.2cm}
+\hrule height 0.3pt
+\vspace{0.7cm}
+
+\begin{mainbox}{Important Familiarization Note}
+Familiarization with your assigned tool is \textbf{crucial} for effective participation. Take time to watch provided tutorials, review documentation, and practice on unrelated tasks to build confidence. \textbf{Avoid using the actual task or codebase during practice to minimize learning effects between sessions.} The post-session survey will ask about your prior experience and familiarity with the tool.
+\end{mainbox}
+
+
+\newpage
+% ============================================================================
+
+\section{Session Workflow (Step-by-Step)}
+
+This section explains the session workflow in which you are to attempt to complete your task. Please follow these steps in order.
+
+\subsection{Ensure Environment is Set Up}
+
+Following \hyperref[sec:your-environment]{Section~\ref*{sec:your-environment}}, ensure you have installed Cursor and that you have correctly set up your environment with all dependencies installed and the required repositories.\newline\newline
+Opening Cursor in your designated workspace directory would look like this:
+\begin{center}
+    \includegraphics[width=1\textwidth]{assets/cursor/cursor-setup.png}
+\end{center}
+
+Verify that all the base dependencies are installed by running:
+\begin{codebox}
+/PATH/TO/YOUR/PYTHON3 --version   # Check Python version
+uv --version                      # Check UV version  
+npm --version                     # Check NPM version (for APM)
+
+# Check Python codebase dependencies (silent success, errors shown)
+cd eclass-mcp-server
+/PATH/TO/YOUR/PYTHON3 -c "import mcp"
+/PATH/TO/YOUR/PYTHON3 -c "import requests"
+/PATH/TO/YOUR/PYTHON3 -c "import bs4"
+/PATH/TO/YOUR/PYTHON3 -c "import dotenv"
+\end{codebox}
+
+\subsection{Session 1: Tool A}
+
+
+\subsubsection*{Initialize Git and Create Branch:}
+    
+    Ensure you're starting from a clean state and create an isolated branch:
+    \begin{codebox}
+cd eclass-mcp-server                # go to implementation codebase root
+git checkout main                   # switch to main branch
+git checkout -b tool-a-attempt      # create new branch for Tool A patch
+    \end{codebox}
+
+\subsubsection*{Before you start working:}
+    
+    \begin{itemize}
+        \item Launch your first assigned AI tool (Tool A) following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
+        \item \textbf{Thoroughly read the} \inlinecode{Specification.md} (the PRD) provided alongside this guide.
+        \item Use the \textbf{default task prompt} provided with the PRD to initiate your first chat.
+        \item \textbf{Note the start time}; it will be used to track your request statistics and session duration.
+        \item Use \textbf{only} your assigned Tool A for AI assistance during this session.
+        \item Start the timer and get to work!
+    \end{itemize}
+
+    \begin{mainbox}{Important Note on Model Selection}
+    For study validity, all participants \textbf{must} use \textbf{Cursor's Composer 1} model for the \textbf{entire duration} of both Tool A and Tool B sessions.
+    \end{mainbox}
+
+\subsubsection*{Work Until Completion or Time Limit:}
+    
+    \begin{itemize}
+        \item Continue working on the task for up to \textbf{3 hours}.
+        \item \textbf{Stop at the 3-hour mark}, even if you haven't completed the task.
+        \item Alternatively, stop when you have fully completed the task (if before 3 hours).
+    \end{itemize}
+
+\subsubsection*{Create Code Patch:}
+\label{sec:creating-patch}
+
+    After the 3 hour mark or upon task completion, generate your solution patch file for this session:
+    \begin{codebox}
+git add . && git commit -m "Tool A solution"            # commit changes
+git diff main tool-a-attempt > tool_a_solution.patch    # create patch file
+    \end{codebox}
+
+\subsubsection*{Export AI Interaction Logs:}
+    
+    Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations and retrieve request statistics. Organize these in a \inlinecode{tool\_a\_logs/} folder.
+    
+\subsubsection*{Clean Up and Ensure Isolation:}
+    
+    Return to main branch and remove the solution branch:
+    \begin{codebox}
+git checkout main
+git branch -D tool-a-attempt
+    \end{codebox}
+    
+    \begin{mainbox}{Git Note}
+Feel free to use Git for version control during your session. However, ensure that you \textbf{do not modify the main branch directly}. All code changes related to your task should be committed to your isolated branch (\inlinecode{tool-a-attempt} for Tool A and \inlinecode{tool-b-attempt} for Tool B) before concluding the session.\newline\newline
+\textbf{Important:} After creating the patch file, \textbf{immediately save/move it to a safe location outside your repository} (e.g., your desktop or a dedicated submission folder). \textbf{Do not} delete your branch until you have saved the patch file and exported all logs; these files will be lost if you delete the branch first.
+    \end{mainbox}
+
+\subsubsection*{Complete Tool A Survey:}
+\label{sec:tool-a-survey}
+
+Fill out the brief \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-session survey}.
+
+\subsubsection*{Session 1 Checklist:}
+\label{sec:session-1-checklist}
+Before moving to Session 2, ensure you have completed the following:
+\begin{itemize}
+    \item Created the patch file \inlinecode{tool\_a\_solution.patch} and deleted the \inlinecode{tool-a-attempt} branch.
+    \item Collected AI interaction logs and organized them in \inlinecode{tool\_a\_logs/} folder:
+    \begin{itemize}
+        \item Exported all chat conversations as \inlinecode{.md} files in \inlinecode{tool\_a\_chat\_conversations/}.
+        \item Exported and filtered your token usage as \inlinecode{tool\_a\_request\_stats.csv}.
+    \end{itemize}
+    \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-session survey}.
+\end{itemize}
+
+\newpage
+% ============================================================================
+
+\subsection{Session 2: Tool B}
+\label{sec:session-2-tool-b}
+
+Follow the same workflow as Session 1, but with the following adjustments:
+
+\begin{itemize}
+    \item Create a branch named \inlinecode{tool-b-attempt} from the clean \inlinecode{main} branch.
+    \item Use \textbf{Tool B} with \textbf{Cursor's Composer 1} model, following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
+    \item After the 3 hour mark or upon task completion, generate the patch file as \inlinecode{tool\_b\_solution.patch}:
+    \begin{codebox}
+git diff main tool-b-attempt > tool_b_solution.patch
+    \end{codebox}
+    \item Export logs to \inlinecode{tool\_b\_logs/} folder following the same procedure as Tool A.
+    \item Complete the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
+\end{itemize}
+
+You may start Session 2 immediately after Session 1 or take a break. Ensure you are ready to approach Session 2 from scratch, maintaining a fresh perspective and minimizing any influence from Session 1.
+
+\begin{mainbox}{Important Session 2 Note}
+    To accurately track your interaction statistics for Tool B, please \textbf{make absolutely sure you note the start time at the beginning of Session 2}. This timestamp will help isolate the request data specific to this session.
+\end{mainbox}
+
+\subsubsection*{Session 2 Checklist:}
+\label{sec:session-2-checklist}
+Before concluding your work, ensure you have completed the following:
+\begin{itemize}
+    \item Created the patch file \inlinecode{tool\_b\_solution.patch} and deleted the \inlinecode{tool-b-attempt} branch.
+    \item Collected AI interaction logs and organized them in \inlinecode{tool\_b\_logs/} folder:
+    \begin{itemize}
+        \item Exported all chat conversations as \inlinecode{.md} files in \inlinecode{tool\_b\_chat\_conversations/}.
+        \item Exported and filtered your token usage as \inlinecode{tool\_b\_request\_stats.csv}.
+    \end{itemize}
+    \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
+\end{itemize}
+
+\newpage
+% ============================================================================
+
+\section{Exporting AI Interaction Logs from Cursor}
+\label{sec:exporting-logs}
+
+To export your AI interaction logs (chat conversations and AI request statistics) from Cursor, follow these steps for both sessions:
+
+\subsection{Export Chat Conversations}
+
+When using Tool A or Tool B, you may open multiple chat conversations in Cursor. For example, with APM, you will typically open at least three conversations: \textbf{Setup Agent}, \textbf{Manager Agent}, and at least one \textbf{Implementation Agent}. For Spec-kit or Plan Mode, the number of conversations may vary depending on your usage of these tools.\newline\newline
+It is crucial to retain \textbf{all workflow conversations} for analysis. Do not delete any conversations during your sessions. \underline{If a conversation is accidentally deleted, please notify the researcher immediately.}\newline\newline
+To export each conversation, follow these steps:
+\begin{itemize}
+    \item For each chat conversation opened during your session, navigate to that specific chat.
+    \item In the top-right corner of the chat window panel, click on the \textbf{three-dot options menu}.
+    \item From the dropdown menu, select the \textbf{"Export Chat"} option.
+    \begin{center}
+        \includegraphics[width=1\textwidth]{assets/cursor/cursor-export-chat.png}
+    \end{center}
+    \item Choose a location on your local machine to save the exported \inlinecode{.md} file.
+\end{itemize}
+
+\noindent Store and name the exported files appropriately and organize them as follows:
+
+\begin{itemize}
+    \item Create a subfolder \inlinecode{tool\_a\_chat\_conversations/} within your logs folder
+    \item Save all chat conversation \inlinecode{.md} files in this subfolder (e.g., \inlinecode{tool\_a\_setup\_agent.md})
+    \item Save the request statistics CSV directly in the logs folder as \inlinecode{tool\_a\_request\_stats.csv}
+\end{itemize}
+\begin{mainbox}{Important Chat Export Note}
+Consider exporting conversations \textbf{immediately after completion} during your session to avoid accidental deletions. For example, export APM's Setup Agent conversation right after the setup phase.
+\end{mainbox}
+
+\newpage
+% ============================================================================
+
+\subsection{Retrieve AI Request Statistics}
+
+To retrieve your AI request statistics from Cursor, follow these steps:
+
+\begin{itemize}
+    \item Login to your \href{https://cursor.com}{Cursor} account and go to the \href{https://cursor.com/dashboard}{Cursor Dashboard}.
+    \item On the sidebar, click on the \textbf{"Usage"} tab to access your usage statistics. 
+    \item Click on the \textbf{"Export CSV"} button located at the top-right corner of the Usage page.
+    \begin{center}
+        \includegraphics[width=1\textwidth]{assets/cursor/cursor-dashboard.png}
+    \end{center}
+\end{itemize}
+
+\noindent This will immediately download a CSV file containing your AI request statistics to your local machine. This file contains AI requests made across all your sessions. \newline\newline
+To isolate the requests made during your specific session, use the provided python script\newline\inlinecode{filter\_csv\_by\_datetime.py} with the \textbf{start time} you noted at the beginning of each session and rename the output file appropriately (e.g., \inlinecode{tool\_a\_request\_stats.csv} for Tool A).\newline\newline
+For example, if your session started on 2025-11-06 at 14:30 in the Europe/Athens timezone:
+\begin{codebox}
+python3 filter_csv_by_datetime.py usage-events.csv 2025-11-06 14:30 Europe/Athens
+\end{codebox}
+
+\begin{mainbox}{Important Timing Note}
+This will create a filtered CSV file containing only requests from that point onward (e.g.,\newline \inlinecode{usage-events\_filtered\_2025-11-06\_14:30\_Europe\_Athens.csv}).\newline\newline
+Run the filtering script \textbf{immediately after completing your session} to ensure the CSV includes all requests from the session start up to your last AI request. If you wait too long before filtering, additional requests from other activities may be included.
+\end{mainbox}
+
+\subsection{Organize Logs for Submission}
+
+Save the exported chat conversations and filtered request statistics in a dedicated logs folder. For example, create a \inlinecode{tool\_a\_logs/} folder containing your chat exports and request statistics.
+
+\newpage
+% ============================================================================
+
+\subsection{Log Organization Summary}
+
+After completing the above steps for both sessions, you will have organized logs folders: 
+\begin{itemize}
+    \item \inlinecode{tool\_a\_logs/} folder for Tool A
+    \item \inlinecode{tool\_b\_logs/} folder for Tool B
+\end{itemize}
+These folders will be included in your final submission zip files alongside the patch files.
+
+\subsection{Create Submission Zip Files}
+
+Once you have your patch file and organized logs folder for each session, create the final submission zip files using your assigned participant ID:
+
+\begin{codebox}
+# Replace {id} with your participant ID number
+# For Tool A
+zip -r id_{id}_tool_a_submission.zip tool_a_solution.patch tool_a_logs/
+
+# For Tool B
+zip -r id_{id}_tool_b_submission.zip tool_b_solution.patch tool_b_logs/
+\end{codebox}
+
+\begin{mainbox}{Important Submission Note}
+Ensure both the patch file and logs folder are at the root level of your zip file (not in subdirectories). The zip file should contain exactly two items: the \verb|.patch| file and the \verb|tool_X_logs/| folder. Use your assigned participant ID in the filename format \verb|id_X_tool_X_submission.zip| as shown above.
+\end{mainbox}
+
+\section{Final Submission}
+
+After completing both sessions, submit all your data to our \href{https://forms.gle/gzYNsSZwMbUDJRji6}{anonymous collection form}.
+
+\subsection*{Submission Checklist}
+
+Please be sure to upload the following single \inlinecode{.zip} files (one for each session):
+
+\begin{codebox}
+id_{id}_tool_a_submission.zip    # Contains: tool_a_solution.patch + tool_a_logs/
+id_{id}_tool_b_submission.zip    # Contains: tool_b_solution.patch + tool_b_logs/
+\end{codebox}
+
+\newpage
+% ============================================================================
+
+\section{Contact \& Help}
+
+This study is conducted for a Bachelor's thesis by Kostantinos Chaidemenos - \href{https://github.com/sdi2200262}{CobuterMan}.\newline\newline
+If you encounter any technical issues or have questions about the study procedure, contact: 
+\begin{codebox}
+sdi2200262@di.uoa.gr        # Email
+cobuter_man                 # Discord
+\end{codebox}
+
+\vspace{1cm}
+\hrule height 0.3pt
+\vspace{0.7cm}
+
+\begin{center}
+    \subsubsection*{\centering Thank you again for your time and contribution to this research.}
+    \includegraphics[width=0.3\textwidth]{assets/common/cobuter-man.png}
+\end{center}
+
+% ============================================================================
+
+\end{document}

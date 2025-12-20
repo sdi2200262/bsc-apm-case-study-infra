@@ -1,0 +1,28 @@
+# OS files
+.DS_Store
+
+# LaTeX build directory (auxiliary files)
+build/*
+
+# LaTeX generated files (fallback if not using build dir)
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz
+*.listing
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb
+
+# Editor files
+.vscode/
+
+# Keep PDFs (they are intentionally committed)
+# !*.pdf
