@@ -66,8 +66,10 @@ grader/
 ├── fixtures/                    # HTML fixtures for SSO mock
 │   ├── sso_login.html
 │   └── sso_login_error.html
-└── scripts/
-    └── results_viewer.py        # CLI utility for browsing results
+├── scripts/                     # Utility scripts for grading analysis
+│   ├── README.md                # Scripts documentation
+│   ├── copilot_chat_parser.py   # Chat export analyzer with sanitization
+│   └── results_viewer.py        # Results JSON browser
 ```
 
 ## System Requirements
