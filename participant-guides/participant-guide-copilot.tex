@@ -192,7 +192,8 @@ Thank you for participating in this research study. Your participation is essent
 The goal of this study is to compare how different AI-assisted frameworks perform on a practical, well-defined coding task. Please be assured that \textbf{you are not being tested}; the AI tools are. All data, including incomplete or non-functional code, is valuable to this research.
 
 \subsection*{Data Privacy \& Anonymity}
-All data that you will submit will be handled with strict confidentiality. Your name or any personal identifiers will not be linked to the data. The research artifacts you will provide will be used exclusively for this academic research and will be anonymized in any resulting publications. By proceeding, you consent to the anonymous collection and use of this data as described.
+All data that you will submit will be handled with strict confidentiality. Your name or any personal identifiers will not be linked to the data. The research artifacts you will provide will be used exclusively for this academic research and will be anonymized in any resulting publications. You have been assigned a unique participant ID for this study, which you must include in your submission file names as described in the submission instructions.\newline\newline
+\textbf{Data Handling:} All submitted chat logs will be encrypted using a secure encryption key before being stored in a publicly accessible dataset repository. This ensures that while the dataset structure is transparent, the actual content of your interactions remains confidential and cannot be read without the encryption key, which is held only by the research team. By proceeding, you consent to the anonymous collection and use of this data as described.
 
 % ============================================================================
 
@@ -247,10 +248,8 @@ To ensure the two sessions are completed in a controlled environment, set up you
 \subsection{What You Will Deliver}
 At the end of each session, you will submit:
 \begin{itemize}
-    \item A \textbf{code patch file} containing all changes made during the session. For example, a patch file \inlinecode{tool\_a\_solution.patch} for Tool A and \inlinecode{tool\_b\_solution.patch} for Tool B.
-    See \hyperref[sec:creating-patch]{Section~\ref*{sec:creating-patch}} for instructions on creating the patch file.
-    \item The complete \textbf{AI interaction logs}, including exported chat conversations and Copilot request usage from your sessions. For example \inlinecode{tool\_a\_logs.zip} and \inlinecode{tool\_b\_logs.zip}.
-    See \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} for exporting AI interaction logs from VS Code (Copilot).
+    \item A \textbf{submission zip file} containing a code patch and AI interaction logs. For example, \verb|{PID}_tool_a_submission.zip| for Tool A and \verb|{PID}_tool_b_submission.zip| for Tool B (where \verb|{PID}| is your assigned participant ID, e.g., \verb|P001|).
+    See \hyperref[sec:creating-patch]{Section~\ref*{sec:creating-patch}} for instructions on creating the patch file and \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} for exporting AI interaction logs from VS Code (Copilot).
     \item A brief \textbf{post-session survey} about your experience using each AI-coding framework.
     See Sections \hyperref[sec:tool-a-survey]{\ref*{sec:tool-a-survey}} and \hyperref[sec:session-2-tool-b]{\ref*{sec:session-2-tool-b}} for links to the surveys.
 \end{itemize}
@@ -383,7 +382,7 @@ git checkout -b tool-a-attempt      # create new branch for Tool A patch
         \item Launch your first assigned AI tool (Tool A) following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
         \item \textbf{Thoroughly read the} \inlinecode{Specification.md} (the PRD) provided alongside this guide.
         \item Use the \textbf{Default Prompt} provided alongside this guide to initiate your conversation with your AI tool.
-        \item Take a screenshot of the Copilot \textbf{Premium Requests usage bar} from your GitHub Copilot Settings page; this will serve as the \textbf{start-of-session} usage baseline.
+        \item \textbf{Note the start time}; it will be used to track your session duration.
         \item Use \textbf{only} your assigned Tool A for AI assistance during this session.
         \item Start the timer and get to work!
         
@@ -412,18 +411,19 @@ git checkout -b tool-a-attempt      # create new branch for Tool A patch
 \subsubsection*{Create Code Patch:}
 \label{sec:creating-patch}
 
-    After the 3 hour mark or upon task completion, generate your solution patch file for this session:
+    After the 3 hour mark or upon task completion, generate your solution patch file for this session (replace \verb|{PID}| with your participant ID):
     \begin{codebox}
-git add . && git commit -m "Tool A solution"            # commit all changes
-git diff main tool-a-attempt > tool_a_solution.patch    # create patch file
+git add . && git commit -m "Tool A solution"                # commit all changes
+git diff main tool-a-attempt > {PID}_tool_a_solution.patch  # create patch file
     \end{codebox}
     \begin{mainbox}{Git Note}
-Feel free to use Git for version control during your session. However, ensure that you \textbf{do not modify the main branch directly}. All code changes related to your task should be committed to your isolated branch (\inlinecode{tool-a-attempt} for Tool A and \inlinecode{tool-b-attempt} for Tool B) before concluding the session.
+Feel free to use Git for version control during your session. However, ensure that you \textbf{do not modify the main branch directly}. All code changes related to your task should be committed to your isolated branch (\inlinecode{tool-a-attempt} for Tool A and \inlinecode{tool-b-attempt} for Tool B) before concluding the session.\newline\newline
+\textbf{Important:} After creating the patch file, \textbf{immediately save/move it to a safe location outside your repository} (e.g., your desktop or a dedicated submission folder). \textbf{Do not} delete your branch until you have saved the patch file and exported all logs; these files will be lost if you delete the branch first.
     \end{mainbox}
 
 \subsubsection*{Export AI Interaction Logs:}
 
-Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations and retrieve request statistics. Save these as \inlinecode{tool\_a\_logs.zip}.
+Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations. Organize these in a \verb|{PID}_tool_a_logs/| folder.
 
 \subsubsection*{Clean Up and Ensure Isolation:}
 
@@ -446,11 +446,10 @@ Fill out the brief \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-sessio
 \label{sec:session-1-checklist}
 Before moving to Session 2, ensure you have completed the following:
 \begin{itemize}
-    \item Created the patch file \inlinecode{tool\_a\_solution.patch} and deleted the \inlinecode{tool-a-attempt} branch.
-    \item Collected AI interaction logs and packaged them as \inlinecode{tool\_a\_logs.zip}:
+    \item Created the patch file \verb|{PID}_tool_a_solution.patch| and deleted the \inlinecode{tool-a-attempt} branch.
+    \item Collected AI interaction logs and organized them in \verb|{PID}_tool_a_logs/| folder:
     \begin{itemize}
-        \item Exported all chat conversations and packaged them as \inlinecode{tool\_a\_chat\_conversations.zip}.
-        \item Captured Copilot request usage screenshots as \inlinecode{tool\_a\_copilot\_requests\_start/end.png}.
+        \item Exported all chat conversations as \inlinecode{.json} files in \verb|{PID}_tool_a_logs/chats/| subfolder.
     \end{itemize}
     \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-session survey}.
 \end{itemize}
@@ -466,16 +465,16 @@ Follow the same workflow as Session 1, but with the following adjustments:
 \begin{itemize}
     \item Create a branch named \inlinecode{tool-b-attempt} from the clean \inlinecode{main} branch.
     \item Use \textbf{Tool B} following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
-    \item After the 3 hour mark or upon task completion, generate the patch file as \inlinecode{tool\_b\_solution.patch}:
+    \item After the 3 hour mark or upon task completion, generate the patch file (replace \verb|{PID}| with your participant ID):
     \begin{codebox}
-git diff main tool-b-attempt > tool_b_solution.patch
+git diff main tool-b-attempt > {PID}_tool_b_solution.patch
     \end{codebox}
-    \item Export logs as \inlinecode{tool\_b\_logs.zip} following the same procedure as Tool A.
+    \item Export logs to \verb|{PID}_tool_b_logs/| folder following the same procedure as Tool A.
     \item Complete the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
     
     \begin{mainbox}{Important Session 2 Note}
         You may start Session 2 immediately after Session 1 or take a break. Ensure you are ready to approach Session 2 from scratch, maintaining a fresh perspective and minimizing any influence from Session 1.\newline\newline
-        To accurately collect all data from Session 2, please \textbf{make absolutely sure you capture both start and end Copilot usage screenshots for this session and that you have all the artifacts from \hyperref[sec:session-1-checklist]{Section~\ref*{sec:session-1-checklist}}}.
+        Before starting Session 2, please \textbf{make absolutely sure you have all the artifacts from \hyperref[sec:session-1-checklist]{Section~\ref*{sec:session-1-checklist}}} safely stored.
     \end{mainbox}
 \end{itemize}
 
@@ -483,11 +482,10 @@ git diff main tool-b-attempt > tool_b_solution.patch
 \label{sec:session-2-checklist}
 Before concluding your work, ensure you have completed the following:
 \begin{itemize}
-    \item Created the patch file \inlinecode{tool\_b\_solution.patch} and deleted the \inlinecode{tool-b-attempt} branch.
-    \item Collected AI interaction logs and packaged them as \inlinecode{tool\_b\_logs.zip}:
+    \item Created the patch file \verb|{PID}_tool_b_solution.patch| and deleted the \inlinecode{tool-b-attempt} branch.
+    \item Collected AI interaction logs and organized them in \verb|{PID}_tool_b_logs/| folder:
     \begin{itemize}
-        \item Exported all chat conversations and packaged them as \inlinecode{tool\_b\_chat\_conversations\_json.zip}.
-        \item Captured Copilot request usage screenshots as \inlinecode{tool\_b\_copilot\_requests\_start.png} and \inlinecode{tool\_b\_copilot\_requests\_end.png}.
+        \item Exported all chat conversations as \inlinecode{.json} files in \verb|{PID}_tool_b_logs/chats/| subfolder.
     \end{itemize}
     \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
 \end{itemize}
@@ -498,7 +496,7 @@ Before concluding your work, ensure you have completed the following:
 \section{Exporting AI Interaction Logs from VS Code (Copilot)}
 \label{sec:exporting-logs}
 
-To export your AI interaction logs (chat conversations and AI request statistics) from Copilot, follow these steps for both sessions.
+To export your AI interaction logs from Copilot, follow these steps for both sessions.
 
 \subsection{Export Chat Conversations}
 When using Tools A or B, you may open multiple chat conversations (e.g., at least three with APM: Setup, Manager, and Implementation Agents; one or two with Spec-kit or Plan agent). \textbf{Retain all chat conversations for our analysis. Do not delete any during your sessions}. To export chats, follow these steps:
@@ -509,49 +507,46 @@ When using Tools A or B, you may open multiple chat conversations (e.g., at leas
     \begin{center}
         \includegraphics[width=1\textwidth]{assets/copilot/copilot-export-chat-command.png}
     \end{center}
-    \item Name the exported \inlinecode{.json} file appropriately (e.g., use the agent name for APM conversations) and choose a location on your local machine to save.  \begin{center}
+    \item Save the exported \inlinecode{.json} file using the \textbf{strict naming format}:\\
+    \texttt{\{PID\}\_tool\_\{a$|$b\}\_chat\_\{NN\}.json}\\
+    where \texttt{\{PID\}} is your participant ID (e.g., \texttt{P001}), \texttt{\{a$|$b\}} is the tool identifier, and \texttt{\{NN\}} is the chat number starting from \texttt{01} (e.g., \texttt{P001\_tool\_a\_chat\_01.json}, \texttt{P001\_tool\_a\_chat\_02.json}).
+    \begin{center}
         \includegraphics[width=1\textwidth]{assets/copilot/copilot-store-exported-chat.png}
     \end{center}
 \end{itemize}
-\noindent Repeat this process for all conversations used during the session. Once all conversations are exported, compress them into a single archive named \inlinecode{tool\_a\_chat\_conversations\_json.zip} for Tool A and \inlinecode{tool\_b\_chat\_conversations\_json.zip} for Tool B.
+\noindent Repeat this process for all conversations used during the session.
 \begin{mainbox}{Important Chat Export Note}
-To take extra precautions, consider exporting conversations \textbf{immediately after completion} your session to avoid accidental deletions or technical issues. For example, in APM the Setup Agent conversation can be exported right after the Setup Phase is complete.
+To take extra precautions, consider exporting conversations \textbf{immediately after completion} during your session to avoid accidental deletions or technical issues. For example, in APM the Setup Agent conversation can be exported right after the Setup Phase is complete.
 \end{mainbox}
 
-\newpage
-% ============================================================================
+\subsection{Organize Logs for Submission}
 
-\subsection{Retrieve AI Request Usage}
+Save the exported chat conversations in a dedicated logs folder. Create the following folder structure using your participant ID:
 
-Copilot does not provide a detailed, time-stamped CSV of token usage, cost and other metrics per request. Instead, we will capture your total request usage through Copilot's Settings.
-
-\begin{itemize}
-    \item At the \textbf{start and end of your session}, open \href{https://github.com/settings/copilot/features}{GitHub's Copilot Settings}.
-    \item In the \textbf{Usage} section, take a screenshot of the \textbf{Premium Requests percentage bar}. The difference between the start and end screenshots will be used to estimate your Copilot requests for the session.
-    \begin{center}
-        \includegraphics[width=1\textwidth]{assets/copilot/copilot-usage-screenshot.png}
-    \end{center}
-    \item Save the screenshots using proper naming: \inlinecode{tool\_a\_copilot\_requests\_start.png} and \inlinecode{tool\_a\_copilot\_requests\_end.png} for Tool A, and \inlinecode{tool\_b\_copilot\_requests\_start.png} and \inlinecode{tool\_b\_copilot\_requests\_end.png} for Tool B.
-\end{itemize}
-
-\begin{mainbox}{Important Note on Request Metrics}
-We acknowledge this metric is less granular. The primary data for this study will come from the detailed \textbf{JSON chat exports}, which allow us to analyze the interaction patterns. The request count provides a secondary, high-level overview.
-\end{mainbox}
-
-\subsection{Package Logs for Submission}
-
-Finally, compress the exported chat conversations and your request count screenshot into a single archive for submission. For example:
 \begin{codebox}
-zip -r tool_a_logs.zip tool_a_chat_conversations_json.zip tool_a_copilot_requests_start.png tool_a_copilot_requests_end.png
+{PID}_tool_a_logs/
+    chats/
+        {PID}_tool_a_chat_01.json
+        {PID}_tool_a_chat_02.json
+        ...
 \end{codebox}
-\subsection{Log Archives Summary}
 
-After completing the above steps for both sessions, you will have two log archives: 
-\begin{itemize}
-    \item \inlinecode{tool\_a\_logs.zip} for Tool A
-    \item \inlinecode{tool\_b\_logs.zip} for Tool B
-\end{itemize}
-These will be submitted along with your code patches in the final submission step.
+\subsection{Create Submission Zip Files}
+
+Once you have your patch file and organized logs folder for each session, create the final submission zip files using your assigned participant ID:
+
+\begin{codebox}
+# Replace {PID} with your participant ID (e.g., P001)
+# For Tool A
+zip -r {PID}_tool_a_submission.zip {PID}_tool_a_solution.patch {PID}_tool_a_logs/
+
+# For Tool B
+zip -r {PID}_tool_b_submission.zip {PID}_tool_b_solution.patch {PID}_tool_b_logs/
+\end{codebox}
+
+\begin{mainbox}{Important Submission Note}
+Ensure both the patch file and logs folder are at the root level of your zip file (not in subdirectories). The zip file should contain exactly two items: the \verb|.patch| file and the \verb|{PID}_tool_X_logs/| folder. Use your assigned participant ID in the filename format \verb|{PID}_tool_X_submission.zip| as shown above.
+\end{mainbox}
 
 \newpage
 % ============================================================================
@@ -562,13 +557,11 @@ After completing both sessions, submit all your data to our \href{https://forms.
 
 \subsection*{Submission Checklist}
 
-Please be sure to upload the following files:
+Please be sure to upload the following single \inlinecode{.zip} files (one for each session):
 
 \begin{codebox}
-    tool_a_solution.patch          # Code patch from Tool A session
-    tool_b_solution.patch          # Code patch from Tool B session
-    tool_a_logs.zip                # AI interaction logs from Tool A session
-    tool_b_logs.zip                # AI interaction logs from Tool B session
+{PID}_tool_a_submission.zip    # Contains: {PID}_tool_a_solution.patch + {PID}_tool_a_logs/
+{PID}_tool_b_submission.zip    # Contains: {PID}_tool_b_solution.patch + {PID}_tool_b_logs/
 \end{codebox}
 
 

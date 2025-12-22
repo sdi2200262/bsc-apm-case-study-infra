@@ -189,7 +189,8 @@ Thank you for participating in this research study. Your participation is essent
 The goal of this study is to compare how different AI-assisted frameworks perform on a practical, well-defined coding task. Please be assured that \textbf{you are not being tested}; the AI tools are. All data, including incomplete or non-functional code, is valuable to this research.
 
 \subsection*{Data Privacy \& Anonymity}
-All data that you will submit will be handled with strict confidentiality. Your name or any personal identifiers will not be linked to the data. The research artifacts you will provide will be used exclusively for this academic research and will be anonymized in any resulting publications. You have been assigned a unique participant ID for this study, which you must include in your submission file names as described in the submission instructions. By proceeding, you consent to the anonymous collection and use of this data as described.
+All data that you will submit will be handled with strict confidentiality. Your name or any personal identifiers will not be linked to the data. The research artifacts you will provide will be used exclusively for this academic research and will be anonymized in any resulting publications. You have been assigned a unique participant ID for this study, which you must include in your submission file names as described in the submission instructions.\newline\newline
+\textbf{Data Handling:} All submitted chat logs will be encrypted using a secure encryption key before being stored in a publicly accessible dataset repository. This ensures that while the dataset structure is transparent, the actual content of your interactions remains confidential and cannot be read without the encryption key, which is held only by the research team. By proceeding, you consent to the anonymous collection and use of this data as described.
 
 % ============================================================================
 
@@ -245,7 +246,7 @@ uv sync --dev --all-extras
 \subsection{What You Will Deliver}
 At the end of each session, you will submit:
 \begin{itemize}
-    \item A \textbf{submission zip file} containing a code patch and AI interaction logs. For example, \verb|id_X_tool_a_submission.zip| for Tool A and \verb|id_X_tool_b_submission.zip| for Tool B (where X is your participant ID).
+    \item A \textbf{submission zip file} containing a code patch and AI interaction logs. For example, \verb|{PID}_tool_a_submission.zip| for Tool A and \verb|{PID}_tool_b_submission.zip| for Tool B (where \verb|{PID}| is your assigned participant ID, e.g., \verb|P001|).
     See \hyperref[sec:creating-patch]{Section~\ref*{sec:creating-patch}} for instructions on creating the patch file and \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} for exporting AI interaction logs from Cursor.
     \item A brief \textbf{post-session survey} about your experience using each AI-coding framework.
     See Sections \hyperref[sec:tool-a-survey]{\ref*{sec:tool-a-survey}} and \hyperref[sec:session-2-tool-b]{\ref*{sec:session-2-tool-b}} for links to the surveys.
@@ -399,15 +400,15 @@ git checkout -b tool-a-attempt      # create new branch for Tool A patch
 \subsubsection*{Create Code Patch:}
 \label{sec:creating-patch}
 
-    After the 3 hour mark or upon task completion, generate your solution patch file for this session:
+    After the 3 hour mark or upon task completion, generate your solution patch file for this session (replace \verb|{PID}| with your participant ID, e.g., \verb|P001|):
     \begin{codebox}
-git add . && git commit -m "Tool A solution"            # commit changes
-git diff main tool-a-attempt > tool_a_solution.patch    # create patch file
+git add . && git commit -m "Tool A solution"                # commit changes
+git diff main tool-a-attempt > {PID}_tool_a_solution.patch  # create patch file
     \end{codebox}
 
 \subsubsection*{Export AI Interaction Logs:}
     
-    Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations and retrieve request statistics. Organize these in a \inlinecode{tool\_a\_logs/} folder.
+    Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations and retrieve request statistics. Organize these in a \verb|{PID}_tool_a_logs/| folder.
     
 \subsubsection*{Clean Up and Ensure Isolation:}
     
@@ -431,11 +432,11 @@ Fill out the brief \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-sessio
 \label{sec:session-1-checklist}
 Before moving to Session 2, ensure you have completed the following:
 \begin{itemize}
-    \item Created the patch file \inlinecode{tool\_a\_solution.patch} and deleted the \inlinecode{tool-a-attempt} branch.
-    \item Collected AI interaction logs and organized them in \inlinecode{tool\_a\_logs/} folder:
+    \item Created the patch file \verb|{PID}_tool_a_solution.patch| and deleted the \inlinecode{tool-a-attempt} branch.
+    \item Collected AI interaction logs and organized them in \verb|{PID}_tool_a_logs/| folder:
     \begin{itemize}
-        \item Exported all chat conversations as \inlinecode{.md} files in \inlinecode{tool\_a\_chat\_conversations/}.
-        \item Exported and filtered your token usage as \inlinecode{tool\_a\_request\_stats.csv}.
+        \item Exported all chat conversations as \inlinecode{.md} files in \verb|{PID}_tool_a_logs/chats/| subfolder.
+        \item Exported and filtered your token usage as \verb|{PID}_tool_a_requests.csv| in \verb|{PID}_tool_a_logs/stats/| subfolder.
     \end{itemize}
     \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-session survey}.
 \end{itemize}
@@ -451,11 +452,11 @@ Follow the same workflow as Session 1, but with the following adjustments:
 \begin{itemize}
     \item Create a branch named \inlinecode{tool-b-attempt} from the clean \inlinecode{main} branch.
     \item Use \textbf{Tool B} with \textbf{Cursor's Composer 1} model, following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
-    \item After the 3 hour mark or upon task completion, generate the patch file as \inlinecode{tool\_b\_solution.patch}:
+    \item After the 3 hour mark or upon task completion, generate the patch file (replace \verb|{PID}| with your participant ID):
     \begin{codebox}
-git diff main tool-b-attempt > tool_b_solution.patch
+git diff main tool-b-attempt > {PID}_tool_b_solution.patch
     \end{codebox}
-    \item Export logs to \inlinecode{tool\_b\_logs/} folder following the same procedure as Tool A.
+    \item Export logs to \verb|{PID}_tool_b_logs/| folder following the same procedure as Tool A.
     \item Complete the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
 \end{itemize}
 
@@ -469,11 +470,11 @@ You may start Session 2 immediately after Session 1 or take a break. Ensure you 
 \label{sec:session-2-checklist}
 Before concluding your work, ensure you have completed the following:
 \begin{itemize}
-    \item Created the patch file \inlinecode{tool\_b\_solution.patch} and deleted the \inlinecode{tool-b-attempt} branch.
-    \item Collected AI interaction logs and organized them in \inlinecode{tool\_b\_logs/} folder:
+    \item Created the patch file \verb|{PID}_tool_b_solution.patch| and deleted the \inlinecode{tool-b-attempt} branch.
+    \item Collected AI interaction logs and organized them in \verb|{PID}_tool_b_logs/| folder:
     \begin{itemize}
-        \item Exported all chat conversations as \inlinecode{.md} files in \inlinecode{tool\_b\_chat\_conversations/}.
-        \item Exported and filtered your token usage as \inlinecode{tool\_b\_request\_stats.csv}.
+        \item Exported all chat conversations as \inlinecode{.md} files in \verb|{PID}_tool_b_logs/chats/| subfolder.
+        \item Exported and filtered your token usage as \verb|{PID}_tool_b_requests.csv| in \verb|{PID}_tool_b_logs/stats/| subfolder.
     \end{itemize}
     \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
 \end{itemize}
@@ -501,12 +502,15 @@ To export each conversation, follow these steps:
     \item Choose a location on your local machine to save the exported \inlinecode{.md} file.
 \end{itemize}
 
-\noindent Store and name the exported files appropriately and organize them as follows:
+\noindent Save the exported \inlinecode{.md} file using the \textbf{strict naming format}:\newline
+\texttt{\{PID\}\_tool\_\{a$|$b\}\_chat\_\{NN\}.md}\newline
+where \texttt{\{PID\}} is your participant ID (e.g., \texttt{P001}), \texttt{\{a$|$b\}} is the tool identifier, and \texttt{\{NN\}} is the chat number starting from \texttt{01} (e.g., \texttt{P001\_tool\_a\_chat\_01.md}, \texttt{P001\_tool\_a\_chat\_02.md}).\newline\newline
+\noindent Organize your exported files as follows:
 
 \begin{itemize}
-    \item Create a subfolder \inlinecode{tool\_a\_chat\_conversations/} within your logs folder
-    \item Save all chat conversation \inlinecode{.md} files in this subfolder (e.g., \inlinecode{tool\_a\_setup\_agent.md})
-    \item Save the request statistics CSV directly in the logs folder as \inlinecode{tool\_a\_request\_stats.csv}
+    \item Create a subfolder \verb|{PID}_tool_a_logs/chats/| for your chat exports
+    \item Save all chat conversation \inlinecode{.md} files in this subfolder
+    \item Save the filtered request statistics CSV in \verb|{PID}_tool_a_logs/stats/| subfolder
 \end{itemize}
 \begin{mainbox}{Important Chat Export Note}
 Consider exporting conversations \textbf{immediately after completion} during your session to avoid accidental deletions. For example, export APM's Setup Agent conversation right after the setup phase.
@@ -529,7 +533,7 @@ To retrieve your AI request statistics from Cursor, follow these steps:
 \end{itemize}
 
 \noindent This will immediately download a CSV file containing your AI request statistics to your local machine. This file contains AI requests made across all your sessions. \newline\newline
-To isolate the requests made during your specific session, use the provided python script\newline\inlinecode{filter\_csv\_by\_datetime.py} with the \textbf{start time} you noted at the beginning of each session and rename the output file appropriately (e.g., \inlinecode{tool\_a\_request\_stats.csv} for Tool A).\newline\newline
+To isolate the requests made during your specific session, use the provided python script\newline\inlinecode{filter\_csv\_by\_datetime.py} with the \textbf{start time} you noted at the beginning of each session and rename the output file using the \textbf{strict naming format}: \texttt{\{PID\}\_tool\_\{a$|$b\}\_requests.csv} (e.g., \texttt{P001\_tool\_a\_requests.csv}).\newline\newline
 For example, if your session started on 2025-11-06 at 14:30 in the Europe/Athens timezone:
 \begin{codebox}
 python3 filter_csv_by_datetime.py usage-events.csv 2025-11-06 14:30 Europe/Athens
@@ -542,7 +546,17 @@ Run the filtering script \textbf{immediately after completing your session} to e
 
 \subsection{Organize Logs for Submission}
 
-Save the exported chat conversations and filtered request statistics in a dedicated logs folder. For example, create a \inlinecode{tool\_a\_logs/} folder containing your chat exports and request statistics.
+Save the exported chat conversations and filtered request statistics in a dedicated logs folder. Create the following folder structure using your participant ID:
+
+\begin{codebox}
+{PID}_tool_a_logs/
+    chats/
+        {PID}_tool_a_chat_01.md
+        {PID}_tool_a_chat_02.md
+        ...
+    stats/
+        {PID}_tool_a_requests.csv
+\end{codebox}
 
 \newpage
 % ============================================================================
@@ -551,8 +565,8 @@ Save the exported chat conversations and filtered request statistics in a dedica
 
 After completing the above steps for both sessions, you will have organized logs folders: 
 \begin{itemize}
-    \item \inlinecode{tool\_a\_logs/} folder for Tool A
-    \item \inlinecode{tool\_b\_logs/} folder for Tool B
+    \item \verb|{PID}_tool_a_logs/| folder for Tool A
+    \item \verb|{PID}_tool_b_logs/| folder for Tool B
 \end{itemize}
 These folders will be included in your final submission zip files alongside the patch files.
 
@@ -561,16 +575,16 @@ These folders will be included in your final submission zip files alongside the 
 Once you have your patch file and organized logs folder for each session, create the final submission zip files using your assigned participant ID:
 
 \begin{codebox}
-# Replace {id} with your participant ID number
+# Replace {PID} with your participant ID (e.g., P001)
 # For Tool A
-zip -r id_{id}_tool_a_submission.zip tool_a_solution.patch tool_a_logs/
+zip -r {PID}_tool_a_submission.zip {PID}_tool_a_solution.patch {PID}_tool_a_logs/
 
 # For Tool B
-zip -r id_{id}_tool_b_submission.zip tool_b_solution.patch tool_b_logs/
+zip -r {PID}_tool_b_submission.zip {PID}_tool_b_solution.patch {PID}_tool_b_logs/
 \end{codebox}
 
 \begin{mainbox}{Important Submission Note}
-Ensure both the patch file and logs folder are at the root level of your zip file (not in subdirectories). The zip file should contain exactly two items: the \verb|.patch| file and the \verb|tool_X_logs/| folder. Use your assigned participant ID in the filename format \verb|id_X_tool_X_submission.zip| as shown above.
+Ensure both the patch file and logs folder are at the root level of your zip file (not in subdirectories). The zip file should contain exactly two items: the \verb|.patch| file and the \verb|{PID}_tool_X_logs/| folder. Use your assigned participant ID in the filename format \verb|{PID}_tool_X_submission.zip| as shown above.
 \end{mainbox}
 
 \section{Final Submission}
@@ -582,8 +596,8 @@ After completing both sessions, submit all your data to our \href{https://forms.
 Please be sure to upload the following single \inlinecode{.zip} files (one for each session):
 
 \begin{codebox}
-id_{id}_tool_a_submission.zip    # Contains: tool_a_solution.patch + tool_a_logs/
-id_{id}_tool_b_submission.zip    # Contains: tool_b_solution.patch + tool_b_logs/
+{PID}_tool_a_submission.zip    # Contains: {PID}_tool_a_solution.patch + {PID}_tool_a_logs/
+{PID}_tool_b_submission.zip    # Contains: {PID}_tool_b_solution.patch + {PID}_tool_b_logs/
 \end{codebox}
 
 \newpage
