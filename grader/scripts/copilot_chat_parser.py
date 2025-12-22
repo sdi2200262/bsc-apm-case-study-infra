@@ -278,14 +278,10 @@ def get_timestamps(requests: List[Dict[str, Any]]) -> Tuple[Optional[int], Optio
     return min_ts, max_ts
 
 
-def get_session_id(data: Dict[str, Any]) -> str:
-    """Generate a session ID hash from the first request's requestId."""
-    requests = data.get('requests', [])
-    if requests:
-        first_request = requests[0]
-        request_id = first_request.get('requestId', '')
-        return hashlib.sha256(request_id.encode()).hexdigest()[:16]
-    return ''
+def get_chat_id(user_texts: List[str]) -> str:
+    """Generate chat ID from concatenated user messages."""
+    combined = "".join(user_texts)
+    return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
 
 def get_model_ids(data: Dict[str, Any]) -> List[str]:
@@ -344,7 +340,7 @@ def extract_raw_events(data: Dict[str, Any]) -> Dict[str, Any]:
         'user_texts': user_texts,
         'min_timestamp': min_ts,
         'max_timestamp': max_ts,
-        'session_id': get_session_id(data),
+        'chat_id': get_chat_id(user_texts),
         'model_ids': get_model_ids(data),
     }
 
@@ -366,7 +362,7 @@ def aggregate_metrics(raw_events_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     all_user_texts: List[str] = []
     global_min_ts: Optional[int] = None
     global_max_ts: Optional[int] = None
-    session_ids: List[str] = []
+    chat_ids: List[str] = []
     all_model_ids: Set[str] = set()
 
     for events in raw_events_list:
@@ -390,8 +386,8 @@ def aggregate_metrics(raw_events_list: List[Dict[str, Any]]) -> Dict[str, Any]:
             if global_max_ts is None or max_ts > global_max_ts:
                 global_max_ts = max_ts
 
-        if events['session_id']:
-            session_ids.append(events['session_id'])
+        if events['chat_id']:
+            chat_ids.append(events['chat_id'])
 
         all_model_ids.update(events['model_ids'])
 
@@ -446,7 +442,7 @@ def aggregate_metrics(raw_events_list: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "project_metadata": {
             "file_count": len(raw_events_list),
-            "session_ids": session_ids,
+            "chat_ids": chat_ids,
             "unique_model_ids": sorted(all_model_ids),
             "global_start": global_start,
             "global_end": global_end,
@@ -483,9 +479,11 @@ def sanitize_chat(data: Dict[str, Any], secret: bytes) -> Dict[str, Any]:
 
     Metadata is preserved in plaintext for cataloging without decryption.
     """
-    session_id = get_session_id(data)
+    requests = data.get('requests', [])
+    user_texts = [extract_user_text(r) for r in requests if extract_user_text(r) is not None]
+    chat_id = get_chat_id(user_texts)
     model_ids = get_model_ids(data)
-    requests_count = len(data.get('requests', []))
+    requests_count = len(requests)
 
     plaintext = json.dumps(data, ensure_ascii=False, separators=(',', ':'))
     encrypted_payload = encrypt(plaintext, secret)
@@ -495,7 +493,7 @@ def sanitize_chat(data: Dict[str, Any], secret: bytes) -> Dict[str, Any]:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "original_size": len(plaintext),
             "requests_count": requests_count,
-            "session_id": session_id,
+            "chat_id": chat_id,
             "model_ids": model_ids,
         },
         "payload": encrypted_payload
@@ -534,7 +532,7 @@ def export_metrics_csv(metrics: Dict[str, Any], filepath: Path) -> None:
 
     pm = metrics.get('project_metadata', {})
     row['file_count'] = pm.get('file_count', 0)
-    row['session_ids'] = ';'.join(pm.get('session_ids', []))
+    row['chat_ids'] = ';'.join(pm.get('chat_ids', []))
     row['unique_model_ids'] = ';'.join(pm.get('unique_model_ids', []))
     row['global_start'] = pm.get('global_start', '')
     row['global_end'] = pm.get('global_end', '')

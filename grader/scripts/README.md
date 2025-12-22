@@ -5,6 +5,7 @@ CLI utilities for analyzing grading outputs and chat exports.
 ## Overview
 
 - **copilot_chat_parser.py** - Project-level analyzer for Copilot chat exports with multi-file aggregation and PII sanitization
+- **cursor_chat_parser.py** - Analyzer for Cursor markdown chat exports with user behavior classification and PII sanitization
 - **results_viewer.py** - Interactive browser for grading results JSON files
 
 ## copilot_chat_parser.py
@@ -44,7 +45,7 @@ export CHAT_PARSER_SECRET='your-secret-key'
 
 **Project Metadata**
 - `file_count` - Number of input files aggregated
-- `session_ids` - SHA256 hashes of each session's first request ID (16 chars)
+- `chat_ids` - SHA256 hashes of concatenated user messages per file (16 chars)
 - `unique_model_ids` - Distinct model identifiers across all files (e.g., claude-3-5-sonnet)
 - `global_start` - ISO timestamp of earliest request across all files
 - `global_end` - ISO timestamp of latest completion across all files
@@ -77,6 +78,48 @@ Inputs are classified into three mutually exclusive buckets (evaluated in order)
 1. **Protocol** - Contains APM signatures (YAML keys or Markdown headers from APM templates)
 2. **Short** - Length < 50 characters (e.g., "ok", "continue", "yes")
 3. **Standard** - Everything else (natural language debugging/intervention)
+
+---
+
+## cursor_chat_parser.py
+
+Analyzer for Cursor markdown chat exports. Provides user behavior classification and PII sanitization with metadata structure compatible with copilot_chat_parser.
+
+### Features
+
+- **User Behavior Classification** - Classify inputs into Short/Protocol/Standard buckets with APM signature detection
+- **PII Sanitization** - Reversible full-file encryption with HMAC-XOR (zero data loss, metadata preserved)
+- **Multiple Output Formats** - JSON and CSV export with project metadata
+
+### Quick Start
+
+```bash
+# Extract metrics from multiple files (JSON + CSV)
+./cursor_chat_parser.py chat1.md chat2.md --metrics
+
+# Sanitize chat exports (requires CHAT_PARSER_SECRET)
+export CHAT_PARSER_SECRET='your-secret-key'
+./cursor_chat_parser.py chat1.md chat2.md --sanitize
+
+# Restore sanitized data (use same secret)
+./cursor_chat_parser.py sanitized1.json sanitized2.json --unsanitize
+```
+
+### Output Structure
+
+**Project Metadata**
+- `file_count` - Number of input files aggregated
+- `chat_ids` - SHA256 hashes of concatenated user messages per file (16 chars)
+
+### Metrics Reference
+
+- `total_requests` - Sum of user messages across all files
+- `ratio_short_inputs` - Count(Short) / total_requests
+- `ratio_protocol_inputs` - Count(Protocol) / total_requests
+- `ratio_standard_inputs` - Count(Standard) / total_requests
+- `avg_chars_short` - Average characters per Short input
+- `avg_chars_protocol` - Average characters per Protocol input
+- `avg_chars_standard` - Average characters per Standard input
 
 ---
 
