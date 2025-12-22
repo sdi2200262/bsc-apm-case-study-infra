@@ -42,7 +42,7 @@ Contents:
 For each submission:
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Download submission zip] --> B[validate_submission.py]
     B --> C[grade_submission.py]
     C --> D[parse_submission.py]
