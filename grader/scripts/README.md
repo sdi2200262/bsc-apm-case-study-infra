@@ -29,8 +29,7 @@ Project-level analyzer for GitHub Copilot chat export JSON files. Aggregates met
 ./copilot_chat_parser.py *.json --metrics --format json
 ./copilot_chat_parser.py *.json --metrics --format csv
 
-# Sanitize chat exports individually (requires CHAT_PARSER_SECRET)
-export CHAT_PARSER_SECRET='your-secret-key'
+# Sanitize chat exports (requires CHAT_PARSER_SECRET - see Environment Variables below)
 ./copilot_chat_parser.py chat1.json chat2.json --sanitize
 
 # Restore sanitized data (use same secret)
@@ -39,7 +38,7 @@ export CHAT_PARSER_SECRET='your-secret-key'
 
 ### Environment Variables
 
-- **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization. Must be the same for both encrypt and decrypt operations.
+- **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization. Must be the same for both encrypt and decrypt operations. Can be set via environment variable (`export CHAT_PARSER_SECRET='your-secret-key'`) or `.env` file (see `.env.example` in the `grader/` directory).
 
 ### Output Structure
 
@@ -97,8 +96,7 @@ Analyzer for Cursor markdown chat exports. Provides user behavior classification
 # Extract metrics from multiple files (JSON + CSV)
 ./cursor_chat_parser.py chat1.md chat2.md --metrics
 
-# Sanitize chat exports (requires CHAT_PARSER_SECRET)
-export CHAT_PARSER_SECRET='your-secret-key'
+# Sanitize chat exports (requires CHAT_PARSER_SECRET - see Environment Variables above)
 ./cursor_chat_parser.py chat1.md chat2.md --sanitize
 
 # Restore sanitized data (use same secret)

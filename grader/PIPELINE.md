@@ -61,9 +61,19 @@ flowchart LR
 
 ## Quick Start
 
+Set the encryption secret either via environment variable or `.env` file:
+
 ```bash
+# Option 1: Export environment variable
 export CHAT_PARSER_SECRET='your-key'
 
+# Option 2: Use .env file (recommended)
+cp .env.example .env
+# Edit .env and set CHAT_PARSER_SECRET=your-key
+```
+
+Then process a submission:
+```bash
 # Process a submission
 ./scripts/pipeline/validate_submission.py P001_tool_a_submission.zip --output-dir /data/copilot/P001/tool_a
 ./scripts/pipeline/grade_submission.py P001 a --data-dir /data/copilot

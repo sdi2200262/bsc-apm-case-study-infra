@@ -6,9 +6,7 @@ See [../PIPELINE.md](../../PIPELINE.md) for the full protocol.
 
 ## Environment
 
-```bash
-export CHAT_PARSER_SECRET='your-encryption-key'  # Required for parse_submission.py
-```
+The `CHAT_PARSER_SECRET` environment variable is required for `parse_submission.py` when sanitization is enabled. See [PIPELINE.md](../PIPELINE.md#quick-start) for setup instructions (supports both environment variables and `.env` file).
 
 ## Scripts
 

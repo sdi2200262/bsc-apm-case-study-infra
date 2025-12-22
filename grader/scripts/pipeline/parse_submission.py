@@ -12,6 +12,12 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv is optional
+
 from manifest import (
     add_entry,
     compute_checksum,
