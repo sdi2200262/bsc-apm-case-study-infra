@@ -1,8 +1,10 @@
-# Grading Suite
+# Grading & Data Processing Suite
 
-Black-box testing suite for evaluating participant submissions against the task specification. Replicates the production environment by running a local `openeclass` instance and an HTTPS mock SSO redirect.
+Black-box testing suite and data processing pipeline for evaluating participant submissions against the task specification. The grader replicates the production environment by running a local `openeclass` instance and an HTTPS mock SSO redirect. The pipeline scripts handle submission validation, metric extraction, sanitization, and dataset aggregation.
 
 ## Overview
+
+### Grading
 
 This grader evaluates submissions against:
 - **Python implementation** - the eclass-mcp-server baseline and new features
@@ -51,6 +53,7 @@ Running on clean `main` branch (commit `8b4e39c`) without any patch:
 ```
 grader/
 ├── grade                        # Entry point script
+├── PIPELINE.md                  # Data processing pipeline documentation
 ├── SETUP.md                     # Environment setup instructions
 ├── docker-compose.eclass.yaml   # OpenEclass Docker config
 ├── src/                         # Grading modules
@@ -66,11 +69,25 @@ grader/
 ├── fixtures/                    # HTML fixtures for SSO mock
 │   ├── sso_login.html
 │   └── sso_login_error.html
-├── scripts/                     # Utility scripts for grading analysis
+├── scripts/                     # Utility scripts
 │   ├── README.md                # Scripts documentation
 │   ├── copilot_chat_parser.py   # Chat export analyzer with sanitization
-│   └── results_viewer.py        # Results JSON browser
+│   ├── cursor_chat_parser.py    # Cursor chat analyzer with sanitization
+│   ├── results_viewer.py        # Results JSON browser
+│   └── pipeline/                # Data processing pipeline scripts
+│       ├── README.md            # Pipeline scripts documentation
+│       └── *.py                 # See pipeline/README.md for details
 ```
+
+### Data Processing Pipeline
+
+For processing participant submissions from collection through to final datasets, see [PIPELINE.md](PIPELINE.md). The pipeline provides:
+
+- Submission validation and extraction
+- Automated grading with result tracking
+- Chat log parsing and metric extraction
+- PII sanitization via reversible encryption
+- Incremental dataset building with audit trails
 
 ## System Requirements
 

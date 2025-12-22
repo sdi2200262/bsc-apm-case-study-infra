@@ -164,3 +164,21 @@ Interactive browser for grading results JSON files. Displays test scores, filter
 ### Categories
 
 build, protocol, login, logout, courses, authstatus, announcements, memory
+
+---
+
+## Pipeline Scripts
+
+The `pipeline/` subdirectory contains scripts for end-to-end submission processing: validation, grading, metric extraction, sanitization, and dataset building.
+
+See [pipeline/README.md](pipeline/README.md) for script documentation and [../PIPELINE.md](../PIPELINE.md) for the full protocol.
+
+| Script | Purpose |
+|--------|---------|
+| `validate_submission.py` | Validate and extract submission zips |
+| `grade_submission.py` | Run grader and record results |
+| `parse_submission.py` | Extract metrics and sanitize chats |
+| `combine_participant.py` | Merge results with metrics |
+| `add_to_dataset.py` | Append row to dataset |
+| `validate_dataset.py` | Verify dataset integrity |
+
