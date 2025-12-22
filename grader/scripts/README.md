@@ -4,73 +4,79 @@ CLI utilities for analyzing grading outputs and chat exports.
 
 ## Overview
 
-- **copilot_chat_parser.py** - Advanced analyzer for Copilot chat exports with PII sanitization
+- **copilot_chat_parser.py** - Project-level analyzer for Copilot chat exports with multi-file aggregation and PII sanitization
 - **results_viewer.py** - Interactive browser for grading results JSON files
 
 ## copilot_chat_parser.py
 
-Comprehensive analyzer for GitHub Copilot chat export JSON files. Extracts metrics, sanitizes PII data, and provides both CLI and interactive modes.
+Project-level analyzer for GitHub Copilot chat export JSON files. Aggregates metrics across multiple chat sessions, classifies user behavior, and sanitizes PII data.
 
 ### Features
 
-- **Metrics Extraction** - Extract 20+ metrics including tool usage, success rates, session duration, and agentic activity patterns
+- **Multi-File Aggregation** - Combine N chat files into a single project-level analysis
+- **User Behavior Classification** - Classify inputs into Short/Protocol/Standard buckets with APM signature detection
 - **PII Sanitization** - Encrypt sensitive paths and content with reversible HMAC-XOR encryption (zero data loss)
-- **Multiple Output Formats** - JSON, CSV, interactive menu, or formatted terminal display
-- **Flexible CLI** - Command-line arguments for scripting or interactive menu for exploration
+- **Multiple Output Formats** - JSON and CSV export with project metadata
 
 ### Quick Start
 
 ```bash
-# Interactive mode (default)
-./copilot_chat_parser.py chat.json
-
-# Extract all metrics (JSON + CSV)
-./copilot_chat_parser.py chat.json --metrics
+# Extract project-level metrics from multiple files (JSON + CSV)
+./copilot_chat_parser.py chat1.json chat2.json chat3.json --metrics
 
 # Extract metrics in specific format
-./copilot_chat_parser.py chat.json --metrics --format json
-./copilot_chat_parser.py chat.json --metrics --format csv
+./copilot_chat_parser.py *.json --metrics --format json
+./copilot_chat_parser.py *.json --metrics --format csv
 
-# Sanitize chat export (requires CHAT_PARSER_SECRET)
+# Sanitize chat exports individually (requires CHAT_PARSER_SECRET)
 export CHAT_PARSER_SECRET='your-secret-key'
-./copilot_chat_parser.py chat.json --sanitize -o sanitized.json
+./copilot_chat_parser.py chat1.json chat2.json --sanitize
 
 # Restore sanitized data (use same secret)
-./copilot_chat_parser.py sanitized.json --unsanitize -o restored.json
+./copilot_chat_parser.py sanitized1.json sanitized2.json --unsanitize
 ```
 
 ### Environment Variables
 
 - **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization. Must be the same for both encrypt and decrypt operations.
 
+### Output Structure
+
+**Project Metadata**
+- `file_count` - Number of input files aggregated
+- `session_ids` - SHA256 hashes of each session's first request ID (16 chars)
+- `unique_model_ids` - Distinct model identifiers across all files (e.g., claude-3-5-sonnet)
+- `global_start` - ISO timestamp of earliest request across all files
+- `global_end` - ISO timestamp of latest completion across all files
+
 ### Metrics Reference
 
-**Session Metadata**
-- `session_id` - SHA256 hash of request ID (first 16 chars)
-- `model_id` - Model identifier (e.g., copilot/claude-opus-4.5)
+**Tier 1: Reliability (Global Rates)**
+- `tool_success_rate` - Σ(successes) / Σ(invocations)
+- `tool_retry_rate` - Σ(retries) / Σ(rounds)
+- `user_edit_rate` - Σ(terminal edits) / Σ(terminal invocations)
 
-**Core Metrics (Tier 1)**
-- `total_requests` - Number of user requests
-- `total_tool_invocations` - Total tool calls across all requests
-- `user_edit_count` - Count of user edits to terminal commands
-- `terminal_invocations` - Total terminal command invocations
-- `user_edit_rate` - Ratio of edited to total terminal invocations
-- `tool_success_count` - Completed tool invocations
-- `tool_success_rate` - Success rate of all tool invocations
-- `session_duration_ms` - Total session time in milliseconds
+**Tier 2: Volume (Global Sums)**
+- `total_requests` - Sum of user messages across all files
+- `session_duration_minutes` - (global_end - global_start) / 60000
 
-**Supporting Metrics (Tier 2)**
-- `total_rounds` - Count of tool execution rounds
-- `retry_count` - Tool invocation retries across all rounds
-- `tool_retry_rate` - Ratio of retries to total rounds
-- `invocations_per_request` - Average tools used per request
-- `unique_tools_used` - Count of distinct tool types
+**Tier 3: Behavior Distribution (Ratios)**
+- `ratio_short_inputs` - Count(Short) / total_requests
+- `ratio_protocol_inputs` - Count(Protocol) / total_requests
+- `ratio_standard_inputs` - Count(Standard) / total_requests
 
-**Agentic Activity (Tier 3)**
-- `file_modifications` - Count of file creation/edit operations
-- `read_operations` - Total file read operations
-- `write_operations` - Total file write operations
-- `read_write_ratio` - Ratio of reads to writes
+**Tier 4: Behavior Magnitude (Character Counts)**
+- `avg_chars_short` - Σ(chars in Short) / Count(Short)
+- `avg_chars_protocol` - Σ(chars in Protocol) / Count(Protocol)
+- `avg_chars_standard` - Σ(chars in Standard) / Count(Standard)
+
+### User Behavior Classification
+
+Inputs are classified into three mutually exclusive buckets (evaluated in order):
+
+1. **Protocol** - Contains APM signatures (YAML keys or Markdown headers from APM templates)
+2. **Short** - Length < 50 characters (e.g., "ok", "continue", "yes")
+3. **Standard** - Everything else (natural language debugging/intervention)
 
 ---
 

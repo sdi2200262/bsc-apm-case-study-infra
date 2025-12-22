@@ -5,9 +5,9 @@
 Copilot Chat Parser - CLI utility for analyzing GitHub Copilot chat exports.
 
 Provides:
-- Metric extraction (JSON/CSV output)
+- Project-level metric extraction with multi-file aggregation (JSON/CSV output)
 - Reversible PII sanitization with zero data loss
-- Interactive menu mode for human exploration
+- User behavior classification (Short/Protocol/Standard buckets)
 
 Environment Variables:
     CHAT_PARSER_SECRET: Required for sanitization/unsanitization operations.
@@ -23,37 +23,18 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 # =============================================================================
 # Constants
 # =============================================================================
 
-LINE_WIDTH = 60
 SANITIZATION_VERSION = 1
 SANITIZATION_MARKER = "ENC"
 META_KEY = "_sanitization_meta"
-
-# Tool classifications for read/write metrics
-READ_TOOLS = frozenset([
-    "copilot_readFile", "read_file", "copilot_findFiles", "file_search",
-    "copilot_findTextInFiles", "grep_search", "semantic_search",
-    "copilot_listDirectory", "list_dir", "copilot_fetchWebPage",
-    "fetch_webpage", "vscode_fetchWebPage_internal"
-])
-
-WRITE_TOOLS = frozenset([
-    "copilot_createFile", "create_file", "replace_string_in_file",
-    "multi_replace_string_in_file", "edit_notebook_file", "run_in_terminal"
-])
-
-FILE_MODIFICATION_TOOLS = frozenset([
-    "copilot_createFile", "create_file", "replace_string_in_file",
-    "multi_replace_string_in_file", "edit_notebook_file"
-])
 
 # Regex patterns for path detection
 PATH_PATTERNS = [
@@ -62,6 +43,44 @@ PATH_PATTERNS = [
     re.compile(r'/home/[^\s"\'\]}>]+'),             # Linux paths
     re.compile(r'[A-Za-z]:\\[^\s"\'\]}>]+'),        # Windows paths
 ]
+
+# APM Protocol Signatures for user behavior classification
+# YAML frontmatter keys (case-insensitive, line starts with)
+APM_YAML_KEYS = [
+    "task_ref:",
+    "agent_assignment:",
+    "execution_type:",
+    "memory_log_path:",
+    "dependency_context:",
+    "ad_hoc_delegation:",
+    "bug_type:",
+    "complexity:",
+    "delegation_attempt:",
+    "research_type:",
+    "information_scope:",
+    "knowledge_gap:",
+]
+
+# Markdown headers (case-insensitive, substring match)
+APM_HEADERS = [
+    "# apm task assignment",
+    "## task reference",
+    "## context from dependencies",
+    "## objective",
+    "## detailed instructions",
+    "## expected output",
+    "## memory logging",
+    "## reporting protocol",
+    "# debug delegation:",
+    "# research delegation:",
+    "# apm implementation agent handover",
+    "# apm manager agent handover",
+    "## apm context integration protocol",
+    "## context integration protocol",
+]
+
+# Short input threshold
+SHORT_INPUT_THRESHOLD = 50
 
 
 # =============================================================================
@@ -209,7 +228,72 @@ def is_sanitized(data: Dict[str, Any]) -> bool:
 
 
 # =============================================================================
-# Metric Extraction
+# User Behavior Classification
+# =============================================================================
+
+def is_apm_protocol(text: str) -> bool:
+    """
+    Check if text contains APM protocol signatures.
+    
+    Args:
+        text: User input text to classify.
+    
+    Returns:
+        True if text contains any APM signature.
+    """
+    if not text:
+        return False
+    
+    text_lower = text.lower()
+    
+    # Check for APM headers (substring match)
+    for header in APM_HEADERS:
+        if header in text_lower:
+            return True
+    
+    # Check for YAML frontmatter keys (line starts with)
+    lines = text_lower.split('\n')
+    for line in lines:
+        stripped = line.strip()
+        for key in APM_YAML_KEYS:
+            if stripped.startswith(key):
+                return True
+    
+    return False
+
+
+def classify_user_input(text: str) -> str:
+    """
+    Classify user input into one of three buckets.
+    
+    Classification order (mutually exclusive):
+    1. Protocol: Contains APM signatures (checked first)
+    2. Short: Length < 50 characters (checked second)
+    3. Standard: Everything else
+    
+    Args:
+        text: User input text to classify.
+    
+    Returns:
+        One of: "protocol", "short", "standard"
+    """
+    if not text:
+        return "short"
+    
+    # Check protocol first (regardless of length)
+    if is_apm_protocol(text):
+        return "protocol"
+    
+    # Then check short
+    if len(text) < SHORT_INPUT_THRESHOLD:
+        return "short"
+    
+    # Everything else is standard
+    return "standard"
+
+
+# =============================================================================
+# Metric Extraction Helpers
 # =============================================================================
 
 def count_tool_invocations(request: Dict[str, Any]) -> int:
@@ -219,6 +303,17 @@ def count_tool_invocations(request: Dict[str, Any]) -> int:
         if item.get('kind') == 'toolInvocationSerialized':
             count += 1
     return count
+
+
+def count_tool_successes(request: Dict[str, Any]) -> int:
+    """Count successfully completed tool invocations."""
+    successes = 0
+    for item in request.get('response', []):
+        if item.get('kind') != 'toolInvocationSerialized':
+            continue
+        if item.get('isComplete', False):
+            successes += 1
+    return successes
 
 
 def count_user_edits(request: Dict[str, Any]) -> Tuple[int, int]:
@@ -246,31 +341,6 @@ def count_user_edits(request: Dict[str, Any]) -> Tuple[int, int]:
     return edits, terminals
 
 
-def get_tool_distribution(request: Dict[str, Any]) -> Dict[str, int]:
-    """Get count of each tool type used in a request."""
-    distribution: Dict[str, int] = {}
-    
-    for item in request.get('response', []):
-        if item.get('kind') == 'toolInvocationSerialized':
-            tool_id = item.get('toolId', 'unknown')
-            distribution[tool_id] = distribution.get(tool_id, 0) + 1
-    
-    return distribution
-
-
-def count_tool_successes(request: Dict[str, Any]) -> int:
-    """Count successfully completed tool invocations."""
-    successes = 0
-    
-    for item in request.get('response', []):
-        if item.get('kind') != 'toolInvocationSerialized':
-            continue
-        if item.get('isComplete', False):
-            successes += 1
-    
-    return successes
-
-
 def get_rounds_info(request: Dict[str, Any]) -> Tuple[int, int]:
     """Get tool round and retry information. Returns (round_count, retry_count)."""
     result = request.get('result', {})
@@ -283,148 +353,280 @@ def get_rounds_info(request: Dict[str, Any]) -> Tuple[int, int]:
     return round_count, retry_count
 
 
-def count_read_write_operations(requests: List[Dict[str, Any]]) -> Tuple[int, int, int]:
-    """Count read/write operations and file modifications. Returns (read_ops, write_ops, file_mods)."""
-    read_ops = 0
-    write_ops = 0
-    file_mods = 0
-    
-    for request in requests:
-        for item in request.get('response', []):
-            if item.get('kind') != 'toolInvocationSerialized':
-                continue
-            
-            tool_id = item.get('toolId', '')
-            
-            if tool_id in READ_TOOLS:
-                read_ops += 1
-            if tool_id in WRITE_TOOLS:
-                write_ops += 1
-            if tool_id in FILE_MODIFICATION_TOOLS:
-                file_mods += 1
-    
-    return read_ops, write_ops, file_mods
+def extract_user_text(request: Dict[str, Any]) -> Optional[str]:
+    """Extract user message text from a request."""
+    message = request.get('message', {})
+    if message.get('role') == 'user':
+        return message.get('text', '')
+    return None
 
 
-def extract_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
+def get_timestamps(requests: List[Dict[str, Any]]) -> Tuple[Optional[int], Optional[int]]:
     """
-    Extract all metrics from chat data.
+    Get min and max timestamps from requests.
+    
+    Returns:
+        Tuple of (min_timestamp, max_timestamp) in milliseconds, or (None, None) if empty.
+    """
+    if not requests:
+        return None, None
+    
+    min_ts = None
+    max_ts = None
+    
+    for r in requests:
+        ts = r.get('timestamp')
+        if ts is not None:
+            if min_ts is None or ts < min_ts:
+                min_ts = ts
+            if max_ts is None or ts > max_ts:
+                max_ts = ts
+        
+        # Also check completedAt in modelState
+        model_state = r.get('modelState', {})
+        completed_at = model_state.get('completedAt')
+        if completed_at is not None:
+            if max_ts is None or completed_at > max_ts:
+                max_ts = completed_at
+    
+    return min_ts, max_ts
+
+
+def get_session_id(data: Dict[str, Any]) -> str:
+    """Generate a session ID hash from the first request's requestId."""
+    requests = data.get('requests', [])
+    if requests:
+        first_request = requests[0]
+        request_id = first_request.get('requestId', '')
+        return hashlib.sha256(request_id.encode()).hexdigest()[:16]
+    return ''
+
+
+def get_model_ids(data: Dict[str, Any]) -> Set[str]:
+    """Extract all unique model IDs from chat data."""
+    model_ids: Set[str] = set()
+    for request in data.get('requests', []):
+        model_id = request.get('modelId', '')
+        if model_id:
+            model_ids.add(model_id)
+    return model_ids
+
+
+# =============================================================================
+# Raw Event Extraction (Per-File)
+# =============================================================================
+
+def extract_raw_events(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extract raw event counts from a single chat file.
     
     Args:
         data: Parsed chat export data.
     
     Returns:
-        Dictionary containing metadata and computed metrics.
+        Dictionary containing raw counts and user texts for aggregation.
     """
     requests = data.get('requests', [])
     
-    # Collect metadata (session/model info)
-    metadata = {}
-    if requests:
-        first_request = requests[0]
-        metadata['session_id'] = hashlib.sha256(
-            first_request.get('requestId', '').encode()
-        ).hexdigest()[:16]
-        metadata['model_id'] = first_request.get('modelId', '')
+    # Initialize counters
+    total_requests = len(requests)
+    total_invocations = 0
+    total_successes = 0
+    total_edits = 0
+    total_terminals = 0
+    total_rounds = 0
+    total_retries = 0
     
-    # Compute metrics
-    metrics = {}
+    # User behavior data
+    user_texts: List[str] = []
     
-    if not requests:
-        metrics = {
-            "total_requests": 0,
-            "total_tool_invocations": 0,
-            "user_edit_count": 0,
-            "terminal_invocations": 0,
-            "user_edit_rate": 0.0,
-            "tool_success_count": 0,
-            "tool_success_rate": 0.0,
-            "session_duration_ms": 0,
-            "total_rounds": 0,
-            "retry_count": 0,
-            "tool_retry_rate": 0.0,
-            "invocations_per_request": 0.0,
-            "unique_tools_used": 0,
-            "file_modifications": 0,
-            "read_operations": 0,
-            "write_operations": 0,
-            "read_write_ratio": 0.0,
-        }
-    else:
-        # Basic counts
-        total_requests = len(requests)
-        total_invocations = sum(count_tool_invocations(r) for r in requests)
+    # Process each request
+    for r in requests:
+        total_invocations += count_tool_invocations(r)
+        total_successes += count_tool_successes(r)
         
-        # User edit metrics
-        total_edits = 0
-        total_terminals = 0
-        for r in requests:
-            edits, terminals = count_user_edits(r)
-            total_edits += edits
-            total_terminals += terminals
+        edits, terminals = count_user_edits(r)
+        total_edits += edits
+        total_terminals += terminals
         
-        user_edit_rate = total_edits / total_terminals if total_terminals > 0 else 0.0
+        rounds, retries = get_rounds_info(r)
+        total_rounds += rounds
+        total_retries += retries
         
-        # Tool success metrics
-        total_successes = sum(count_tool_successes(r) for r in requests)
-        tool_success_rate = total_successes / total_invocations if total_invocations > 0 else 0.0
+        user_text = extract_user_text(r)
+        if user_text is not None:
+            user_texts.append(user_text)
+    
+    # Get timestamps
+    min_ts, max_ts = get_timestamps(requests)
+    
+    return {
+        'total_requests': total_requests,
+        'total_invocations': total_invocations,
+        'total_successes': total_successes,
+        'total_edits': total_edits,
+        'total_terminals': total_terminals,
+        'total_rounds': total_rounds,
+        'total_retries': total_retries,
+        'user_texts': user_texts,
+        'min_timestamp': min_ts,
+        'max_timestamp': max_ts,
+        'session_id': get_session_id(data),
+        'model_ids': get_model_ids(data),
+    }
+
+
+# =============================================================================
+# Project-Level Aggregation
+# =============================================================================
+
+def aggregate_metrics(raw_events_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Aggregate raw events from multiple files into project-level metrics.
+    
+    Args:
+        raw_events_list: List of raw event dictionaries from extract_raw_events.
+    
+    Returns:
+        Dictionary with project_metadata and metrics.
+    """
+    # Aggregate counters
+    total_requests = 0
+    total_invocations = 0
+    total_successes = 0
+    total_edits = 0
+    total_terminals = 0
+    total_rounds = 0
+    total_retries = 0
+    
+    # Collect all user texts
+    all_user_texts: List[str] = []
+    
+    # Track timestamps
+    global_min_ts: Optional[int] = None
+    global_max_ts: Optional[int] = None
+    
+    # Collect session IDs and model IDs
+    session_ids: List[str] = []
+    all_model_ids: Set[str] = set()
+    
+    for events in raw_events_list:
+        total_requests += events['total_requests']
+        total_invocations += events['total_invocations']
+        total_successes += events['total_successes']
+        total_edits += events['total_edits']
+        total_terminals += events['total_terminals']
+        total_rounds += events['total_rounds']
+        total_retries += events['total_retries']
         
-        # Session timing
-        first_timestamp = requests[0].get('timestamp', 0)
-        last_completed = None
-        for r in reversed(requests):
-            model_state = r.get('modelState', {})
-            if model_state and 'completedAt' in model_state:
-                last_completed = model_state['completedAt']
-                break
+        all_user_texts.extend(events['user_texts'])
         
-        session_duration_ms = (last_completed - first_timestamp) if last_completed else 0
+        min_ts = events['min_timestamp']
+        max_ts = events['max_timestamp']
         
-        # Round metrics
-        total_rounds = 0
-        total_retries = 0
-        for r in requests:
-            rounds, retries = get_rounds_info(r)
-            total_rounds += rounds
-            total_retries += retries
+        if min_ts is not None:
+            if global_min_ts is None or min_ts < global_min_ts:
+                global_min_ts = min_ts
+        if max_ts is not None:
+            if global_max_ts is None or max_ts > global_max_ts:
+                global_max_ts = max_ts
         
-        tool_retry_rate = total_retries / total_rounds if total_rounds > 0 else 0.0
+        if events['session_id']:
+            session_ids.append(events['session_id'])
         
-        # Tool distribution
-        all_tools: Set[str] = set()
-        for r in requests:
-            dist = get_tool_distribution(r)
-            all_tools.update(dist.keys())
+        all_model_ids.update(events['model_ids'])
+    
+    # Calculate Tier 1: Reliability rates
+    tool_success_rate = total_successes / total_invocations if total_invocations > 0 else 0.0
+    tool_retry_rate = total_retries / total_rounds if total_rounds > 0 else 0.0
+    user_edit_rate = total_edits / total_terminals if total_terminals > 0 else 0.0
+    
+    # Calculate Tier 2: Volume
+    session_duration_minutes = 0.0
+    if global_min_ts is not None and global_max_ts is not None:
+        session_duration_minutes = (global_max_ts - global_min_ts) / 60000.0
+    
+    # Calculate Tier 3 & 4: User behavior classification
+    count_short = 0
+    count_protocol = 0
+    count_standard = 0
+    chars_short = 0
+    chars_protocol = 0
+    chars_standard = 0
+    
+    for text in all_user_texts:
+        bucket = classify_user_input(text)
+        text_len = len(text) if text else 0
         
-        unique_tools = len(all_tools)
-        invocations_per_request = total_invocations / total_requests if total_requests > 0 else 0.0
-        
-        # Read/write metrics
-        read_ops, write_ops, file_mods = count_read_write_operations(requests)
-        read_write_ratio = read_ops / write_ops if write_ops > 0 else 0.0
-        
-        metrics = {
-            "total_requests": total_requests,
-            "total_tool_invocations": total_invocations,
-            "user_edit_count": total_edits,
-            "terminal_invocations": total_terminals,
-            "user_edit_rate": round(user_edit_rate, 4),
-            "tool_success_count": total_successes,
+        if bucket == "short":
+            count_short += 1
+            chars_short += text_len
+        elif bucket == "protocol":
+            count_protocol += 1
+            chars_protocol += text_len
+        else:  # standard
+            count_standard += 1
+            chars_standard += text_len
+    
+    # Calculate ratios (Tier 3)
+    total_classified = len(all_user_texts)
+    ratio_short = count_short / total_classified if total_classified > 0 else 0.0
+    ratio_protocol = count_protocol / total_classified if total_classified > 0 else 0.0
+    ratio_standard = count_standard / total_classified if total_classified > 0 else 0.0
+    
+    # Calculate average chars (Tier 4)
+    avg_chars_short = chars_short / count_short if count_short > 0 else 0.0
+    avg_chars_protocol = chars_protocol / count_protocol if count_protocol > 0 else 0.0
+    avg_chars_standard = chars_standard / count_standard if count_standard > 0 else 0.0
+    
+    # Format timestamps as ISO strings
+    global_start = None
+    global_end = None
+    if global_min_ts is not None:
+        global_start = datetime.fromtimestamp(global_min_ts / 1000, tz=timezone.utc).isoformat()
+    if global_max_ts is not None:
+        global_end = datetime.fromtimestamp(global_max_ts / 1000, tz=timezone.utc).isoformat()
+    
+    return {
+        "project_metadata": {
+            "file_count": len(raw_events_list),
+            "session_ids": session_ids,
+            "unique_model_ids": sorted(list(all_model_ids)),
+            "global_start": global_start,
+            "global_end": global_end,
+        },
+        "metrics": {
+            # Tier 1: Reliability
             "tool_success_rate": round(tool_success_rate, 4),
-            "session_duration_ms": session_duration_ms,
-            "total_rounds": total_rounds,
-            "retry_count": total_retries,
             "tool_retry_rate": round(tool_retry_rate, 4),
-            "invocations_per_request": round(invocations_per_request, 2),
-            "unique_tools_used": unique_tools,
-            "file_modifications": file_mods,
-            "read_operations": read_ops,
-            "write_operations": write_ops,
-            "read_write_ratio": round(read_write_ratio, 2),
+            "user_edit_rate": round(user_edit_rate, 4),
+            # Tier 2: Volume
+            "total_requests": total_requests,
+            "session_duration_minutes": round(session_duration_minutes, 2),
+            # Tier 3: Behavior Distribution
+            "ratio_short_inputs": round(ratio_short, 4),
+            "ratio_protocol_inputs": round(ratio_protocol, 4),
+            "ratio_standard_inputs": round(ratio_standard, 4),
+            # Tier 4: Behavior Magnitude
+            "avg_chars_short": round(avg_chars_short, 2),
+            "avg_chars_protocol": round(avg_chars_protocol, 2),
+            "avg_chars_standard": round(avg_chars_standard, 2),
         }
+    }
+
+
+def extract_project_metrics(data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Extract project-level metrics from multiple chat files.
     
-    # Combine metadata and metrics
-    return {**metadata, **metrics}
+    Args:
+        data_list: List of parsed chat export data dictionaries.
+    
+    Returns:
+        Dictionary with project_metadata and metrics.
+    """
+    raw_events_list = [extract_raw_events(data) for data in data_list]
+    return aggregate_metrics(raw_events_list)
 
 
 # =============================================================================
@@ -684,46 +886,6 @@ def unsanitize_chat(data: Dict[str, Any], secret: bytes) -> Dict[str, Any]:
 # Output Formatting
 # =============================================================================
 
-def print_header(text: str, char: str = "=") -> None:
-    """Print section header with separator lines."""
-    print(f"\n{char * LINE_WIDTH}")
-    print(f" {text}")
-    print(f"{char * LINE_WIDTH}")
-
-
-def print_metrics(metrics: Dict[str, Any]) -> None:
-    """Print metrics summary with metadata and tiers."""
-    print_header("CHAT METRICS SUMMARY")
-    
-    # Session metadata
-    print_header("SESSION METADATA", "-")
-    print(f"  Session ID:           {metrics.get('session_id', 'N/A')}")
-    print(f"  Model ID:             {metrics.get('model_id', 'N/A')}")
-    
-    print_header("CORE METRICS (Tier 1)", "-")
-    print(f"  Total Requests:       {metrics['total_requests']}")
-    print(f"  Total Invocations:    {metrics['total_tool_invocations']}")
-    print(f"  User Edit Count:      {metrics['user_edit_count']}")
-    print(f"  Terminal Invocations: {metrics['terminal_invocations']}")
-    print(f"  User Edit Rate:       {metrics['user_edit_rate']:.2%}")
-    print(f"  Tool Success Count:   {metrics['tool_success_count']}")
-    print(f"  Tool Success Rate:    {metrics['tool_success_rate']:.2%}")
-    print(f"  Session Duration:     {metrics['session_duration_ms']:,} ms")
-    
-    print_header("SUPPORTING METRICS (Tier 2)", "-")
-    print(f"  Total Rounds:         {metrics['total_rounds']}")
-    print(f"  Retry Count:          {metrics['retry_count']}")
-    print(f"  Tool Retry Rate:      {metrics['tool_retry_rate']:.2%}")
-    print(f"  Invocations/Request:  {metrics['invocations_per_request']:.2f}")
-    print(f"  Unique Tools Used:    {metrics['unique_tools_used']}")
-    
-    print_header("AGENTIC ACTIVITY (Tier 3)", "-")
-    print(f"  File Modifications:   {metrics['file_modifications']}")
-    print(f"  Read Operations:      {metrics['read_operations']}")
-    print(f"  Write Operations:     {metrics['write_operations']}")
-    print(f"  Read/Write Ratio:     {metrics['read_write_ratio']:.2f}")
-
-
 def export_metrics_json(metrics: Dict[str, Any], filepath: Path) -> None:
     """Export metrics as JSON file."""
     save_json(metrics, filepath)
@@ -731,70 +893,30 @@ def export_metrics_json(metrics: Dict[str, Any], filepath: Path) -> None:
 
 
 def export_metrics_csv(metrics: Dict[str, Any], filepath: Path) -> None:
-    """Export metrics as CSV file (single row)."""
-    fieldnames = list(metrics.keys())
+    """Export metrics as CSV file (single row with flattened structure)."""
+    # Flatten project_metadata and metrics into single row
+    row = {}
+    
+    # Flatten project_metadata
+    pm = metrics.get('project_metadata', {})
+    row['file_count'] = pm.get('file_count', 0)
+    row['session_ids'] = ';'.join(pm.get('session_ids', []))
+    row['unique_model_ids'] = ';'.join(pm.get('unique_model_ids', []))
+    row['global_start'] = pm.get('global_start', '')
+    row['global_end'] = pm.get('global_end', '')
+    
+    # Flatten metrics
+    m = metrics.get('metrics', {})
+    row.update(m)
+    
+    fieldnames = list(row.keys())
     
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerow(metrics)
+        writer.writerow(row)
     
     print(f"Metrics exported to: {filepath}")
-
-
-# =============================================================================
-# Interactive Menu
-# =============================================================================
-
-def interactive_menu(data: Dict[str, Any], input_path: Path) -> None:
-    """Run interactive menu for browsing and exporting chat data."""
-    stem = input_path.stem
-    parent = input_path.parent
-    
-    # Pre-compute metrics
-    if is_sanitized(data):
-        print("\nWarning: Input is sanitized. Metrics may not be accurate.")
-        print("Use --unsanitize first to restore original data.\n")
-    
-    metrics = extract_metrics(data)
-    
-    while True:
-        print_header("COPILOT CHAT PARSER")
-        print("  1. Show metrics (print to terminal)")
-        print("  2. Export metrics (JSON)")
-        print("  3. Export metrics (CSV)")
-        print("  4. Export sanitized JSON")
-        print("  q. Quit")
-        
-        choice = input("\nEnter choice: ").strip().lower()
-        
-        if choice == 'q':
-            print("Exiting.")
-            break
-        elif choice == '1':
-            print_metrics(metrics)
-        elif choice == '2':
-            output_path = parent / f"metrics_{stem}.json"
-            export_metrics_json(metrics, output_path)
-        elif choice == '3':
-            output_path = parent / f"metrics_{stem}.csv"
-            export_metrics_csv(metrics, output_path)
-        elif choice == '4':
-            secret = os.environ.get('CHAT_PARSER_SECRET', '').encode('utf-8')
-            if not secret:
-                print("\nError: CHAT_PARSER_SECRET environment variable not set.")
-                print("Set it with: export CHAT_PARSER_SECRET='your-secret-key'")
-            elif is_sanitized(data):
-                print("\nError: Data is already sanitized.")
-            else:
-                sanitized = sanitize_chat(data, secret)
-                output_path = parent / f"sanitized_{stem}.json"
-                save_json(sanitized, output_path)
-                print(f"\nSanitized export saved to: {output_path}")
-        else:
-            print("Invalid choice. Please try again.")
-        
-        input("\nPress Enter to continue...")
 
 
 # =============================================================================
@@ -805,26 +927,21 @@ def create_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
     parser = argparse.ArgumentParser(
         prog="copilot_chat_parser.py",
-        description="CLI utility for analyzing GitHub Copilot chat exports.",
+        description="CLI utility for analyzing GitHub Copilot chat exports with project-level aggregation.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Usage Examples:
-  Interactive mode (default):
-    ./copilot_chat_parser.py chat.json
+  Extract project-level metrics from multiple files:
+    ./copilot_chat_parser.py chat1.json chat2.json chat3.json --metrics
+    ./copilot_chat_parser.py *.json --metrics --format json
+    ./copilot_chat_parser.py *.json --metrics --format csv
 
-  Extract metrics:
-    ./copilot_chat_parser.py chat.json --metrics
-    ./copilot_chat_parser.py chat.json --metrics --format json
-    ./copilot_chat_parser.py chat.json --metrics --format csv
-
-  Sanitize (requires CHAT_PARSER_SECRET env var):
+  Sanitize files individually (requires CHAT_PARSER_SECRET env var):
     export CHAT_PARSER_SECRET='your-secret-key'
-    ./copilot_chat_parser.py chat.json --sanitize
-    ./copilot_chat_parser.py chat.json --sanitize -o sanitized.json
+    ./copilot_chat_parser.py chat1.json chat2.json --sanitize
 
-  Unsanitize (requires same secret):
-    ./copilot_chat_parser.py sanitized.json --unsanitize
-    ./copilot_chat_parser.py sanitized.json --unsanitize -o restored.json
+  Unsanitize files individually (requires same secret):
+    ./copilot_chat_parser.py sanitized1.json sanitized2.json --unsanitize
 
 Environment Variables:
   CHAT_PARSER_SECRET  Required for --sanitize and --unsanitize operations.
@@ -833,15 +950,16 @@ Environment Variables:
     )
     
     parser.add_argument(
-        "input_file",
+        "input_files",
         type=Path,
-        help="Path to the chat export JSON file"
+        nargs='+',
+        help="Path(s) to the chat export JSON file(s)"
     )
     
     parser.add_argument(
         "--metrics",
         action="store_true",
-        help="Extract and export metrics (JSON + CSV by default)"
+        help="Extract and export project-level metrics (aggregated across all input files)"
     )
     
     parser.add_argument(
@@ -854,20 +972,20 @@ Environment Variables:
     parser.add_argument(
         "--sanitize",
         action="store_true",
-        help="Sanitize chat export (encrypt PII fields)"
+        help="Sanitize chat exports (encrypt PII fields) - processes each file individually"
     )
     
     parser.add_argument(
         "--unsanitize",
         action="store_true",
-        help="Unsanitize chat export (decrypt PII fields)"
+        help="Unsanitize chat exports (decrypt PII fields) - processes each file individually"
     )
     
     parser.add_argument(
         "-o", "--output",
         type=Path,
         default=None,
-        help="Output file path (default: same directory as input)"
+        help="Output file path for metrics (default: metrics_project.json/csv in first file's directory)"
     )
     
     return parser
@@ -878,25 +996,13 @@ def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
     
-    # Validate input file
-    if not args.input_file.exists():
-        print(f"Error: File not found: {args.input_file}", file=sys.stderr)
-        return 1
+    # Validate all input files exist
+    for input_file in args.input_files:
+        if not input_file.exists():
+            print(f"Error: File not found: {input_file}", file=sys.stderr)
+            return 1
     
-    # Load JSON data
-    try:
-        data = load_chat(args.input_file)
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON: {e}", file=sys.stderr)
-        return 1
-    except OSError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    
-    stem = args.input_file.stem
-    parent = args.input_file.parent
-    
-    # Handle --sanitize
+    # Handle --sanitize (file-by-file)
     if args.sanitize:
         secret = os.environ.get('CHAT_PARSER_SECRET', '').encode('utf-8')
         if not secret:
@@ -904,17 +1010,29 @@ def main() -> int:
                   file=sys.stderr)
             return 1
         
-        if is_sanitized(data):
-            print("Error: Input is already sanitized.", file=sys.stderr)
-            return 1
+        for input_file in args.input_files:
+            try:
+                data = load_chat(input_file)
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in {input_file}: {e}", file=sys.stderr)
+                return 1
+            except OSError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            
+            if is_sanitized(data):
+                print(f"Warning: {input_file} is already sanitized, skipping.",
+                      file=sys.stderr)
+                continue
+            
+            sanitized = sanitize_chat(data, secret)
+            output_path = input_file.parent / f"sanitized_{input_file.name}"
+            save_json(sanitized, output_path)
+            print(f"Sanitized export saved to: {output_path}")
         
-        sanitized = sanitize_chat(data, secret)
-        output_path = args.output or (parent / f"sanitized_{stem}.json")
-        save_json(sanitized, output_path)
-        print(f"Sanitized export saved to: {output_path}")
         return 0
     
-    # Handle --unsanitize
+    # Handle --unsanitize (file-by-file)
     if args.unsanitize:
         secret = os.environ.get('CHAT_PARSER_SECRET', '').encode('utf-8')
         if not secret:
@@ -922,41 +1040,72 @@ def main() -> int:
                   file=sys.stderr)
             return 1
         
-        if not is_sanitized(data):
-            print("Error: Input is not a sanitized file.", file=sys.stderr)
-            return 1
+        for input_file in args.input_files:
+            try:
+                data = load_chat(input_file)
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in {input_file}: {e}", file=sys.stderr)
+                return 1
+            except OSError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            
+            if not is_sanitized(data):
+                print(f"Warning: {input_file} is not a sanitized file, skipping.",
+                      file=sys.stderr)
+                continue
+            
+            restored = unsanitize_chat(data, secret)
+            output_path = input_file.parent / f"unsanitized_{input_file.name}"
+            save_json(restored, output_path)
+            print(f"Restored export saved to: {output_path}")
         
-        restored = unsanitize_chat(data, secret)
-        output_path = args.output or (parent / f"unsanitized_{stem}.json")
-        save_json(restored, output_path)
-        print(f"Restored export saved to: {output_path}")
         return 0
     
-    # Handle --metrics
+    # Handle --metrics (aggregation mode)
     if args.metrics:
-        if is_sanitized(data):
-            print("Warning: Input is sanitized. Metrics extracted from sanitized data.",
-                  file=sys.stderr)
+        data_list = []
+        has_sanitized_warning = False
         
-        metrics = extract_metrics(data)
+        for input_file in args.input_files:
+            try:
+                data = load_chat(input_file)
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in {input_file}: {e}", file=sys.stderr)
+                return 1
+            except OSError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            
+            if is_sanitized(data) and not has_sanitized_warning:
+                print("Warning: One or more input files are sanitized. "
+                      "Metrics extracted from sanitized data.", file=sys.stderr)
+                has_sanitized_warning = True
+            
+            data_list.append(data)
+        
+        metrics = extract_project_metrics(data_list)
+        
+        # Determine output paths
+        first_parent = args.input_files[0].parent
         
         if args.format == "json":
-            output_path = args.output or (parent / f"metrics_{stem}.json")
+            output_path = args.output or (first_parent / "metrics_project.json")
             export_metrics_json(metrics, output_path)
         elif args.format == "csv":
-            output_path = args.output or (parent / f"metrics_{stem}.csv")
+            output_path = args.output or (first_parent / "metrics_project.csv")
             export_metrics_csv(metrics, output_path)
         else:
             # Export both formats
-            json_path = parent / f"metrics_{stem}.json"
-            csv_path = parent / f"metrics_{stem}.csv"
+            json_path = args.output.with_suffix('.json') if args.output else (first_parent / "metrics_project.json")
+            csv_path = args.output.with_suffix('.csv') if args.output else (first_parent / "metrics_project.csv")
             export_metrics_json(metrics, json_path)
             export_metrics_csv(metrics, csv_path)
         
         return 0
     
-    # Default: interactive mode
-    interactive_menu(data, args.input_file)
+    # No action specified - show help
+    parser.print_help()
     return 0
 
 
