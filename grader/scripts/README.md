@@ -15,7 +15,7 @@ Project-level analyzer for GitHub Copilot chat export JSON files. Aggregates met
 
 - **Multi-File Aggregation** - Combine N chat files into a single project-level analysis
 - **User Behavior Classification** - Classify inputs into Short/Protocol/Standard buckets with APM signature detection
-- **PII Sanitization** - Encrypt sensitive paths and content with reversible HMAC-XOR encryption (zero data loss)
+- **PII Sanitization** - Reversible full-file encryption with HMAC-XOR (zero data loss, metadata preserved)
 - **Multiple Output Formats** - JSON and CSV export with project metadata
 
 ### Quick Start
