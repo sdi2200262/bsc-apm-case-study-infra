@@ -9,6 +9,7 @@ import argparse
 import csv
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -20,6 +21,10 @@ from manifest import (
     load_manifest,
     save_manifest,
     validate_checksum,
+)
+from workspace import (
+    find_workspace_root,
+    get_data_dir,
 )
 
 DATASET_FILENAME = "dataset.csv"
@@ -137,8 +142,14 @@ def main() -> int:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        required=True,
-        help="Base data directory (e.g., submissions_sanitized/copilot)"
+        default=None,
+        help="Base data directory (auto-detected from workspace if not specified)"
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        type=Path,
+        default=None,
+        help="Workspace root directory (auto-detected if not specified)"
     )
     
     args = parser.parse_args()
@@ -146,8 +157,28 @@ def main() -> int:
     pid = args.participant_id.upper()
     tool = args.tool.lower()
     
+    # Auto-detect workspace and data directory
+    workspace_root = find_workspace_root(args.workspace_dir)
+    if args.data_dir:
+        data_dir = Path(args.data_dir).resolve()
+    elif workspace_root:
+        # Get sub-study from manifest
+        for sub_study in ["copilot", "cursor"]:
+            test_data_dir = get_data_dir(sub_study, workspace_root)
+            manifest = load_manifest(test_data_dir)
+            entry = get_entry(manifest, pid, tool, "combine")
+            if entry:
+                data_dir = test_data_dir
+                break
+        else:
+            print("Error: Could not determine sub-study. Please specify --data-dir", file=sys.stderr)
+            return 2
+    else:
+        print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
+        return 2
+    
     # Locate participant directory
-    participant_dir = args.data_dir / pid / f"tool_{tool}"
+    participant_dir = data_dir / pid / f"tool_{tool}"
     if not participant_dir.exists():
         print(f"Error: Directory not found: {participant_dir}", file=sys.stderr)
         return 2
@@ -162,7 +193,7 @@ def main() -> int:
     print(f"Adding to dataset: {pid} tool_{tool}")
     
     # Verify checksum against manifest
-    manifest = load_manifest(args.data_dir)
+    manifest = load_manifest(data_dir)
     combine_entry = get_entry(manifest, pid, tool, "combine")
     if combine_entry:
         expected_checksum = combine_entry.get("output_checksum", "")
@@ -173,13 +204,20 @@ def main() -> int:
     combined = load_json(combined_file)
     row = combined_to_row(combined)
     
+    # Override processing_timestamp with current timestamp (when adding to dataset)
+    processing_timestamp = datetime.now(timezone.utc).isoformat()
+    row["processing_timestamp"] = processing_timestamp
+    
     # Load existing dataset
-    dataset_path = args.data_dir / DATASET_FILENAME
+    dataset_path = data_dir / DATASET_FILENAME
     existing_rows = read_existing_rows(dataset_path)
     
     dataset_checksum_before = ""
     if dataset_path.exists():
         dataset_checksum_before = compute_checksum(dataset_path)
+    
+    # Calculate row number (1-indexed for CSV)
+    row_number = len(existing_rows) + 1
     
     # Append row to dataset
     existing_rows.append(row)
@@ -191,19 +229,21 @@ def main() -> int:
     
     print(f"\nDataset updated: {dataset_path}")
     print(f"Total rows: {len(existing_rows)}")
+    print(f"Added at row: {row_number}")
     
     # Update manifest
     entry = create_stage_entry(
         status="success",
         input_file=combined_file.name,
         input_checksum=compute_checksum(combined_file),
-        dataset_row_added=True,
+        output_file=DATASET_FILENAME,
+        dataset_row_number=row_number,
         dataset_checksum_before=dataset_checksum_before,
         dataset_checksum_after=dataset_checksum_after,
     )
     
     add_entry(manifest, pid, tool, "add_to_dataset", entry)
-    save_manifest(manifest, args.data_dir)
+    save_manifest(manifest, data_dir)
     
     print("Manifest updated")
     

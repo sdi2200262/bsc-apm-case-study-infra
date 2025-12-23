@@ -22,7 +22,7 @@ from typing import Dict, Optional
 
 
 # File paths
-GRADER_DIR = Path(__file__).parent
+GRADER_DIR = Path(__file__).parent.parent 
 FIXTURES_DIR = GRADER_DIR / "fixtures"
 CERT_FILE = GRADER_DIR / "sso_cert.pem"
 KEY_FILE = GRADER_DIR / "sso_key.pem"

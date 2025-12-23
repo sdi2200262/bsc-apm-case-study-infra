@@ -51,10 +51,19 @@ The grader expects this workspace structure:
 
 ```
 workspace/
-  eclass-mcp-server/   # Project being evaluated (git repo)
-  openeclass/          # OpenEclass source (for Docker image)
-  grader/              # This directory
+  eclass-mcp-server/          # Project being evaluated (git repo)
+  openeclass/                 # OpenEclass source (for Docker image)
+  bsc-apm-case-study-task/    # This repository
+    └── grader/               # This directory
+  bsc-apm-case-study-data/     # Data repository (for pipeline)
+    └── submissions_sanitized/
+        ├── copilot/
+        │   └── pipeline_manifest.json
+        └── cursor/
+            └── pipeline_manifest.json
 ```
+
+**Note:** The pipeline scripts automatically detect this workspace structure. You can run them from anywhere within the workspace, and they will find the correct paths. See [PIPELINE.md](PIPELINE.md) for details on workspace auto-detection.
 
 ## Setup Steps
 
@@ -140,7 +149,9 @@ Note: MATH301 has no announcements for testing "No announcements found" case.
 ### 8. Generate SSL Certificates
 
 The mock SSO server requires self-signed SSL certificates with proper Subject
-Alternative Name (SAN) extension for IP address validation:
+Alternative Name (SAN) extension for IP address validation.
+
+**Location:** Certificates must be generated in the `grader/` directory (same level as this SETUP.md file).
 
 ```bash
 cd grader
@@ -149,12 +160,17 @@ openssl req -x509 -newkey rsa:2048 -keyout sso_key.pem -out sso_cert.pem \
     -addext 'subjectAltName=IP:172.17.0.1'
 ```
 
+This will create:
+- `grader/sso_cert.pem` - SSL certificate
+- `grader/sso_key.pem` - Private key
+
 **Important:** The `-addext` option adds a SAN extension, which is required for
 modern SSL/TLS validation of IP addresses (RFC 6125). Without it, Python's
 `requests` library will reject the certificate with "IP address mismatch".
 
 **Note:** These files are in `.gitignore`. Each grading environment must
-generate its own certificates.
+generate its own certificates. The mock server (`src/mock_server.py`) expects
+these files to be in the `grader/` directory.
 
 ### 9. Verify Setup
 

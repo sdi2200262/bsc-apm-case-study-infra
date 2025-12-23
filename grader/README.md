@@ -56,6 +56,8 @@ grader/
 ├── PIPELINE.md                  # Data processing pipeline documentation
 ├── SETUP.md                     # Environment setup instructions
 ├── docker-compose.eclass.yaml   # OpenEclass Docker config
+├── sso_cert.pem                 # SSL certificate (generated, see SETUP.md)
+├── sso_key.pem                  # SSL private key (generated, see SETUP.md)
 ├── src/                         # Grading modules
 │   ├── __init__.py
 │   ├── build_tester.py          # Build verification
@@ -83,11 +85,15 @@ grader/
 
 For processing participant submissions from collection through to final datasets, see [PIPELINE.md](PIPELINE.md). The pipeline provides:
 
+- **Workspace auto-detection** - Automatically finds all required directories
 - Submission validation and extraction
 - Automated grading with result tracking
 - Chat log parsing and metric extraction
 - PII sanitization via reversible encryption
 - Incremental dataset building with audit trails
+- **Checkpoint validation** - Verify data integrity at each step via manifest
+
+The pipeline automatically detects your workspace structure and finds manifests in `bsc-apm-case-study-data/submissions_sanitized/{sub_study}/pipeline_manifest.json` for tracking and validation.
 
 ## System Requirements
 

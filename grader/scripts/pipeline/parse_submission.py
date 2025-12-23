@@ -22,8 +22,13 @@ from manifest import (
     add_entry,
     compute_checksum,
     create_stage_entry,
+    get_entry,
     load_manifest,
     save_manifest,
+)
+from workspace import (
+    find_workspace_root,
+    get_data_dir,
 )
 
 
@@ -110,8 +115,14 @@ def main() -> int:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        required=True,
-        help="Base data directory (e.g., submissions_sanitized/copilot)"
+        default=None,
+        help="Base data directory (auto-detected from workspace if not specified)"
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        type=Path,
+        default=None,
+        help="Workspace root directory (auto-detected if not specified)"
     )
     parser.add_argument(
         "--no-sanitize",
@@ -124,8 +135,28 @@ def main() -> int:
     pid = args.participant_id.upper()
     tool = args.tool.lower()
     
+    # Auto-detect workspace and data directory
+    workspace_root = find_workspace_root(args.workspace_dir)
+    if args.data_dir:
+        data_dir = Path(args.data_dir).resolve()
+    elif workspace_root:
+        # Get sub-study from manifest
+        for sub_study in ["copilot", "cursor"]:
+            test_data_dir = get_data_dir(sub_study, workspace_root)
+            manifest = load_manifest(test_data_dir)
+            entry = get_entry(manifest, pid, tool, "validate")
+            if entry:
+                data_dir = test_data_dir
+                break
+        else:
+            print("Error: Could not determine sub-study. Please specify --data-dir", file=sys.stderr)
+            return 2
+    else:
+        print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
+        return 2
+    
     # Locate participant directory
-    participant_dir = args.data_dir / pid / f"tool_{tool}"
+    participant_dir = data_dir / pid / f"tool_{tool}"
     if not participant_dir.exists():
         print(f"Error: Directory not found: {participant_dir}", file=sys.stderr)
         return 2
@@ -205,7 +236,7 @@ def main() -> int:
                 print(f"Removed original: {chat_file.name}")
     
     # Update manifest
-    manifest = load_manifest(args.data_dir)
+    manifest = load_manifest(data_dir)
     
     entry = create_stage_entry(
         status="success",
@@ -217,7 +248,7 @@ def main() -> int:
     )
     
     add_entry(manifest, pid, tool, "parse", entry)
-    save_manifest(manifest, args.data_dir)
+    save_manifest(manifest, data_dir)
     
     print("\nManifest updated")
     

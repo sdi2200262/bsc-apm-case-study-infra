@@ -65,9 +65,15 @@ def main():
         help="Show individual test results in console output"
     )
     parser.add_argument(
-        "--debug", 
+        "--debug",
         action="store_true",
         help="Enable debug output (internal server communication)"
+    )
+    parser.add_argument(
+        "--eclass-dir",
+        type=Path,
+        default=None,
+        help="Path to eclass-mcp-server directory (defaults to same level as grader directory)"
     )
     
     args = parser.parse_args()
@@ -92,12 +98,18 @@ def main():
         patch_name = patch_path.stem
     
     # Determine workspace paths
-    workspace_root = GRADER_DIR.parent
-    eclass_dir = workspace_root / "eclass-mcp-server"
+    if args.eclass_dir:
+        eclass_dir = Path(args.eclass_dir).resolve()
+    else:
+        workspace_root = GRADER_DIR.parent
+        eclass_dir = workspace_root / "eclass-mcp-server"
     
     if not eclass_dir.exists():
         print(f"Error: eclass-mcp-server directory not found at {eclass_dir}", file=sys.stderr)
         sys.exit(1)
+    
+    # Determine workspace_root from eclass_dir for report generation
+    workspace_root = eclass_dir.parent
     
     print("=" * 50)
     print(f"Grading: {patch_name}")

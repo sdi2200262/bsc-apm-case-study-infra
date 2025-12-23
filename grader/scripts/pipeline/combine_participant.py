@@ -20,6 +20,10 @@ from manifest import (
     save_manifest,
     validate_checksum,
 )
+from workspace import (
+    find_workspace_root,
+    get_data_dir,
+)
 
 
 def load_json(path: Path) -> dict:
@@ -51,8 +55,14 @@ def main() -> int:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        required=True,
-        help="Base data directory (e.g., submissions_sanitized/copilot)"
+        default=None,
+        help="Base data directory (auto-detected from workspace if not specified)"
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        type=Path,
+        default=None,
+        help="Workspace root directory (auto-detected if not specified)"
     )
     
     args = parser.parse_args()
@@ -60,8 +70,28 @@ def main() -> int:
     pid = args.participant_id.upper()
     tool = args.tool.lower()
     
+    # Auto-detect workspace and data directory
+    workspace_root = find_workspace_root(args.workspace_dir)
+    if args.data_dir:
+        data_dir = Path(args.data_dir).resolve()
+    elif workspace_root:
+        # Get sub-study from manifest
+        for sub_study in ["copilot", "cursor"]:
+            test_data_dir = get_data_dir(sub_study, workspace_root)
+            manifest = load_manifest(test_data_dir)
+            entry = get_entry(manifest, pid, tool, "parse")
+            if entry:
+                data_dir = test_data_dir
+                break
+        else:
+            print("Error: Could not determine sub-study. Please specify --data-dir", file=sys.stderr)
+            return 2
+    else:
+        print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
+        return 2
+    
     # Locate participant directory
-    participant_dir = args.data_dir / pid / f"tool_{tool}"
+    participant_dir = data_dir / pid / f"tool_{tool}"
     if not participant_dir.exists():
         print(f"Error: Directory not found: {participant_dir}", file=sys.stderr)
         return 2
@@ -83,7 +113,7 @@ def main() -> int:
     print(f"Combining: {pid} tool_{tool}")
     
     # Verify checksums against manifest
-    manifest = load_manifest(args.data_dir)
+    manifest = load_manifest(data_dir)
     
     grade_entry = get_entry(manifest, pid, tool, "grade")
     if grade_entry:
@@ -107,21 +137,45 @@ def main() -> int:
     metrics = load_json(metrics_file)
     
     # Extract grading scores
+    # Results file structure:
+    # {
+    #   "scores": {
+    #     "python": {
+    #       "baseline": {"score": ..., "max": ...},
+    #       "feature": {"score": ..., "max": ...},
+    #       "total": {"score": ..., "max": ...}
+    #     },
+    #     "c": {
+    #       "total": {"score": ..., "max": ...}
+    #     },
+    #     "grand_total": {"score": ..., "max": ...}
+    #   }
+    # }
     scores = results.get('scores', {})
-    python_baseline = scores.get('python_baseline', {'score': 0, 'max': 12})
-    python_feature = scores.get('python_feature', {'score': 0, 'max': 12})
-    c_replica = scores.get('c_replica', {'score': 0, 'max': 24})
     
-    total_score = (
-        python_baseline.get('score', 0) +
-        python_feature.get('score', 0) +
-        c_replica.get('score', 0)
-    )
-    max_score = (
-        python_baseline.get('max', 12) +
-        python_feature.get('max', 12) +
-        c_replica.get('max', 24)
-    )
+    # Extract nested structure
+    python = scores.get('python', {})
+    python_baseline = python.get('baseline', {'score': 0, 'max': 12})
+    python_feature = python.get('feature', {'score': 0, 'max': 12})
+    c = scores.get('c', {})
+    c_total = c.get('total', {'score': 0, 'max': 24})
+    
+    # Use grand_total if available, otherwise calculate
+    grand_total = scores.get('grand_total', {})
+    if grand_total:
+        total_score = grand_total.get('score', 0)
+        max_score = grand_total.get('max', 48)
+    else:
+        total_score = (
+            python_baseline.get('score', 0) +
+            python_feature.get('score', 0) +
+            c_total.get('score', 0)
+        )
+        max_score = (
+            python_baseline.get('max', 12) +
+            python_feature.get('max', 12) +
+            c_total.get('max', 24)
+        )
     
     # Build combined structure
     combined = {
@@ -141,8 +195,8 @@ def main() -> int:
                 "max": python_feature.get('max', 12)
             },
             "c_replica": {
-                "score": c_replica.get('score', 0),
-                "max": c_replica.get('max', 24)
+                "score": c_total.get('score', 0),
+                "max": c_total.get('max', 24)
             }
         },
         "metrics": metrics
@@ -164,7 +218,7 @@ def main() -> int:
     )
     
     add_entry(manifest, pid, tool, "combine", entry)
-    save_manifest(manifest, args.data_dir)
+    save_manifest(manifest, data_dir)
     
     print("Manifest updated")
     

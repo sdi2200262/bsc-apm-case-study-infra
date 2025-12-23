@@ -12,6 +12,8 @@ import subprocess
 import json
 import os
 import time
+import select
+import sys
 from pathlib import Path
 from typing import Dict, Tuple, Optional, List, Callable
 from dataclasses import dataclass
@@ -93,9 +95,19 @@ class ServerProcess:
             self.proc = None
     
     def send_request(self, request: dict) -> Optional[dict]:
-        """Send JSON-RPC request and return response."""
+        """
+        Send JSON-RPC request and return response.
+        
+        Applies a 10-second timeout to prevent hangs. This timeout applies
+        equally to both Python and C implementations for fair testing.
+        """
         if not self.proc:
             return None
+        
+        # Timeout: 10 seconds - generous for legitimate operations on localhost,
+        # but catches hangs. Applies equally to both Python and C implementations.
+        TIMEOUT = 10.0
+        
         try:
             req_str = json.dumps(request) + "\n"
             if self.ctx.debug:
@@ -104,7 +116,20 @@ class ServerProcess:
             self.proc.stdin.write(req_str)
             self.proc.stdin.flush()
             
-            response_line = self.proc.stdout.readline()
+            # Read with timeout (applies to both Python and C)
+            if sys.platform != 'win32':
+                # Unix: use select for timeout
+                ready, _, _ = select.select([self.proc.stdout], [], [], TIMEOUT)
+                if not ready:
+                    if self.ctx.debug:
+                        print(f"[DEBUG] TIMEOUT: No response after {TIMEOUT}s")
+                    return None
+                response_line = self.proc.stdout.readline()
+            else:
+                # Windows: readline blocks, timeout handled by test framework
+                # Note: Windows doesn't support select on pipes easily
+                response_line = self.proc.stdout.readline()
+            
             if not response_line:
                 return None
             
@@ -112,6 +137,10 @@ class ServerProcess:
                 print(f"[DEBUG] RECV: {response_line.strip()}")
             
             return json.loads(response_line.strip())
+        except json.JSONDecodeError as e:
+            if self.ctx.debug:
+                print(f"[DEBUG] JSON decode error: {e}")
+            return None
         except Exception as e:
             if self.ctx.debug:
                 print(f"[DEBUG] Request error: {e}")

@@ -17,6 +17,10 @@ from manifest import (
     load_manifest,
     validate_checksum,
 )
+from workspace import (
+    find_workspace_root,
+    get_data_dir,
+)
 DATASET_FILENAME = "dataset.csv"
 
 REQUIRED_COLUMNS = [
@@ -77,8 +81,20 @@ def main() -> int:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        required=True,
-        help="Base data directory (e.g., submissions_sanitized/copilot)"
+        default=None,
+        help="Base data directory (auto-detected from workspace if not specified)"
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        type=Path,
+        default=None,
+        help="Workspace root directory (auto-detected if not specified)"
+    )
+    parser.add_argument(
+        "--sub-study",
+        choices=["copilot", "cursor"],
+        default=None,
+        help="Sub-study name (required if auto-detection fails)"
     )
     parser.add_argument(
         "--verbose",
@@ -88,24 +104,37 @@ def main() -> int:
     
     args = parser.parse_args()
     
-    if not args.data_dir.exists():
-        print(f"Error: Directory not found: {args.data_dir}", file=sys.stderr)
+    # Auto-detect data directory
+    if args.data_dir:
+        data_dir = Path(args.data_dir).resolve()
+    elif args.sub_study:
+        workspace_root = find_workspace_root(args.workspace_dir)
+        if workspace_root is None:
+            print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
+            return 2
+        data_dir = get_data_dir(args.sub_study, workspace_root)
+    else:
+        print("Error: Could not auto-detect. Please specify --data-dir or --sub-study", file=sys.stderr)
         return 2
     
-    print(f"Validating: {args.data_dir}")
+    if not data_dir.exists():
+        print(f"Error: Directory not found: {data_dir}", file=sys.stderr)
+        return 2
+    
+    print(f"Validating: {data_dir}")
     
     errors: List[str] = []
     warnings: List[str] = []
     
     # Load manifest
-    manifest = load_manifest(args.data_dir)
+    manifest = load_manifest(data_dir)
     entries = manifest.get("entries", {})
     
     if not entries:
         warnings.append("Manifest has no entries")
     
     # Load dataset
-    dataset_path = args.data_dir / DATASET_FILENAME
+    dataset_path = data_dir / DATASET_FILENAME
     columns, rows = read_dataset(dataset_path)
     
     if not rows:
@@ -147,7 +176,7 @@ def main() -> int:
             parts = entry_key.split("_tool_")
             if len(parts) == 2:
                 pid, tool = parts
-                combined_path = args.data_dir / pid / f"tool_{tool}" / combined_file
+                combined_path = data_dir / pid / f"tool_{tool}" / combined_file
                 
                 if not combined_path.exists():
                     errors.append(f"{entry_key}: Combined file missing: {combined_file}")

@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 
-from scorer import Scorer, get_all_tests, PYTHON_BASELINE_TESTS, PYTHON_FEATURE_TESTS, C_TESTS
+from .scorer import Scorer, get_all_tests, PYTHON_BASELINE_TESTS, PYTHON_FEATURE_TESTS, C_TESTS
 
 
 # Maximum length for console message excerpts

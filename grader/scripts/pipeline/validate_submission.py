@@ -19,6 +19,12 @@ from manifest import (
     load_manifest,
     save_manifest,
 )
+from workspace import (
+    find_workspace_root,
+    get_data_dir,
+    detect_sub_study_from_zip,
+    get_participant_dir,
+)
 
 # Regex patterns for validation
 PID_PATTERN = r"[Pp]\d{3}"
@@ -159,13 +165,19 @@ def main() -> int:
         "--output-dir",
         type=Path,
         default=None,
-        help="Directory to extract validated submission"
+        help="Directory to extract validated submission (auto-detected from workspace if not specified)"
     )
     parser.add_argument(
         "--manifest-dir",
         type=Path,
         default=None,
         help="Directory containing pipeline manifest (defaults to output-dir parent)"
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        type=Path,
+        default=None,
+        help="Workspace root directory (auto-detected if not specified)"
     )
     
     args = parser.parse_args()
@@ -199,26 +211,38 @@ def main() -> int:
     print(f"\nValidation PASSED")
     print(f"Sub-study: {sub_study}")
     
-    # Extract if output directory specified
+    # Determine output directory
     if args.output_dir:
-        print(f"\nExtracting to: {args.output_dir}")
-        extract_submission(args.zip_file, args.output_dir)
+        output_dir = Path(args.output_dir).resolve()
+    else:
+        # Auto-detect from workspace
+        workspace_root = find_workspace_root(args.workspace_dir)
+        if workspace_root is None:
+            print("Error: Could not auto-detect workspace. Please specify --output-dir or --workspace-dir", file=sys.stderr)
+            return 2
         
-        # Update manifest
-        manifest_dir = args.manifest_dir or args.output_dir.parent.parent
-        manifest = load_manifest(manifest_dir)
-        
-        entry = create_stage_entry(
-            status="success" if is_valid else "error",
-            input_file=args.zip_file.name,
-            input_checksum=compute_checksum(args.zip_file),
-            sub_study=sub_study,
-            warnings=issues if issues else [],
-        )
-        
-        add_entry(manifest, pid, tool, "validate", entry)
-        save_manifest(manifest, manifest_dir)
-        print(f"Manifest updated: {manifest_dir / 'pipeline_manifest.json'}")
+        output_dir = get_participant_dir(pid, tool, sub_study, workspace_root)
+        print(f"\nAuto-detected workspace: {workspace_root}")
+        print(f"Extracting to: {output_dir}")
+    
+    # Extract submission
+    extract_submission(args.zip_file, output_dir)
+    
+    # Update manifest
+    manifest_dir = args.manifest_dir or output_dir.parent.parent
+    manifest = load_manifest(manifest_dir)
+    
+    entry = create_stage_entry(
+        status="success" if is_valid else "error",
+        input_file=args.zip_file.name,
+        input_checksum=compute_checksum(args.zip_file),
+        sub_study=sub_study,
+        warnings=issues if issues else [],
+    )
+    
+    add_entry(manifest, pid, tool, "validate", entry)
+    save_manifest(manifest, manifest_dir)
+    print(f"Manifest updated: {manifest_dir / 'pipeline_manifest.json'}")
     
     return 0
 

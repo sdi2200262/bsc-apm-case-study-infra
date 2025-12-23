@@ -103,6 +103,7 @@ The C microservice acts as a standard CLI application implementing the **Model C
   * **Stderr:** All application logs and internal debug information must be printed to `stderr`.
     * **Constraint (Cleanliness):** `stdout` must remain pure JSON-RPC. Any "print debugging" leaked to `stdout` will corrupt the protocol and fail.
 * **Lifecycle:** The server must run continuously in a loop, processing requests one by one until the input stream is closed (EOF).
+* **Responsiveness:** All JSON-RPC requests must complete and emit responses. Implementations that hang, deadlock, or fail to respond are considered non-functional (see Section 4 for detailed requirements).
 
 ### Protocol Compliance
 
@@ -127,6 +128,10 @@ The `days_back` parameter is a strict functional requirement.
 
   * **Research Requirement:** You must analyze the `openeclass` legacy codebase to determine if the backend supports date filtering. If not, you must implement robust **Client-Side Filtering** to parse the locale-specific date formats and filter entries accurately.
 
+### Responsiveness
+
+Both Python and C implementations must be functional and responsive. All JSON-RPC requests must complete and emit valid responses. Implementations that hang indefinitely, deadlock, or fail to respond will be considered non-functional and will fail validation.
+
 ## 5. Acceptance Criteria
 
 All responses from the `get_course_announcements` tool must match the exact formats specified below. Deviations in string content, punctuation, or output structure will result in non-conforming behavior.
@@ -149,6 +154,7 @@ All responses from the `get_course_announcements` tool must match the exact form
 | **Protocol** | `initialize`, `tools/list`, and `tools/call` responses match the JSON structure in `wire_protocol.md`. |
 | **Authentication** | Successfully performs the full SSO login flow against the configured target environment. |
 | **Cookie State** | `authstatus` correctly reflects the login state after a `login` call. |
+| **Responsiveness** | Must meet responsiveness requirements defined in Section 4. |
 
 ## 6. Deliverables
 
