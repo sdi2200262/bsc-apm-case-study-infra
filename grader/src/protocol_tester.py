@@ -20,7 +20,13 @@ from dataclasses import dataclass
 
 
 def _get_extended_env() -> dict:
-    """Get environment with extended PATH for uv and cargo binaries."""
+    """
+    Get environment with extended PATH for uv and cargo binaries.
+    
+    Returns:
+        Dictionary with modified PATH environment variable including
+        ~/.local/bin and ~/.cargo/bin for uv and cargo tool access.
+    """
     env = os.environ.copy()
     home = Path.home()
     extra_paths = [str(home / ".local" / "bin"), str(home / ".cargo" / "bin")]
@@ -41,11 +47,22 @@ class ServerProcess:
     """Manages a server subprocess for testing."""
     
     def __init__(self, ctx: TestContext):
+        """
+        Initialize server process manager.
+        
+        Args:
+            ctx: TestContext with implementation and configuration.
+        """
         self.ctx = ctx
         self.proc: Optional[subprocess.Popen] = None
     
     def start(self) -> bool:
-        """Start the server process. Returns True on success."""
+        """
+        Start the server process.
+        
+        Returns:
+            True if server started successfully, False otherwise.
+        """
         env = _get_extended_env()
         env.update(self.ctx.env_vars)
         
@@ -85,7 +102,9 @@ class ServerProcess:
             return False
     
     def stop(self) -> None:
-        """Stop the server process."""
+        """
+        Stop the server process and clean up resources.
+        """
         if self.proc:
             self.proc.stdin.close()
             try:
@@ -100,6 +119,12 @@ class ServerProcess:
         
         Applies a 10-second timeout to prevent hangs. This timeout applies
         equally to both Python and C implementations for fair testing.
+        
+        Args:
+            request: JSON-RPC request dictionary.
+        
+        Returns:
+            JSON-RPC response dictionary, or None on timeout/error.
         """
         if not self.proc:
             return None
@@ -147,7 +172,12 @@ class ServerProcess:
             return None
     
     def send_notification(self, notification: dict) -> None:
-        """Send JSON-RPC notification (no response expected)."""
+        """
+        Send JSON-RPC notification (no response expected).
+        
+        Args:
+            notification: JSON-RPC notification dictionary.
+        """
         if not self.proc:
             return
         try:
@@ -159,7 +189,12 @@ class ServerProcess:
             pass
     
     def _get_python_cmd(self) -> List[str]:
-        """Get command to run Python server."""
+        """
+        Get command to run Python server.
+        
+        Returns:
+            List of command arguments (prefers uv run, falls back to python).
+        """
         try:
             subprocess.run(["uv", "--version"], capture_output=True, check=True, 
                          env=_get_extended_env())
@@ -172,6 +207,15 @@ class ProtocolTester:
     """Tests protocol compliance and tool functionality."""
     
     def __init__(self, eclass_dir: Path, env_vars: dict, debug: bool = False):
+        """
+        Initialize protocol tester for an implementation.
+        
+        Args:
+            eclass_dir: Path to the eclass-mcp-server repository directory.
+            env_vars: Environment variables for server configuration
+                    (typically from MockServerManager.get_env()).
+            debug: Enable debug output for server communication (default: False).
+        """
         self.eclass_dir = Path(eclass_dir).resolve()
         self.env_vars = env_vars
         self.debug = debug
@@ -181,7 +225,15 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def test_initialize(self, impl: str) -> Tuple[bool, str, str]:
-        """P1: Test initialize response structure."""
+        """
+        P1: Test initialize response structure.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -219,7 +271,15 @@ class ProtocolTester:
             server.stop()
     
     def test_tools_list(self, impl: str) -> Tuple[bool, str, str]:
-        """P2: Test tools/list response structure."""
+        """
+        P2: Test tools/list response structure.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -262,7 +322,15 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def test_login_success(self, impl: str) -> Tuple[bool, str, str]:
-        """L1: Test successful login."""
+        """
+        L1: Test successful login.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -285,7 +353,15 @@ class ProtocolTester:
             server.stop()
     
     def test_login_already_logged_in(self, impl: str) -> Tuple[bool, str, str]:
-        """L2: Test already logged in handling."""
+        """
+        L2: Test already logged in handling.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -311,7 +387,15 @@ class ProtocolTester:
             server.stop()
     
     def test_login_missing_credentials(self, impl: str) -> Tuple[bool, str, str]:
-        """L3: Test missing credentials error."""
+        """
+        L3: Test missing credentials error.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         # Use empty credentials
         env_no_creds = dict(self.env_vars)
         env_no_creds["ECLASS_USERNAME"] = ""
@@ -346,7 +430,15 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def test_logout_success(self, impl: str) -> Tuple[bool, str, str]:
-        """O1: Test successful logout."""
+        """
+        O1: Test successful logout.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -370,7 +462,15 @@ class ProtocolTester:
             server.stop()
     
     def test_logout_not_logged_in(self, impl: str) -> Tuple[bool, str, str]:
-        """O2: Test logout when not logged in."""
+        """
+        O2: Test logout when not logged in.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -397,7 +497,15 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def test_courses_logged_in(self, impl: str) -> Tuple[bool, str, str]:
-        """C1: Test get courses when logged in."""
+        """
+        C1: Test get courses when logged in.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -421,7 +529,15 @@ class ProtocolTester:
             server.stop()
     
     def test_courses_not_logged_in(self, impl: str) -> Tuple[bool, str, str]:
-        """C2: Test get courses when not logged in."""
+        """
+        C2: Test get courses when not logged in.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -448,7 +564,15 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def test_authstatus_not_logged_in(self, impl: str) -> Tuple[bool, str, str]:
-        """A1: Test authstatus when not logged in."""
+        """
+        A1: Test authstatus when not logged in.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -475,7 +599,15 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def test_announcements_not_logged_in(self, impl: str) -> Tuple[bool, str, str]:
-        """AN1: Test announcements when not logged in (exact error string)."""
+        """
+        AN1: Test announcements when not logged in (exact error string).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -505,7 +637,15 @@ class ProtocolTester:
             server.stop()
     
     def test_announcements_invalid_url(self, impl: str) -> Tuple[bool, str, str]:
-        """AN2: Test announcements with invalid course URL (exact error string)."""
+        """
+        AN2: Test announcements with invalid course URL (exact error string).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -535,7 +675,15 @@ class ProtocolTester:
             server.stop()
     
     def test_announcements_none_found(self, impl: str) -> Tuple[bool, str, str]:
-        """AN3: Test announcements with no results (exact string)."""
+        """
+        AN3: Test announcements with no results (exact string).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -566,7 +714,15 @@ class ProtocolTester:
             server.stop()
     
     def test_announcements_default_days(self, impl: str) -> Tuple[bool, str, str]:
-        """AN4: Test announcements with default days_back (30 days)."""
+        """
+        AN4: Test announcements with default days_back (30 days).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -600,7 +756,15 @@ class ProtocolTester:
             server.stop()
     
     def test_announcements_custom_days(self, impl: str) -> Tuple[bool, str, str]:
-        """AN5: Test announcements with custom days_back parameter."""
+        """
+        AN5: Test announcements with custom days_back parameter.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
         ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
         server = ServerProcess(ctx)
         
@@ -638,7 +802,12 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def _initialize_server(self, server: ServerProcess) -> None:
-        """Send initialize and initialized notification to server."""
+        """
+        Send initialize and initialized notification to server.
+        
+        Args:
+            server: ServerProcess instance to initialize.
+        """
         server.send_request({
             "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {"protocolVersion": "2025-03-26", "capabilities": {},
@@ -647,7 +816,17 @@ class ProtocolTester:
         server.send_notification({"jsonrpc": "2.0", "method": "notifications/initialized"})
     
     def _call_tool(self, server: ServerProcess, tool: str, args: dict) -> Optional[dict]:
-        """Call a tool and return the response."""
+        """
+        Call a tool and return the response.
+        
+        Args:
+            server: ServerProcess instance.
+            tool: Tool name to call.
+            args: Tool arguments dictionary.
+        
+        Returns:
+            JSON-RPC response dictionary, or None on failure.
+        """
         # Add dummy random_string parameter for tools that require it (baseline tools)
         if tool in ("login", "logout", "get_courses", "authstatus") and "random_string" not in args:
             args = {**args, "random_string": "test"}
@@ -659,7 +838,15 @@ class ProtocolTester:
         })
     
     def _extract_text(self, response: Optional[dict]) -> str:
-        """Extract text content from tool response."""
+        """
+        Extract text content from tool response.
+        
+        Args:
+            response: JSON-RPC response dictionary.
+        
+        Returns:
+            Text content string, or empty string if not found.
+        """
         if not response or "result" not in response:
             return ""
         content = response["result"].get("content", [])
@@ -668,7 +855,16 @@ class ProtocolTester:
         return ""
     
     def _tool_exists(self, server: ServerProcess, tool_name: str) -> bool:
-        """Check if a tool exists in tools/list."""
+        """
+        Check if a tool exists in tools/list.
+        
+        Args:
+            server: ServerProcess instance.
+            tool_name: Name of tool to check.
+        
+        Returns:
+            True if tool exists, False otherwise.
+        """
         response = server.send_request({
             "jsonrpc": "2.0", "id": 98, "method": "tools/list", "params": {}
         })
@@ -682,7 +878,12 @@ class ProtocolTester:
     # -------------------------------------------------------------------------
     
     def run_python_baseline_tests(self) -> Dict[str, Tuple[bool, str, str]]:
-        """Run all Python baseline tests. Returns {test_id: (passed, message, full_output)}."""
+        """
+        Run all Python baseline tests.
+        
+        Returns:
+            Dictionary mapping test_id to (success: bool, message: str, full_output: str).
+        """
         return {
             "P1": self.test_initialize("python"),
             "P2": self.test_tools_list("python"),
@@ -697,7 +898,12 @@ class ProtocolTester:
         }
     
     def run_python_feature_tests(self) -> Dict[str, Tuple[bool, str, str]]:
-        """Run all Python feature tests. Returns {test_id: (passed, message, full_output)}."""
+        """
+        Run all Python feature tests.
+        
+        Returns:
+            Dictionary mapping test_id to (success: bool, message: str, full_output: str).
+        """
         return {
             "AN1": self.test_announcements_not_logged_in("python"),
             "AN2": self.test_announcements_invalid_url("python"),
@@ -707,7 +913,12 @@ class ProtocolTester:
         }
     
     def run_c_baseline_tests(self) -> Dict[str, Tuple[bool, str, str]]:
-        """Run all C baseline tests. Returns {test_id: (passed, message, full_output)}."""
+        """
+        Run all C baseline tests.
+        
+        Returns:
+            Dictionary mapping test_id to (success: bool, message: str, full_output: str).
+        """
         return {
             "P1_c": self.test_initialize("c"),
             "P2_c": self.test_tools_list("c"),
@@ -722,7 +933,12 @@ class ProtocolTester:
         }
     
     def run_c_feature_tests(self) -> Dict[str, Tuple[bool, str, str]]:
-        """Run all C feature tests. Returns {test_id: (passed, message, full_output)}."""
+        """
+        Run all C feature tests.
+        
+        Returns:
+            Dictionary mapping test_id to (success: bool, message: str, full_output: str).
+        """
         return {
             "AN1_c": self.test_announcements_not_logged_in("c"),
             "AN2_c": self.test_announcements_invalid_url("c"),

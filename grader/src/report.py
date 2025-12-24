@@ -21,7 +21,16 @@ CONSOLE_MESSAGE_LIMIT = 200
 
 
 def truncate(text: str, limit: int = CONSOLE_MESSAGE_LIMIT) -> str:
-    """Truncate text to limit, adding ellipsis if needed."""
+    """
+    Truncate text to limit, adding ellipsis if needed.
+    
+    Args:
+        text: Text string to truncate.
+        limit: Maximum length (default: CONSOLE_MESSAGE_LIMIT).
+    
+    Returns:
+        Truncated string with "..." suffix if truncated, original string otherwise.
+    """
     if len(text) <= limit:
         return text
     return text[:limit-3] + "..."
@@ -199,7 +208,12 @@ class ReportWriter:
         print("=" * 50)
     
     def _print_verbose_results(self, scorer: Scorer) -> None:
-        """Print individual test results in verbose mode."""
+        """
+        Print individual test results in verbose mode.
+        
+        Args:
+            scorer: Scorer instance with test results.
+        """
         tests = get_all_tests()
         
         print("\n  Python Baseline:")

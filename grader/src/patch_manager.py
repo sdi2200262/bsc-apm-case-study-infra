@@ -30,6 +30,12 @@ class PatchManager:
     """Manages git operations for patch-based grading."""
     
     def __init__(self, repo_path: Path):
+        """
+        Initialize patch manager for a git repository.
+        
+        Args:
+            repo_path: Path to the git repository (e.g., eclass-mcp-server directory).
+        """
         self.repo_path = Path(repo_path).resolve()
         self.original_branch: str = ""
         self.test_branch: str = ""
@@ -44,7 +50,7 @@ class PatchManager:
                    failure status based on returncode.
         
         Returns:
-            Tuple of (success, output). On failure, output contains stderr.
+            Tuple of (success: bool, output: str). On failure, output contains stderr.
         """
         try:
             result = subprocess.run(
@@ -142,7 +148,12 @@ class PatchManager:
         return True, f"Patch applied on branch {self.test_branch}"
     
     def cleanup(self) -> Tuple[bool, str]:
-        """Switch back to original branch and delete test branch."""
+        """
+        Switch back to original branch and delete test branch.
+        
+        Returns:
+            Tuple of (success: bool, message: str) describing cleanup actions.
+        """
         messages = []
         
         # Switch to original branch

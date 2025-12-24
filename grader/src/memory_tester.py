@@ -20,11 +20,12 @@ class MemoryTester:
     
     def __init__(self, eclass_dir: Path, env_vars: dict = None):
         """
-        Initialize MemoryTester.
+        Initialize memory tester for C implementation.
         
         Args:
-            eclass_dir: Path to eclass-mcp-server directory
-            env_vars: Environment variables for server (from MockServerManager.get_env())
+            eclass_dir: Path to eclass-mcp-server repository directory.
+            env_vars: Environment variables for server configuration
+                    (typically from MockServerManager.get_env()).
         """
         self.eclass_dir = Path(eclass_dir).resolve()
         self.c_replica_dir = self.eclass_dir / "c-replica"
@@ -38,7 +39,9 @@ class MemoryTester:
         Tests: initialize -> login -> get_courses -> authstatus -> logout
         
         Returns:
-            (success, message, full_output)
+            Tuple of (success: bool, message: str, full_output: str).
+            success indicates if memory is clean (0 bytes lost), message is a brief summary,
+            full_output contains complete Valgrind output for debugging.
         """
         if not self.server_binary.exists():
             return False, "Server binary not found", "Server binary not found at c-replica/server"
@@ -86,7 +89,12 @@ class MemoryTester:
             return False, f"Valgrind error: {e}", str(e)
     
     def _build_test_sequence(self) -> str:
-        """Build JSON-RPC test sequence for memory testing."""
+        """
+        Build JSON-RPC test sequence for memory testing.
+        
+        Returns:
+            Newline-delimited string of JSON-RPC messages for a complete session.
+        """
         messages = [
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"grader","version":"1.0.0"}}}',
             '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
@@ -98,14 +106,29 @@ class MemoryTester:
         return "\n".join(messages) + "\n"
     
     def _get_env(self) -> dict:
-        """Get environment variables for testing."""
+        """
+        Get environment variables for testing.
+        
+        Returns:
+            Dictionary of environment variables combining system environment
+            with provided configuration variables.
+        """
         env = os.environ.copy()
         # Apply provided environment variables (from MockServerManager)
         env.update(self.env_vars)
         return env
     
     def _parse_leak(self, output: str, leak_type: str) -> int:
-        """Parse leak amount from Valgrind output."""
+        """
+        Parse leak amount from Valgrind output.
+        
+        Args:
+            output: Valgrind stderr output.
+            leak_type: Type of leak to parse (e.g., "definitely lost", "indirectly lost").
+        
+        Returns:
+            Number of bytes leaked (0 if not found or no leaks).
+        """
         pattern = rf"{leak_type}:\s*([\d,]+)\s*bytes"
         match = re.search(pattern, output, re.IGNORECASE)
         if match:

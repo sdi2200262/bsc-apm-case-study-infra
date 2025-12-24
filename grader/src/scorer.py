@@ -70,13 +70,23 @@ C_TESTS: List[TestDefinition] = [
 
 
 def get_all_tests() -> Dict[str, TestDefinition]:
-    """Return all test definitions keyed by ID."""
+    """
+    Return all test definitions keyed by ID.
+    
+    Returns:
+        Dictionary mapping test_id to TestDefinition for all tests.
+    """
     all_tests = PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS + C_TESTS
     return {t.id: t for t in all_tests}
 
 
 def get_max_scores() -> Dict[str, int]:
-    """Calculate maximum possible scores for each category."""
+    """
+    Calculate maximum possible scores for each category.
+    
+    Returns:
+        Dictionary mapping category names to maximum possible points.
+    """
     return {
         "python_baseline": sum(t.points for t in PYTHON_BASELINE_TESTS),
         "python_feature": sum(t.points for t in PYTHON_FEATURE_TESTS),
@@ -101,7 +111,15 @@ class Scorer:
     results: Dict[str, TestResult] = field(default_factory=dict)
     
     def record(self, test_id: str, passed: bool, message: str, full_output: str = "") -> None:
-        """Record a test result."""
+        """
+        Record a test result.
+        
+        Args:
+            test_id: Test identifier (e.g., "P1", "AN1", "L1_c").
+            passed: Whether the test passed.
+            message: Brief summary message.
+            full_output: Complete output for JSON reports (defaults to message if empty).
+        """
         self.results[test_id] = TestResult(
             test_id=test_id,
             passed=passed,
@@ -110,7 +128,12 @@ class Scorer:
         )
     
     def get_python_baseline_score(self) -> Tuple[int, int]:
-        """Return (score, max) for Python baseline tests."""
+        """
+        Return score for Python baseline tests.
+        
+        Returns:
+            Tuple of (score: int, max_score: int) for Python baseline tests.
+        """
         score = 0
         max_score = 0
         for test in PYTHON_BASELINE_TESTS:
@@ -120,7 +143,12 @@ class Scorer:
         return score, max_score
     
     def get_python_feature_score(self) -> Tuple[int, int]:
-        """Return (score, max) for Python feature tests."""
+        """
+        Return score for Python feature tests.
+        
+        Returns:
+            Tuple of (score: int, max_score: int) for Python feature tests.
+        """
         score = 0
         max_score = 0
         for test in PYTHON_FEATURE_TESTS:
@@ -130,13 +158,23 @@ class Scorer:
         return score, max_score
     
     def get_python_total_score(self) -> Tuple[int, int]:
-        """Return (score, max) for all Python tests."""
+        """
+        Return total score for all Python tests (baseline + feature).
+        
+        Returns:
+            Tuple of (score: int, max_score: int) for all Python tests.
+        """
         baseline = self.get_python_baseline_score()
         feature = self.get_python_feature_score()
         return baseline[0] + feature[0], baseline[1] + feature[1]
     
     def get_c_score(self) -> Tuple[int, int]:
-        """Return (score, max) for C tests."""
+        """
+        Return score for C replica tests.
+        
+        Returns:
+            Tuple of (score: int, max_score: int) for C tests.
+        """
         score = 0
         max_score = 0
         for test in C_TESTS:
@@ -146,16 +184,25 @@ class Scorer:
         return score, max_score
     
     def get_total_score(self) -> Tuple[int, int]:
-        """Return (score, max) for all tests."""
+        """
+        Return total score for all tests (Python + C).
+        
+        Returns:
+            Tuple of (score: int, max_score: int) for all tests.
+        """
         py = self.get_python_total_score()
         c = self.get_c_score()
         return py[0] + c[0], py[1] + c[1]
     
     def get_category_breakdown(self, target: str) -> Dict[str, Tuple[int, int]]:
         """
-        Return score breakdown by category for a target (python/c).
+        Return score breakdown by category for a target implementation.
         
-        Returns dict mapping category -> (score, max).
+        Args:
+            target: Implementation target ("python" or "c").
+        
+        Returns:
+            Dictionary mapping category name to (score: int, max_score: int).
         """
         if target == "python":
             tests = PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS
@@ -173,7 +220,13 @@ class Scorer:
         return {cat: (scores[0], scores[1]) for cat, scores in categories.items()}
     
     def to_dict(self) -> dict:
-        """Export full scoring data as dictionary for JSON serialization."""
+        """
+        Export full scoring data as dictionary for JSON serialization.
+        
+        Returns:
+            Dictionary containing scores, test results, and category breakdowns
+            suitable for JSON serialization.
+        """
         tests = get_all_tests()
         py_baseline = self.get_python_baseline_score()
         py_feature = self.get_python_feature_score()

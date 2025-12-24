@@ -12,7 +12,13 @@ from typing import Tuple
 
 
 def _get_extended_env() -> dict:
-    """Get environment with extended PATH for uv and cargo binaries."""
+    """
+    Get environment with extended PATH for uv and cargo binaries.
+    
+    Returns:
+        Dictionary with modified PATH environment variable including
+        ~/.local/bin and ~/.cargo/bin for uv and cargo tool access.
+    """
     env = os.environ.copy()
     home = Path.home()
     extra_paths = [str(home / ".local" / "bin"), str(home / ".cargo" / "bin")]
@@ -24,6 +30,12 @@ class BuildTester:
     """Tests build/compilation for Python and C implementations."""
     
     def __init__(self, eclass_dir: Path):
+        """
+        Initialize build tester for a repository.
+        
+        Args:
+            eclass_dir: Path to the eclass-mcp-server repository directory.
+        """
         self.eclass_dir = Path(eclass_dir).resolve()
         self.c_replica_dir = self.eclass_dir / "c-replica"
     
@@ -32,7 +44,9 @@ class BuildTester:
         Test Python dependency installation with uv sync, falling back to pip.
         
         Returns:
-            (success, message, full_output)
+            Tuple of (success: bool, message: str, full_output: str).
+            success indicates if build succeeded, message is a brief summary,
+            full_output contains complete command output for debugging.
         """
         pyproject = self.eclass_dir / "pyproject.toml"
         if not pyproject.exists():
@@ -83,7 +97,9 @@ class BuildTester:
         Test C compilation with make c-server.
         
         Returns:
-            (success, message, full_output)
+            Tuple of (success: bool, message: str, full_output: str).
+            success indicates if compilation succeeded, message is a brief summary,
+            full_output contains complete command output for debugging.
         """
         if not self.c_replica_dir.exists():
             return False, "c-replica/ directory not found", "c-replica/ directory not found in eclass-mcp-server"
