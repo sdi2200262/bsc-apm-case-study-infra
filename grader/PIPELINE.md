@@ -12,15 +12,6 @@ The pipeline transforms raw participant submissions into:
 
 Processing is incremental and traceable. Each operation is logged in a manifest file with checksums and timestamps, enabling error recovery and audit trails.
 
-## Sub-Studies
-
-| Sub-Study | IDE | Chat Format | Extra Artifacts |
-|-----------|-----|-------------|-----------------|
-| Cursor | Cursor | Markdown | Token usage CSV |
-| Copilot | VS Code + GitHub Copilot | JSON | — |
-
-Each sub-study maintains separate manifest and dataset files.
-
 ## Prerequisites
 
 - Python 3.10+
@@ -32,40 +23,40 @@ Each sub-study maintains separate manifest and dataset files.
   - `eclass-mcp-server/` (baseline repository)
   - `openeclass/` (OpenEclass source)
 
+See [SETUP.md](SETUP.md) for complete setup instructions.
+
 ## Submission Format
 
-Participants submit: `{PID}_tool_{a|b}_submission.zip`
+Submissions follow format: `{PID}_{S1|2}_{Platform}_{Tool}_submission.zip`
+
+- `{PID}` - Participant ID (e.g., `P001`)
+- `{S1|2}` - Session number (`S1` = first tool, `S2` = second tool)
+- `{Platform}` - `copilot` or `cursor`
+- `{Tool}` - Tool identifier (`apm`, `spec-kit`, `cursor-plan`, `copilot-plan`)
+
+Example: `P001_S1_copilot_apm_submission.zip`
 
 Contents:
-- `{PID}_tool_{a|b}_solution.patch`
-- `{PID}_tool_{a|b}_logs/chats/*.{json|md}`
-- (Cursor only) `{PID}_tool_{a|b}_logs/stats/*.csv`
+- `{PID}_{S1|2}_{Platform}_{Tool}_solution.patch`
+- `{PID}_{S1|2}_{Platform}_{Tool}_logs/chats/*.{json|md}`
+- (Cursor only) `{PID}_{S1|2}_{Platform}_{Tool}_logs/stats/*.csv`
 
 ## Processing Steps
 
-For each submission:
+The pipeline processes submissions through discrete stages:
 
-```mermaid
-flowchart LR
-    A[Download submission zip] --> B[validate_submission.py]
-    B --> C[grade_submission.py]
-    C --> D[parse_submission.py]
-    D --> E[combine_participant.py]
-    E --> F[add_to_dataset.py]
-    F --> G[Commit to data repository]
-```
+1. **Validate** - Zip structure and naming format validation, extraction to workspace root
+2. **Grade** - Automated grading with result tracking
+3. **Parse** - Interaction metric extraction and chat sanitization
+4. **Combine** - Merge grading results with metrics
+5. **Add to Dataset** - Append to platform-level CSV
+6. **Validate Dataset** - Integrity checks against manifest
 
-| Step | Script | Output |
-|------|--------|--------|
-| Validate | `validate_submission.py` | Extracted submission folder |
-| Grade | `grade_submission.py` | `{PID}_tool_X_results.json` |
-| Parse | `parse_submission.py` | `{PID}_tool_X_metrics.json` + sanitized chats |
-| Combine | `combine_participant.py` | `{PID}_tool_X_combined.json` |
-| Add | `add_to_dataset.py` | Updated `dataset.csv` |
+Each stage is checkpointed in the manifest for error recovery. See [pipeline/README.md](pipeline/README.md) for script usage.
 
 ## Workspace Structure
 
-The pipeline uses workspace auto-detection to find all required directories. Your workspace should have this structure:
+The pipeline uses workspace auto-detection to find required directories:
 
 ```
 workspace/
@@ -77,100 +68,90 @@ workspace/
 │       ├── copilot/
 │       │   ├── pipeline_manifest.json
 │       │   ├── dataset.csv
-│       │   └── P001/
+│       │   └── {PID}/
+│       │       └── S{S1|2}_{tool}/
 │       └── cursor/
-├── eclass-mcp-server/          # Baseline repository
-└── openeclass/                  # OpenEclass source
+├── eclass-mcp-server/           # eClass MCP Server repository
+└── openeclass/                  # Local openeclass repository
 ```
 
-The pipeline automatically detects the workspace root by searching for these directories. You can run scripts from anywhere within the workspace, and they will find the correct paths.
+Scripts automatically detect the workspace root by searching for these directories. Run scripts from anywhere within the workspace.
 
 ## Quick Start
 
-Set the encryption secret either via environment variable or `.env` file:
+Set the encryption secret via environment variable or `.env` file:
 
 ```bash
-# Option 1: Export environment variable
 export CHAT_PARSER_SECRET='your-key'
-
-# Option 2: Use .env file (recommended)
-cp .env.example .env
-# Edit .env and set CHAT_PARSER_SECRET=your-key
 ```
 
-Then process a submission from your workspace root:
+Process a submission:
 
 ```bash
-# All paths auto-detected from workspace!
 cd bsc-apm-case-study-task/grader/pipeline
 
-# Step 1: Validate and extract submission
-./validate_submission.py P001_tool_a_submission.zip
+# Step 1: Validate and extract
+./validate_submission.py P001_S1_copilot_apm_submission.zip
 
-# Step 2: Grade the submission (extracts P001 and 'a' from zip filename)
-./grade_submission.py P001 a
+# Step 2: Grade
+./grade_submission.py P001_S1_copilot_apm_submission
 
-# Step 3: Parse chat logs and extract metrics
-./parse_submission.py P001 a
+# Step 3: Parse metrics
+./parse_submission.py P001_S1_copilot_apm_submission
 
-# Step 4: Combine grading results with metrics
-./combine_participant.py P001 a
+# Step 4: Combine results
+./combine_participant.py P001_S1_copilot_apm_submission
 
-# Step 5: Add to aggregated dataset
-./add_to_dataset.py P001 a
+# Step 5: Add to dataset
+./add_to_dataset.py P001_S1_copilot_apm_submission
 
-# Step 6: Verify integrity
-./validate_dataset.py --sub-study copilot
+# Step 6: Validate integrity
+./validate_dataset.py --platform copilot
 ```
 
-**Note:** The participant ID (`P001`) and tool (`a`) are extracted from the zip filename `P001_tool_a_submission.zip`. All subsequent steps use these values.
+All scripts accept unpacked submission directory path (except `validate_submission.py` which takes zip, and `validate_dataset.py`/`inspect_submission.py` which are submission-agnostic).
 
-**Note:** All path arguments (`--data-dir`, `--grader-dir`, `--eclass-dir`, `--output-dir`) are now optional and will be auto-detected from the workspace structure. You can still specify them manually if needed.
-
-### Manual Path Override
-
-If auto-detection fails or you need to override paths:
-
-```bash
-# Specify paths manually
-./validate_submission.py P001_tool_a_submission.zip \
-    --output-dir /custom/path/P001/tool_a \
-    --workspace-dir /custom/workspace
-
-# For subsequent steps, extract participant ID and tool from zip filename:
-# P001_tool_a_submission.zip -> P001, a
-./grade_submission.py P001 a \
-    --data-dir /custom/data/copilot \
-    --grader-dir /custom/grader \
-    --eclass-dir /custom/eclass-mcp-server
-```
+See [pipeline/README.md](pipeline/README.md) for detailed usage and options.
 
 ## Data Repository Structure
 
-The pipeline stores all processed data in `bsc-apm-case-study-data/submissions_sanitized/`:
+Processed data is stored in `bsc-apm-case-study-data/submissions_sanitized/{platform}/`:
 
 ```
-bsc-apm-case-study-data/
-└── submissions_sanitized/
-    ├── cursor/
-    │   ├── pipeline_manifest.json    # Audit trail for all operations
-    │   ├── dataset.csv                # Aggregated dataset
-    │   └── P001/
-    │       └── tool_a/
-    │           ├── P001_tool_a_solution.patch
-    │           ├── P001_tool_a_results.json
-    │           ├── P001_tool_a_metrics.json
-    │           ├── P001_tool_a_combined.json
-    │           └── P001_tool_a_logs/
-    │               └── chats/
-    │                   └── sanitized_*.json
-    └── copilot/
-        └── (same structure)
+submissions_sanitized/
+├── copilot/
+│   ├── pipeline_manifest.json    # Audit trail for all operations
+│   ├── dataset.csv                # Aggregated dataset
+│   └── {PID}/
+│       └── S{S1|2}_{tool}/
+│           ├── {PID}_{S1|2}_{platform}_{tool}_solution.patch
+│           ├── {PID}_{S1|2}_{platform}_{tool}_results.json
+│           ├── {PID}_{S1|2}_{platform}_{tool}_metrics.json
+│           ├── {PID}_{S1|2}_{platform}_{tool}_combined.json
+│           └── chats/
+│               └── sanitized_*.json
+└── cursor/
+    └── (same structure)
 ```
 
-The `pipeline_manifest.json` file in each sub-study directory tracks all operations with checksums and timestamps, enabling validation at each checkpoint and error recovery.
+The `pipeline_manifest.json` file tracks all operations with checksums and timestamps, enabling validation at each checkpoint and error recovery.
+
+## Manifest
+
+Each platform maintains a manifest at `submissions_sanitized/{platform}/pipeline_manifest.json`. Manifest entries use key format: `{PID}_{S1|2}_{Platform}_{Tool}` (e.g., `P001_S1_copilot_apm`).
+
+Use `inspect_submission.py` to view processing history for any submission. See [pipeline/README.md](pipeline/README.md) for manifest inspection.
+
+## OpenEclass Background Process
+
+OpenEclass must be running in the background for grading to function. Start services per [SETUP.md](SETUP.md):
+
+```bash
+docker start grader_db_1 grader_eclass_1
+```
 
 ## Related
 
-- [Scripts README](scripts/README.md) — Parser and viewer utilities
-- [SETUP.md](SETUP.md) — Grader environment setup
+- [pipeline/README.md](pipeline/README.md) - Pipeline script usage and options
+- [scripts/README.md](scripts/README.md) - Parser and viewer utilities
+- [SETUP.md](SETUP.md) - Grader environment setup

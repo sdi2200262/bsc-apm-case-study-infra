@@ -1,16 +1,14 @@
-# Grading & Data Processing Suite
+# Grading & Data Processing Infrastructure
 
-Black-box testing suite and data processing pipeline for evaluating participant submissions against the task specification. The grader replicates the production environment by running a local `openeclass` instance and an HTTPS mock SSO redirect. The pipeline scripts handle submission validation, metric extraction, sanitization, and dataset aggregation.
+Black-box testing suite and data processing pipeline for evaluating participant submissions. Replicates production environment with local OpenEclass instance and HTTPS mock SSO redirect.
 
 ## Overview
 
-### Grading
+This infrastructure provides:
 
-This grader evaluates submissions against:
-- **Python implementation** - the eclass-mcp-server baseline and new features
-- **C replica** - a high-performance native C implementation
-
-Submissions are provided as git patch files applied against the baseline `eclass-mcp-server` repository. "Baseline" refers to commit `8b4e39c` without any patch.
+- **Automated grading** - Black-box tests against Python and C implementations
+- **Data processing pipeline** - Submission validation, metric extraction, sanitization, and dataset aggregation
+- **Audit trails** - Manifest-based tracking with checksums for reproducibility
 
 ## Quick Start
 
@@ -21,90 +19,75 @@ docker start grader_db_1 grader_eclass_1
 # Test baseline (no patch)
 ./grade --no-patch
 
-# Grade a submission
+# Grade a patch file
 ./grade <patch_file>
 
-# Options
-./grade patch.patch --verbose    # Show test details
-./grade patch.patch --debug      # Debug server communication
-./grade patch.patch --no-cleanup # Keep git branch after grading
+# View options
+./grade --help
 ```
 
-## Output
+For pipeline usage, see [PIPELINE.md](PIPELINE.md).
 
-- `results_<patch>.json` - Complete machine-parsable report
-- `results_<patch>.txt` - Human-readable report
-- Console summary
+## Architecture
 
-## Baseline Score
+### Grading System
 
-Running on clean `main` branch (commit `8b4e39c`) without any patch:
+The grader evaluates submissions as git patches applied against baseline repositories:
+- `eclass-mcp-server` at commit `8b4e39c`
+- `openeclass` at commit `e8b3329` (Docker image `openeclass:test`)
 
-| Category | Score | Description |
-|----------|-------|-------------|
-| Python Baseline | 12/12 | Existing tools (login, logout, get_courses, authstatus) |
-| Python Feature | 0/12 | get_course_announcements (not implemented in baseline) |
-| C Replica | 0/24 | Full C implementation (not present in baseline) |
+Tests cover Python baseline (12 points), Python feature (12 points), and C replica (24 points). Baseline score (no patch): **12/48**.
 
-**Total: 12/48** 
+See source code docstrings in `src/` for detailed test specifications.
+
+### Data Processing Pipeline
+
+The pipeline processes submissions through discrete stages: validation, grading, parsing, combination, dataset aggregation, and integrity validation. Each stage is checkpointed in the manifest for error recovery.
+
+See [PIPELINE.md](PIPELINE.md) for complete protocol and submission format.
 
 ## Directory Structure
 
 ```
 grader/
-├── grade                        # Entry point script
-├── PIPELINE.md                  # Data processing pipeline documentation
-├── SETUP.md                     # Environment setup instructions
-├── docker-compose.eclass.yaml   # OpenEclass Docker config
-├── sso_cert.pem                 # SSL certificate (generated, see SETUP.md)
-├── sso_key.pem                  # SSL private key (generated, see SETUP.md)
-├── src/                         # Grading modules
-│   ├── __init__.py
+├── grade                        # Grading entry point
+├── src/                         # Core grading modules
+│   ├── patch_manager.py        # Git operations for patches
 │   ├── build_tester.py          # Build verification
-│   ├── eclass_manager.py        # OpenEclass availability checks
-│   ├── memory_tester.py         # Valgrind memory tests (C)
-│   ├── mock_server.py           # CAS authentication mock
-│   ├── patch_manager.py         # Git operations
 │   ├── protocol_tester.py       # MCP protocol and tool tests
-│   ├── report.py                # Report generation
-│   └── scorer.py                # Point allocation and aggregation
-├── fixtures/                    # HTML fixtures for SSO mock
-│   ├── sso_login.html
-│   └── sso_login_error.html
-├── scripts/                     # Utility scripts
-│   ├── README.md                # Scripts documentation
-│   ├── copilot_chat_parser.py   # Chat export analyzer with sanitization
-│   ├── cursor_chat_parser.py    # Cursor chat analyzer with sanitization
-│   └── results_viewer.py        # Results JSON browser
-├── pipeline/                    # Data processing pipeline scripts
-│   ├── README.md                # Pipeline scripts documentation
-│   └── *.py                     # See pipeline/README.md for details
+│   ├── memory_tester.py         # Valgrind memory tests
+│   ├── mock_server.py           # CAS authentication mock
+│   ├── eclass_manager.py        # OpenEclass availability checks
+│   ├── scorer.py                # Point allocation
+│   └── report.py                # Report generation
+├── scripts/                     # Grader utility scripts
+│   ├── copilot_chat_parser.py  # Copilot chat analyzer
+│   ├── cursor_chat_parser.py   # Cursor chat analyzer
+│   └── results_viewer.py       # Results browser
+├── pipeline/                    # Pipeline infrastructure
+│   ├── validate_submission.py  # Validation and extraction
+│   ├── grade_submission.py     # Automated grading
+│   ├── parse_submission.py     # Metric extraction
+│   ├── combine_participant.py  # Result merging
+│   ├── add_to_dataset.py       # Dataset aggregation
+│   ├── validate_dataset.py     # Integrity validation
+│   ├── inspect_submission.py   # Manifest inspection
+│   ├── workspace.py            # Workspace detection
+│   └── manifest.py             # Manifest operations
+├── fixtures/                    # SSO mock HTML fixtures
+├── PIPELINE.md                  # Pipeline protocol documentation
+└── SETUP.md                     # Environment setup
 ```
 
-### Data Processing Pipeline
+## Documentation
 
-For processing participant submissions from collection through to final datasets, see [PIPELINE.md](PIPELINE.md). The pipeline provides:
-
-- **Workspace auto-detection** - Automatically finds all required directories
-- Submission validation and extraction
-- Automated grading with result tracking
-- Chat log parsing and metric extraction
-- PII sanitization via reversible encryption
-- Incremental dataset building with audit trails
-- **Checkpoint validation** - Verify data integrity at each step via manifest
-
-The pipeline automatically detects your workspace structure and finds manifests in `bsc-apm-case-study-data/submissions_sanitized/{sub_study}/pipeline_manifest.json` for tracking and validation.
-
-## System Requirements
-
-- Ubuntu 22.04+ (or similar Linux)
-- Python 3.10+ with `uv` or `pip`
-- Docker with docker compose v2
-- For C tests: `libcurl-dev`, `libxml2-dev`, `valgrind`
-
-See [SETUP.md](SETUP.md) for complete setup instructions.
+- **[SETUP.md](SETUP.md)** - Environment setup and prerequisites
+- **[PIPELINE.md](PIPELINE.md)** - Data processing pipeline protocol
+- **[scripts/README.md](scripts/README.md)** - Utility script usage
+- **[pipeline/README.md](pipeline/README.md)** - Pipeline script usage
+- **Source code docstrings** - Detailed API documentation in `src/` modules
 
 ## Related
 
-- [Task Specification](../task/) - What submissions are implementing
-- [Scoring Rubric](../task/SCORING.md) - Detailed test-by-test point allocation
+- [Task Specification](../task/) - Submission requirements
+- [Scoring Rubric](../task/SCORING.md) - Test-by-test point allocation

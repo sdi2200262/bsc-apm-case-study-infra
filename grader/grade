@@ -21,7 +21,6 @@ Usage:
 """
 
 import sys
-import os
 import argparse
 from pathlib import Path
 
@@ -39,7 +38,13 @@ from src.scorer import Scorer
 from src.report import ReportWriter
 
 
-def main():
+def main() -> None:
+    """
+    Main entry point for grading participant submissions.
+    
+    Orchestrates the grading pipeline: applies patch, runs tests, and generates reports.
+    Supports both patch-based grading and baseline testing (no patch).
+    """
     parser = argparse.ArgumentParser(
         description="Grade participant submissions for eclass-mcp-server"
     )
@@ -94,19 +99,19 @@ def main():
         patch_path = Path(args.patch_file).resolve()
         if not patch_path.exists():
             print(f"Error: Patch file not found: {patch_path}", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(2)
         patch_name = patch_path.stem
     
     # Determine workspace paths
     if args.eclass_dir:
         eclass_dir = Path(args.eclass_dir).resolve()
     else:
-        workspace_root = GRADER_DIR.parent
-        eclass_dir = workspace_root / "eclass-mcp-server"
+        # Default: assume eclass-mcp-server is at same level as grader directory
+        eclass_dir = GRADER_DIR.parent / "eclass-mcp-server"
     
     if not eclass_dir.exists():
         print(f"Error: eclass-mcp-server directory not found at {eclass_dir}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
     
     # Determine workspace_root from eclass_dir for report generation
     workspace_root = eclass_dir.parent
@@ -126,7 +131,7 @@ def main():
     if not eclass_manager.start():
         print("\nError: Prerequisites not met.")
         print("Ensure OpenEclass is running: docker start grader_db_1 grader_eclass_1")
-        sys.exit(1)
+        sys.exit(2)
     
     try:
         # Apply patch (if provided)
@@ -251,7 +256,12 @@ def main():
 
 
 def _skip_python_tests(scorer: Scorer) -> None:
-    """Record skipped results for all Python tests."""
+    """
+    Record skipped results for all Python tests.
+    
+    Args:
+        scorer: Scorer instance to record skipped test results.
+    """
     python_tests = ["P1", "P2", "L1", "L2", "L3", "O1", "O2", "C1", "C2", "A1",
                    "AN1", "AN2", "AN3", "AN4", "AN5"]
     for test_id in python_tests:
@@ -259,7 +269,12 @@ def _skip_python_tests(scorer: Scorer) -> None:
 
 
 def _skip_c_tests(scorer: Scorer) -> None:
-    """Record skipped results for all C tests."""
+    """
+    Record skipped results for all C tests.
+    
+    Args:
+        scorer: Scorer instance to record skipped test results.
+    """
     c_tests = ["M1", "P1_c", "P2_c", "L1_c", "L2_c", "L3_c", "O1_c", "O2_c", 
                "C1_c", "C2_c", "A1_c", "AN1_c", "AN2_c", "AN3_c", "AN4_c", "AN5_c"]
     for test_id in c_tests:
@@ -267,7 +282,14 @@ def _skip_c_tests(scorer: Scorer) -> None:
 
 
 def _finalize_and_exit(scorer: Scorer, report: ReportWriter, verbose: bool) -> None:
-    """Finalize reports and exit with error."""
+    """
+    Finalize reports and exit with error code.
+    
+    Args:
+        scorer: Scorer instance with test results.
+        report: ReportWriter instance for generating reports.
+        verbose: Whether to show verbose output.
+    """
     report.write_json(scorer)
     report.write_text(scorer)
     report.print_console_summary(scorer, verbose)

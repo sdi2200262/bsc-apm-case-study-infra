@@ -1,7 +1,6 @@
 # Environment Setup
 
-This document describes how to set up the grading environment for evaluating
-participant submissions to the eclass-mcp-server task.
+This document describes how to set up the grading environment and workspace structure for evaluating participant submissions.
 
 ## System Requirements
 
@@ -45,56 +44,82 @@ The grader tests against these baseline versions:
 - Python Feature: 0/12 (not implemented in baseline)
 - C Replica: 0/24 (not implemented in baseline)
 
-## Directory Layout
+## Workspace Structure
 
-The grader expects this workspace structure:
+The pipeline requires this workspace structure:
 
 ```
 workspace/
-  eclass-mcp-server/          # Project being evaluated (git repo)
-  openeclass/                 # OpenEclass source (for Docker image)
-  bsc-apm-case-study-task/    # This repository
-    └── grader/               # This directory
-  bsc-apm-case-study-data/     # Data repository (for pipeline)
-    └── submissions_sanitized/
-        ├── copilot/
-        │   └── pipeline_manifest.json
-        └── cursor/
-            └── pipeline_manifest.json
+├── bsc-apm-case-study-task/    # This repository
+│   └── grader/
+│       └── pipeline/
+├── bsc-apm-case-study-data/    # Data repository
+│   └── submissions_sanitized/
+│       ├── copilot/
+│       │   ├── pipeline_manifest.json
+│       │   └── dataset.csv
+│       └── cursor/
+│           ├── pipeline_manifest.json
+│           └── dataset.csv
+├── eclass-mcp-server/          # eClass MCP Server repository
+└── openeclass/                 # Local openeclass repository
 ```
 
-**Note:** The pipeline scripts automatically detect this workspace structure. You can run them from anywhere within the workspace, and they will find the correct paths. See [PIPELINE.md](PIPELINE.md) for details on workspace auto-detection.
+The pipeline scripts automatically detect this workspace structure. You can run them from anywhere within the workspace, and they will find the correct paths.
 
 ## Setup Steps
 
-### 1. Clone Repositories
+### 1. Create Workspace Directory
 
 ```bash
-git clone https://github.com/sdi2200262/eclass-mcp-server.git
-git clone <openeclass-repo> openeclass
+mkdir -p workspace
+cd workspace
 ```
 
-### 2. Build OpenEclass Docker Image
+### 2. Clone Repositories
+
+```bash
+# Clone this repository
+git clone https://github.com/sdi2200262/bsc-apm-case-study-task
+
+# Clone data repository
+git clone https://github.com/sdi2200262/bsc-apm-case-study-data
+
+# Clone baseline repositories
+git clone https://github.com/sdi2200262/eclass-mcp-server.git
+cd eclass-mcp-server
+git checkout 8b4e39c
+cd ..
+
+git clone https://github.com/gunet/openeclass
+cd openeclass
+git checkout e8b3329
+cd ..
+```
+
+**Note:** The data repository already contains the required directory structure (`submissions_sanitized/copilot/` and `submissions_sanitized/cursor/`). The pipeline scripts will automatically create `pipeline_manifest.json` and `dataset.csv` files when processing submissions.
+
+### 3. Build OpenEclass Docker Image
 
 ```bash
 cd openeclass
 docker build -t openeclass:test .
 ```
 
-### 3. Start Docker Services
+### 4. Start Docker Services
 
 ```bash
-cd grader
+cd bsc-apm-case-study-task/grader
 docker compose -f docker-compose.eclass.yaml up -d
 ```
 
 Wait for services:
 ```bash
-docker exec grader_db_1 mysql -uroot -psecret -e "SELECT 1" && echo "DB ready"
-curl -s http://localhost/ > /dev/null && echo "OpenEclass ready"
+docker exec grader_db_1 mysql -uroot -psecret -e "SELECT 1"
+curl -s http://localhost/ > /dev/null
 ```
 
-### 4. Configure CAS Authentication
+### 5. Configure CAS Authentication
 
 ```bash
 docker exec grader_db_1 mysql -uroot -psecret eclass -e "
@@ -105,7 +130,7 @@ WHERE auth_id = 7;
 "
 ```
 
-### 5. Create Test User
+### 6. Create Test User
 
 The `password` field must be `'cas'` for CAS authentication.
 
@@ -117,7 +142,7 @@ ON DUPLICATE KEY UPDATE password='cas';
 "
 ```
 
-### 6. Create Test Courses
+### 7. Create Test Courses
 
 ```bash
 docker exec grader_db_1 mysql -uroot -psecret eclass -e "
@@ -133,7 +158,7 @@ ON DUPLICATE KEY UPDATE status=5;
 "
 ```
 
-### 7. Seed Test Announcements
+### 8. Seed Test Announcements
 
 ```bash
 docker exec grader_db_1 mysql -uroot -psecret eclass -e "
@@ -146,15 +171,14 @@ INSERT INTO announcement (course_id, title, content, date, visible) VALUES
 
 Note: MATH301 has no announcements for testing "No announcements found" case.
 
-### 8. Generate SSL Certificates
+### 9. Generate SSL Certificates
 
-The mock SSO server requires self-signed SSL certificates with proper Subject
-Alternative Name (SAN) extension for IP address validation.
+The mock SSO server requires self-signed SSL certificates with proper Subject Alternative Name (SAN) extension for IP address validation.
 
 **Location:** Certificates must be generated in the `grader/` directory (same level as this SETUP.md file).
 
 ```bash
-cd grader
+cd bsc-apm-case-study-task/grader
 openssl req -x509 -newkey rsa:2048 -keyout sso_key.pem -out sso_cert.pem \
     -days 365 -nodes -subj '/CN=172.17.0.1' \
     -addext 'subjectAltName=IP:172.17.0.1'
@@ -164,19 +188,16 @@ This will create:
 - `grader/sso_cert.pem` - SSL certificate
 - `grader/sso_key.pem` - Private key
 
-**Important:** The `-addext` option adds a SAN extension, which is required for
-modern SSL/TLS validation of IP addresses (RFC 6125). Without it, Python's
-`requests` library will reject the certificate with "IP address mismatch".
+**Important:** The `-addext` option adds a SAN extension, which is required for modern SSL/TLS validation of IP addresses (RFC 6125). Without it, Python's `requests` library will reject the certificate with "IP address mismatch".
 
-**Note:** These files are in `.gitignore`. Each grading environment must
-generate its own certificates. The mock server (`src/mock_server.py`) expects
-these files to be in the `grader/` directory.
+**Note:** These files are in `.gitignore`. Each grading environment must generate its own certificates. 
 
-### 9. Verify Setup
+### 10. Verify Setup
 
 Run the baseline test to verify everything works:
 
 ```bash
+cd bsc-apm-case-study-task/grader
 ./grade --no-patch
 ```
 
@@ -217,3 +238,13 @@ sudo apt-get install libcurl4-openssl-dev libxml2-dev
 ```
 
 These are required for compiling the C replica, as specified in the task specification.
+
+### Pipeline workspace detection fails
+
+Ensure all required directories exist at the same level:
+- `bsc-apm-case-study-task/`
+- `bsc-apm-case-study-data/`
+- `eclass-mcp-server/`
+- `openeclass/`
+
+Run pipeline scripts from within the workspace directory structure.
