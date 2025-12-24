@@ -261,9 +261,9 @@ def main() -> int:
     # Locate parser script
     script_dir = Path(__file__).parent
     if platform == "copilot":
-        parser_script = script_dir.parent / "copilot_chat_parser.py"
+        parser_script = script_dir.parent / "scripts" / "copilot_chat_parser.py"
     else:
-        parser_script = script_dir.parent / "cursor_chat_parser.py"
+        parser_script = script_dir.parent / "scripts" / "cursor_chat_parser.py"
     
     if not parser_script.exists():
         print(f"Error: Parser not found: {parser_script}", file=sys.stderr)

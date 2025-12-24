@@ -2,7 +2,7 @@
 
 Checkpoint scripts for processing participant submissions. Each script represents a discrete step in the workflow and logs operations to a manifest file for traceability.
 
-See [../PIPELINE.md](../../PIPELINE.md) for the complete protocol and workflow.
+See [../PIPELINE.md](../PIPELINE.md) for the complete protocol and workflow.
 
 ## Overview
 

@@ -71,7 +71,7 @@ The pipeline uses workspace auto-detection to find all required directories. You
 workspace/
 ├── bsc-apm-case-study-task/    # This repository
 │   └── grader/
-│       └── scripts/pipeline/
+│       └── pipeline/
 ├── bsc-apm-case-study-data/    # Data repository
 │   └── submissions_sanitized/
 │       ├── copilot/
@@ -102,7 +102,7 @@ Then process a submission from your workspace root:
 
 ```bash
 # All paths auto-detected from workspace!
-cd bsc-apm-case-study-task/grader/scripts/pipeline
+cd bsc-apm-case-study-task/grader/pipeline
 
 # Step 1: Validate and extract submission
 ./validate_submission.py P001_tool_a_submission.zip

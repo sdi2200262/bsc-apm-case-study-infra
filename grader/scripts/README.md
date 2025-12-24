@@ -63,6 +63,6 @@ For detailed usage, command-line options, and output formats, see:
 
 ## Pipeline Scripts
 
-The `pipeline/` subdirectory contains scripts for end-to-end submission processing.
+Pipeline scripts for end-to-end submission processing are located in `../pipeline/`.
 
-See [pipeline/README.md](pipeline/README.md) for script documentation and [../PIPELINE.md](../PIPELINE.md) for the full protocol.
+See [../pipeline/README.md](../pipeline/README.md) for script documentation and [../PIPELINE.md](../PIPELINE.md) for the full protocol.

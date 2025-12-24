@@ -75,10 +75,10 @@ grader/
 │   ├── README.md                # Scripts documentation
 │   ├── copilot_chat_parser.py   # Chat export analyzer with sanitization
 │   ├── cursor_chat_parser.py    # Cursor chat analyzer with sanitization
-│   ├── results_viewer.py        # Results JSON browser
-│   └── pipeline/                # Data processing pipeline scripts
-│       ├── README.md            # Pipeline scripts documentation
-│       └── *.py                 # See pipeline/README.md for details
+│   └── results_viewer.py        # Results JSON browser
+├── pipeline/                    # Data processing pipeline scripts
+│   ├── README.md                # Pipeline scripts documentation
+│   └── *.py                     # See pipeline/README.md for details
 ```
 
 ### Data Processing Pipeline

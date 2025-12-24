@@ -36,7 +36,7 @@ from workspace import (
 # Import PatchManager for cleanup on interruption
 # Add grader directory to path so we can import src modules
 script_dir = Path(__file__).parent
-grader_dir = script_dir.parent.parent
+grader_dir = script_dir.parent
 sys.path.insert(0, str(grader_dir))
 from src.patch_manager import PatchManager
 
