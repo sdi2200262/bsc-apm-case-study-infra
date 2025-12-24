@@ -80,7 +80,17 @@ SHORT_INPUT_THRESHOLD = 50
 # =============================================================================
 
 def _derive_keystream(secret: bytes, salt: bytes, length: int) -> bytes:
-    """Derive keystream using HMAC-SHA256 expansion."""
+    """
+    Derive keystream using HMAC-SHA256 expansion.
+    
+    Args:
+        secret: Secret key bytes for HMAC.
+        salt: Salt bytes for keystream derivation.
+        length: Desired keystream length in bytes.
+    
+    Returns:
+        Keystream bytes of specified length.
+    """
     keystream = b""
     counter = 0
     while len(keystream) < length:
@@ -95,7 +105,17 @@ def _derive_keystream(secret: bytes, salt: bytes, length: int) -> bytes:
 
 
 def encrypt(plaintext: str, secret: bytes) -> str:
-    """Encrypt string using XOR with HMAC-derived keystream."""
+    """
+    Encrypt string using XOR with HMAC-derived keystream.
+    
+    Args:
+        plaintext: Plaintext string to encrypt.
+        secret: Secret key bytes for encryption.
+    
+    Returns:
+        Encrypted string in format "ENC:{salt_b64}:{cipher_b64}".
+        Returns original plaintext if empty.
+    """
     if not plaintext:
         return plaintext
 
@@ -111,7 +131,19 @@ def encrypt(plaintext: str, secret: bytes) -> str:
 
 
 def decrypt(encrypted: str, secret: bytes) -> str:
-    """Decrypt string encrypted with encrypt(). Raises ValueError on invalid format."""
+    """
+    Decrypt string encrypted with encrypt().
+    
+    Args:
+        encrypted: Encrypted string in format "ENC:{salt_b64}:{cipher_b64}".
+        secret: Secret key bytes for decryption (must match encryption key).
+    
+    Returns:
+        Decrypted plaintext string. Returns original string if not encrypted.
+    
+    Raises:
+        ValueError: If encrypted format is invalid or malformed.
+    """
     if not encrypted or not encrypted.startswith(f"{SANITIZATION_MARKER}:"):
         return encrypted
 
@@ -134,31 +166,80 @@ def decrypt(encrypted: str, secret: bytes) -> str:
 # =============================================================================
 
 def load_markdown(filepath: Path) -> str:
-    """Load Cursor chat markdown file."""
+    """
+    Load Cursor chat markdown file.
+    
+    Args:
+        filepath: Path to the Cursor chat markdown export file.
+    
+    Returns:
+        File contents as string.
+    
+    Raises:
+        OSError: If file cannot be read.
+    """
     with open(filepath, 'r', encoding='utf-8') as f:
         return f.read()
 
 
 def load_json(filepath: Path) -> Dict[str, Any]:
-    """Load sanitized JSON file."""
+    """
+    Load sanitized JSON file.
+    
+    Args:
+        filepath: Path to the sanitized JSON file.
+    
+    Returns:
+        Parsed JSON data as dictionary.
+    
+    Raises:
+        json.JSONDecodeError: If file contains invalid JSON.
+        OSError: If file cannot be read.
+    """
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
 def save_json(data: Dict[str, Any], filepath: Path) -> None:
-    """Save data as formatted JSON file."""
+    """
+    Save data as formatted JSON file.
+    
+    Args:
+        data: Dictionary to save as JSON.
+        filepath: Path where JSON file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def save_markdown(content: str, filepath: Path) -> None:
-    """Save markdown content to file."""
+    """
+    Save markdown content to file.
+    
+    Args:
+        content: Markdown content string to save.
+        filepath: Path where markdown file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
 
 
 def is_sanitized(data: Any) -> bool:
-    """Check if data is a sanitized JSON structure."""
+    """
+    Check if data is a sanitized JSON structure.
+    
+    Args:
+        data: Data to check (typically a dictionary).
+    
+    Returns:
+        True if data is a dictionary containing sanitization metadata, False otherwise.
+    """
     return isinstance(data, dict) and META_KEY in data
 
 
@@ -169,9 +250,13 @@ def is_sanitized(data: Any) -> bool:
 def parse_chat(content: str) -> Dict[str, Any]:
     """
     Parse Cursor markdown export into structured data.
-
+    
+    Args:
+        content: Markdown content string from Cursor chat export.
+    
     Returns:
-        Dictionary with messages list containing role and text.
+        Dictionary with 'messages' list containing dictionaries with 'role' and 'text' keys.
+        Roles are 'user' or 'cursor'.
     """
     messages: List[Dict[str, str]] = []
 
@@ -197,12 +282,28 @@ def parse_chat(content: str) -> Dict[str, Any]:
 
 
 def get_user_messages(data: Dict[str, Any]) -> List[str]:
-    """Extract all user message texts from parsed data."""
+    """
+    Extract all user message texts from parsed data.
+    
+    Args:
+        data: Parsed chat data dictionary from parse_chat().
+    
+    Returns:
+        List of user message text strings.
+    """
     return [m['text'] for m in data.get('messages', []) if m['role'] == 'user']
 
 
 def get_chat_id(user_messages: List[str]) -> str:
-    """Generate chat ID from concatenated user messages."""
+    """
+    Generate chat ID from concatenated user messages.
+    
+    Args:
+        user_messages: List of user message text strings.
+    
+    Returns:
+        SHA256 hash of concatenated messages (first 16 characters).
+    """
     combined = "".join(user_messages)
     return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
@@ -212,7 +313,15 @@ def get_chat_id(user_messages: List[str]) -> str:
 # =============================================================================
 
 def is_apm_protocol(text: str) -> bool:
-    """Check if text contains APM protocol signatures."""
+    """
+    Check if text contains APM protocol signatures.
+    
+    Args:
+        text: Text string to check for APM protocol markers.
+    
+    Returns:
+        True if text contains APM YAML keys or headers, False otherwise.
+    """
     if not text:
         return False
 
@@ -234,8 +343,15 @@ def is_apm_protocol(text: str) -> bool:
 def classify_user_input(text: str) -> str:
     """
     Classify user input into buckets: "protocol", "short", or "standard".
-
+    
     Classification priority: protocol > short > standard.
+    
+    Args:
+        text: User input text to classify.
+    
+    Returns:
+        Classification bucket: "protocol", "short", or "standard".
+        Returns "short" if text is empty.
     """
     if not text:
         return "short"
@@ -256,9 +372,15 @@ def classify_user_input(text: str) -> str:
 def extract_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract available metrics from parsed Cursor chat.
-
+    
+    Args:
+        data: Parsed chat data dictionary from parse_chat().
+    
     Returns:
-        Dictionary with project_metadata and metrics.
+        Dictionary with project_metadata and metrics:
+        - project_metadata: file_count, chat_ids
+        - metrics: total_requests, ratio_short_inputs, ratio_protocol_inputs,
+          ratio_standard_inputs, avg_chars_short, avg_chars_protocol, avg_chars_standard
     """
     user_messages = get_user_messages(data)
 
@@ -311,7 +433,15 @@ def extract_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def aggregate_metrics(metrics_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Aggregate metrics from multiple parsed chats."""
+    """
+    Aggregate metrics from multiple parsed chats.
+    
+    Args:
+        metrics_list: List of metrics dictionaries from extract_metrics().
+    
+    Returns:
+        Dictionary with aggregated project_metadata and metrics (same structure as extract_metrics()).
+    """
     all_chat_ids: List[str] = []
     total_requests = 0
 
@@ -376,8 +506,17 @@ def aggregate_metrics(metrics_list: List[Dict[str, Any]]) -> Dict[str, Any]:
 def sanitize_chat(content: str, secret: bytes) -> Dict[str, Any]:
     """
     Sanitize chat export by encrypting the entire payload.
-
+    
     Metadata is preserved in plaintext for cataloging without decryption.
+    
+    Args:
+        content: Markdown content string to sanitize.
+        secret: Secret key bytes for encryption.
+    
+    Returns:
+        Dictionary with sanitization metadata and encrypted payload:
+        - _sanitization_meta: timestamp, original_size, requests_count, chat_id
+        - payload: Encrypted chat content string
     """
     data = parse_chat(content)
     user_messages = get_user_messages(data)
@@ -416,13 +555,31 @@ def unsanitize_chat(data: Dict[str, Any], secret: bytes) -> str:
 # =============================================================================
 
 def export_metrics_json(metrics: Dict[str, Any], filepath: Path) -> None:
-    """Export metrics as JSON file."""
+    """
+    Export metrics as JSON file.
+    
+    Args:
+        metrics: Metrics dictionary from aggregate_metrics() or extract_metrics().
+        filepath: Path where JSON file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     save_json(metrics, filepath)
     print(f"Metrics exported to: {filepath}")
 
 
 def export_metrics_csv(metrics: Dict[str, Any], filepath: Path) -> None:
-    """Export metrics as CSV file with flattened structure."""
+    """
+    Export metrics as CSV file with flattened structure.
+    
+    Args:
+        metrics: Metrics dictionary from aggregate_metrics() or extract_metrics().
+        filepath: Path where CSV file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     row = {}
 
     pm = metrics.get('project_metadata', {})
@@ -447,7 +604,12 @@ def export_metrics_csv(metrics: Dict[str, Any], filepath: Path) -> None:
 # =============================================================================
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create and configure argument parser."""
+    """
+    Create and configure argument parser.
+    
+    Returns:
+        Configured ArgumentParser instance with all CLI arguments.
+    """
     parser = argparse.ArgumentParser(
         prog="cursor_chat_parser.py",
         description="CLI utility for analyzing Cursor chat exports.",
@@ -514,7 +676,12 @@ Environment Variables:
 
 
 def main() -> int:
-    """Main entry point."""
+    """
+    Main entry point for CLI execution.
+    
+    Returns:
+        Exit code: 0 for success, 1 for error.
+    """
     parser = create_parser()
     args = parser.parse_args()
 

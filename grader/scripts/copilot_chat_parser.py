@@ -80,7 +80,17 @@ SHORT_INPUT_THRESHOLD = 50
 # =============================================================================
 
 def _derive_keystream(secret: bytes, salt: bytes, length: int) -> bytes:
-    """Derive keystream using HMAC-SHA256 expansion."""
+    """
+    Derive keystream using HMAC-SHA256 expansion.
+    
+    Args:
+        secret: Secret key bytes for HMAC.
+        salt: Salt bytes for keystream derivation.
+        length: Desired keystream length in bytes.
+    
+    Returns:
+        Keystream bytes of specified length.
+    """
     keystream = b""
     counter = 0
     while len(keystream) < length:
@@ -95,7 +105,17 @@ def _derive_keystream(secret: bytes, salt: bytes, length: int) -> bytes:
 
 
 def encrypt(plaintext: str, secret: bytes) -> str:
-    """Encrypt string using XOR with HMAC-derived keystream."""
+    """
+    Encrypt string using XOR with HMAC-derived keystream.
+    
+    Args:
+        plaintext: Plaintext string to encrypt.
+        secret: Secret key bytes for encryption.
+    
+    Returns:
+        Encrypted string in format "ENC:{salt_b64}:{cipher_b64}".
+        Returns original plaintext if empty.
+    """
     if not plaintext:
         return plaintext
 
@@ -111,7 +131,19 @@ def encrypt(plaintext: str, secret: bytes) -> str:
 
 
 def decrypt(encrypted: str, secret: bytes) -> str:
-    """Decrypt string encrypted with encrypt(). Raises ValueError on invalid format."""
+    """
+    Decrypt string encrypted with encrypt().
+    
+    Args:
+        encrypted: Encrypted string in format "ENC:{salt_b64}:{cipher_b64}".
+        secret: Secret key bytes for decryption (must match encryption key).
+    
+    Returns:
+        Decrypted plaintext string. Returns original string if not encrypted.
+    
+    Raises:
+        ValueError: If encrypted format is invalid or malformed.
+    """
     if not encrypted or not encrypted.startswith(f"{SANITIZATION_MARKER}:"):
         return encrypted
 
@@ -134,19 +166,48 @@ def decrypt(encrypted: str, secret: bytes) -> str:
 # =============================================================================
 
 def load_chat(filepath: Path) -> Dict[str, Any]:
-    """Load and parse Copilot chat JSON file."""
+    """
+    Load and parse Copilot chat JSON file.
+    
+    Args:
+        filepath: Path to the Copilot chat export JSON file.
+    
+    Returns:
+        Parsed JSON data as dictionary.
+    
+    Raises:
+        json.JSONDecodeError: If file contains invalid JSON.
+        OSError: If file cannot be read.
+    """
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
 def save_json(data: Dict[str, Any], filepath: Path) -> None:
-    """Save data as formatted JSON file."""
+    """
+    Save data as formatted JSON file.
+    
+    Args:
+        data: Dictionary to save as JSON.
+        filepath: Path where JSON file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def is_sanitized(data: Dict[str, Any]) -> bool:
-    """Check if chat data has been sanitized."""
+    """
+    Check if chat data has been sanitized.
+    
+    Args:
+        data: Chat data dictionary to check.
+    
+    Returns:
+        True if data contains sanitization metadata, False otherwise.
+    """
     return META_KEY in data
 
 
@@ -155,7 +216,15 @@ def is_sanitized(data: Dict[str, Any]) -> bool:
 # =============================================================================
 
 def is_apm_protocol(text: str) -> bool:
-    """Check if text contains APM protocol signatures."""
+    """
+    Check if text contains APM protocol signatures.
+    
+    Args:
+        text: Text string to check for APM protocol markers.
+    
+    Returns:
+        True if text contains APM YAML keys or headers, False otherwise.
+    """
     if not text:
         return False
 
@@ -177,8 +246,15 @@ def is_apm_protocol(text: str) -> bool:
 def classify_user_input(text: str) -> str:
     """
     Classify user input into buckets: "protocol", "short", or "standard".
-
+    
     Classification priority: protocol > short > standard.
+    
+    Args:
+        text: User input text to classify.
+    
+    Returns:
+        Classification bucket: "protocol", "short", or "standard".
+        Returns "short" if text is empty.
     """
     if not text:
         return "short"
@@ -197,7 +273,15 @@ def classify_user_input(text: str) -> str:
 # =============================================================================
 
 def count_tool_invocations(request: Dict[str, Any]) -> int:
-    """Count tool invocations in a request's response array."""
+    """
+    Count tool invocations in a request's response array.
+    
+    Args:
+        request: Request dictionary containing response array.
+    
+    Returns:
+        Number of tool invocations found in the request.
+    """
     count = 0
     for item in request.get('response', []):
         if item.get('kind') == 'toolInvocationSerialized':
@@ -206,7 +290,15 @@ def count_tool_invocations(request: Dict[str, Any]) -> int:
 
 
 def count_tool_successes(request: Dict[str, Any]) -> int:
-    """Count successfully completed tool invocations."""
+    """
+    Count successfully completed tool invocations.
+    
+    Args:
+        request: Request dictionary containing response array.
+    
+    Returns:
+        Number of successfully completed tool invocations.
+    """
     successes = 0
     for item in request.get('response', []):
         if item.get('kind') != 'toolInvocationSerialized':
@@ -217,7 +309,17 @@ def count_tool_successes(request: Dict[str, Any]) -> int:
 
 
 def count_user_edits(request: Dict[str, Any]) -> Tuple[int, int]:
-    """Count user edits and terminal invocations. Returns (edit_count, terminal_count)."""
+    """
+    Count user edits and terminal invocations.
+    
+    Args:
+        request: Request dictionary containing response array.
+    
+    Returns:
+        Tuple of (edit_count: int, terminal_count: int).
+        edit_count is number of terminal commands that were edited by user.
+        terminal_count is total number of terminal invocations.
+    """
     edits = 0
     terminals = 0
 
@@ -242,7 +344,17 @@ def count_user_edits(request: Dict[str, Any]) -> Tuple[int, int]:
 
 
 def get_rounds_info(request: Dict[str, Any]) -> Tuple[int, int]:
-    """Get tool round and retry counts. Returns (round_count, retry_count)."""
+    """
+    Get tool round and retry counts.
+    
+    Args:
+        request: Request dictionary containing result metadata.
+    
+    Returns:
+        Tuple of (round_count: int, retry_count: int).
+        round_count is number of tool call rounds.
+        retry_count is total number of tool input retries.
+    """
     result = request.get('result', {})
     metadata = result.get('metadata', {})
     rounds = metadata.get('toolCallRounds', [])
@@ -254,13 +366,31 @@ def get_rounds_info(request: Dict[str, Any]) -> Tuple[int, int]:
 
 
 def extract_user_text(request: Dict[str, Any]) -> Optional[str]:
-    """Extract user message text from a request."""
+    """
+    Extract user message text from a request.
+    
+    Args:
+        request: Request dictionary containing message data.
+    
+    Returns:
+        User message text string, or None if not found.
+    """
     message = request.get('message', {})
     return message.get('text', '')
 
 
 def get_timestamps(requests: List[Dict[str, Any]]) -> Tuple[Optional[int], Optional[int]]:
-    """Get min and max timestamps from requests in milliseconds."""
+    """
+    Get min and max timestamps from requests in milliseconds.
+    
+    Args:
+        requests: List of request dictionaries.
+    
+    Returns:
+        Tuple of (min_timestamp: Optional[int], max_timestamp: Optional[int]).
+        Timestamps are in milliseconds. Returns (None, None) if requests list is empty.
+        max_timestamp considers both request timestamp and completedAt from modelState.
+    """
     if not requests:
         return None, None
 
@@ -285,13 +415,29 @@ def get_timestamps(requests: List[Dict[str, Any]]) -> Tuple[Optional[int], Optio
 
 
 def get_chat_id(user_texts: List[str]) -> str:
-    """Generate chat ID from concatenated user messages."""
+    """
+    Generate chat ID from concatenated user messages.
+    
+    Args:
+        user_texts: List of user message text strings.
+    
+    Returns:
+        SHA256 hash of concatenated messages (first 16 characters).
+    """
     combined = "".join(user_texts)
     return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
 
 def get_model_ids(data: Dict[str, Any]) -> List[str]:
-    """Extract all unique model IDs from chat data."""
+    """
+    Extract all unique model IDs from chat data.
+    
+    Args:
+        data: Chat data dictionary containing requests.
+    
+    Returns:
+        Sorted list of unique model ID strings.
+    """
     model_ids: Set[str] = set()
     for request in data.get('requests', []):
         model_id = request.get('modelId', '')
@@ -305,7 +451,27 @@ def get_model_ids(data: Dict[str, Any]) -> List[str]:
 # =============================================================================
 
 def extract_raw_events(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract raw event counts from a single chat file for aggregation."""
+    """
+    Extract raw event counts from a single chat file for aggregation.
+    
+    Args:
+        data: Chat data dictionary containing requests.
+    
+    Returns:
+        Dictionary with raw event counts and metadata:
+        - total_requests: Number of requests
+        - total_invocations: Total tool invocations
+        - total_successes: Successful tool invocations
+        - total_edits: User terminal edits
+        - total_terminals: Terminal invocations
+        - total_rounds: Tool call rounds
+        - total_retries: Tool input retries
+        - user_texts: List of user message texts
+        - min_timestamp: Earliest timestamp (ms)
+        - max_timestamp: Latest timestamp (ms)
+        - chat_id: SHA256 hash of user messages
+        - model_ids: List of model IDs
+    """
     requests = data.get('requests', [])
 
     total_requests = len(requests)
@@ -356,7 +522,19 @@ def extract_raw_events(data: Dict[str, Any]) -> Dict[str, Any]:
 # =============================================================================
 
 def aggregate_metrics(raw_events_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Aggregate raw events from multiple files into project-level metrics."""
+    """
+    Aggregate raw events from multiple files into project-level metrics.
+    
+    Args:
+        raw_events_list: List of raw event dictionaries from extract_raw_events().
+    
+    Returns:
+        Dictionary with project_metadata and metrics:
+        - project_metadata: file_count, chat_ids, unique_model_ids, global_start, global_end
+        - metrics: tool_success_rate, tool_retry_rate, user_edit_rate, total_requests,
+          session_duration_minutes, ratio_short_inputs, ratio_protocol_inputs,
+          ratio_standard_inputs, avg_chars_short, avg_chars_protocol, avg_chars_standard
+    """
     total_requests = 0
     total_invocations = 0
     total_successes = 0
@@ -470,7 +648,15 @@ def aggregate_metrics(raw_events_list: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def extract_project_metrics(data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Extract project-level metrics from multiple chat files."""
+    """
+    Extract project-level metrics from multiple chat files.
+    
+    Args:
+        data_list: List of chat data dictionaries from load_chat().
+    
+    Returns:
+        Dictionary with aggregated project-level metrics (same structure as aggregate_metrics()).
+    """
     raw_events_list = [extract_raw_events(data) for data in data_list]
     return aggregate_metrics(raw_events_list)
 
@@ -482,8 +668,17 @@ def extract_project_metrics(data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
 def sanitize_chat(data: Dict[str, Any], secret: bytes) -> Dict[str, Any]:
     """
     Sanitize chat export by encrypting the entire payload.
-
+    
     Metadata is preserved in plaintext for cataloging without decryption.
+    
+    Args:
+        data: Chat data dictionary to sanitize.
+        secret: Secret key bytes for encryption.
+    
+    Returns:
+        Dictionary with sanitization metadata and encrypted payload:
+        - _sanitization_meta: timestamp, original_size, requests_count, chat_id, model_ids
+        - payload: Encrypted chat data string
     """
     requests = data.get('requests', [])
     user_texts = [extract_user_text(r) for r in requests if extract_user_text(r) is not None]
@@ -510,30 +705,57 @@ def unsanitize_chat(data: Dict[str, Any], secret: bytes) -> Dict[str, Any]:
     """
     Restore sanitized chat export by decrypting the payload.
 
+    Args:
+        data: Chat data dictionary containing encrypted payload.
+        secret: Secret key bytes for decryption (must match encryption key).
+    
+    Returns:
+        Dictionary with decrypted payload.
+    
     Raises:
         ValueError: If payload is missing or malformed.
         json.JSONDecodeError: If decrypted payload is not valid JSON.
     """
     encrypted_payload = data.get("payload")
-    if not encrypted_payload:
-        raise ValueError("Sanitized file missing 'payload' field")
+    if not encrypted_payload or not encrypted_payload.startswith(f"{SANITIZATION_MARKER}:"):
+        raise ValueError("Sanitized file missing 'payload' field or invalid format")
 
     plaintext = decrypt(encrypted_payload, secret)
-    return json.loads(plaintext)
-
+    try:
+        return json.loads(plaintext)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in decrypted payload: {e}")
 
 # =============================================================================
 # Output Formatting
 # =============================================================================
 
 def export_metrics_json(metrics: Dict[str, Any], filepath: Path) -> None:
-    """Export metrics as JSON file."""
+    """
+    Export metrics as JSON file.
+    
+    Args:
+        metrics: Metrics dictionary from aggregate_metrics() or extract_project_metrics().
+        filepath: Path where JSON file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     save_json(metrics, filepath)
     print(f"Metrics exported to: {filepath}")
 
 
 def export_metrics_csv(metrics: Dict[str, Any], filepath: Path) -> None:
-    """Export metrics as CSV file with flattened structure."""
+    """
+    Export metrics as CSV file with flattened structure.
+    
+    Args:
+        metrics: Metrics dictionary from aggregate_metrics() or extract_project_metrics().
+        filepath: Path where CSV file will be written.
+    
+    Raises:
+        OSError: If file cannot be written.
+    """
     row = {}
 
     pm = metrics.get('project_metadata', {})
@@ -561,7 +783,12 @@ def export_metrics_csv(metrics: Dict[str, Any], filepath: Path) -> None:
 # =============================================================================
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create and configure argument parser."""
+    """
+    Create and configure argument parser.
+    
+    Returns:
+        Configured ArgumentParser instance with all CLI arguments.
+    """
     parser = argparse.ArgumentParser(
         prog="copilot_chat_parser.py",
         description="CLI utility for analyzing GitHub Copilot chat exports.",
@@ -628,7 +855,12 @@ Environment Variables:
 
 
 def main() -> int:
-    """Main entry point."""
+    """
+    Main entry point for CLI execution.
+    
+    Returns:
+        Exit code: 0 for success, 1 for error.
+    """
     parser = create_parser()
     args = parser.parse_args()
 
