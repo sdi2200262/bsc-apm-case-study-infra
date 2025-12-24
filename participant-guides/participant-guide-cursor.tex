@@ -177,8 +177,6 @@
     \end{center}
     \vfill
     
-    {\small November 2025}\par
-    
 \end{titlepage}
 
 % ============================================================================
@@ -204,7 +202,7 @@ Your task is to research an existing legacy PHP codebase and implement a new fea
 
 You will complete this task \textbf{twice}, each time using a different AI-coding framework (e.g., APM, Spec-kit, Cursor's Plan Mode). Sessions will be \textbf{time-boxed and isolated on separate branches}. Between sessions, you will submit your code changes, chat logs, and a brief survey.
 \begin{mainbox}{Learning Effects Note}
-We acknowledge that performing the task twice may introduce learning effects. To mitigate this, some participants will begin with Tool A, others with Tool B. This counterbalancing aims to ensure fair assessments across the study.
+We acknowledge that performing the task twice may introduce learning effects. To mitigate this, some participants will begin with one tool, others with a different tool. This counterbalancing aims to ensure fair assessments across the study.
 \end{mainbox}
 
 \subsection{Your Time}
@@ -217,24 +215,29 @@ Each session is strictly time-boxed to \textbf{three (3) hours}. It is important
 \label{sec:your-environment}
 To ensure the two sessions are completed in a controlled environment, set up your environment according to the following specifications:
 \begin{itemize}
-    \item \textbf{Operating System:} POSIX-compliant systems such as Linux (e.g., Ubuntu 22.04+) or macOS (latest versions). For Windows, we recommend using Windows Subsystem for Linux (WSL) with a recent Ubuntu distribution.
+    \item \textbf{Operating System:} \textbf{Linux required} (e.g., Ubuntu 22.04+). The C replica implementation requires \texttt{valgrind} for memory leak testing, which is only available on Linux.
+    \begin{itemize}
+        \item \textbf{Linux (native):} Use Ubuntu 22.04+ or similar distribution.
+        \item \textbf{Windows:} Use Windows Subsystem for Linux (WSL) with a recent Ubuntu distribution.
+        \item \textbf{macOS:} Use a Linux virtual machine or container (e.g., Docker with Ubuntu, or a Linux VM via VirtualBox/Parallels).
+    \end{itemize}
     \item \textbf{Workspace:} A dedicated directory with the following repositories cloned:
     \begin{itemize}
         \item \href{https://github.com/sdi2200262/eclass-mcp-server}{\texttt{eclass-mcp-server}} (the main codebase where you will implement the new feature).\\
-        Install dependencies using:
-        \begin{codebox}
-cd eclass-mcp-server
-uv sync --dev --all-extras
-        \end{codebox}
-        \item \href{https://github.com/gunet/openeclass}{\texttt{openeclass}} (the legacy PHP codebase where you will conduct research)
+        \textbf{Important:} You must use the specific commit \texttt{8b4e39c} for this repository. After cloning, run: \inlinecode{cd eclass-mcp-server \&\& git checkout 8b4e39c}\\
+        Then install dependencies using: \inlinecode{uv sync --dev --all-extras}
+        \item \href{https://github.com/gunet/openeclass}{\texttt{openeclass}} (the legacy PHP codebase where you will conduct research).\\
+        \textbf{Important:} You must use the specific commit \texttt{e8b3329} for this repository. After cloning, run: \inlinecode{cd openeclass \&\& git checkout e8b3329}
     \end{itemize}
     \item \textbf{Python Version: 3.10+}
     This will include all of its \href{https://www.npmjs.com/package/agentic-pm?activeTab=dependencies}{dependencies}.
-    \item \textbf{C Development Libraries:} Ensure the following C development libraries are installed for the task:
+    \item \textbf{C Development Libraries:} Install the required C development libraries on your Linux system:
     \begin{itemize}
-        \item \textbf{Ubuntu/Debian:} \inlinecode{sudo apt-get install libcurl4-openssl-dev libxml2-dev}
-        \item \textbf{macOS (Homebrew):} \inlinecode{brew install curl libxml2}
+        \item \textbf{Ubuntu/Debian:} \inlinecode{sudo apt-get install libcurl4-openssl-dev libxml2-dev valgrind}
     \end{itemize}
+    \begin{mainbox}{Why Linux is Required}
+    The C replica implementation must pass memory leak testing with \texttt{valgrind} as specified in the task requirements (Section 3: Memory Safety \& Stability). \texttt{valgrind} is only available on Linux systems, which is why a Linux environment is mandatory for this study.
+    \end{mainbox}
     \item \href{https://cursor.com/?from=home}{\textbf{IDE: Cursor 2.0+}}
     \begin{mainbox}{Important Cursor Access Note}
         This study requires access to Cursor's premium AI features. If you do not have a Pro account, you can sign up for a \textbf{7-day free trial}. Please be aware that activating this trial \textbf{requires you to enter credit card information}.
@@ -246,10 +249,17 @@ uv sync --dev --all-extras
 \subsection{What You Will Deliver}
 At the end of each session, you will submit:
 \begin{itemize}
-    \item A \textbf{submission zip file} containing a code patch and AI interaction logs. For example, \verb|{PID}_tool_a_submission.zip| for Tool A and \verb|{PID}_tool_b_submission.zip| for Tool B (where \verb|{PID}| is your assigned participant ID, e.g., \verb|P001|).
+    \item A \textbf{submission zip file} containing a code patch and AI interaction logs. The file must follow the format: \texttt{\{PID\}\_\{S1\textbar{}S2\}\_\{platform\}\_\{tool\}\_submission.zip} where:
+    \begin{itemize}
+        \item \texttt{\{PID\}} is your assigned participant ID (e.g., \texttt{P001})
+        \item \texttt{\{S1\textbar{}S2\}} is the session number (\texttt{S1} for first session, \texttt{S2} for second session)
+        \item \texttt{\{platform\}} is \texttt{cursor} (lowercase)
+        \item \texttt{\{tool\}} is your assigned tool identifier: \texttt{apm}, \texttt{spec-kit}, or \texttt{cursor-plan} (lowercase, hyphenated if multi-word)
+    \end{itemize}
+    Example: \texttt{P001\_S1\_cursor\_apm\_submission.zip} for Session 1 using APM tool.\\
     See \hyperref[sec:creating-patch]{Section~\ref*{sec:creating-patch}} for instructions on creating the patch file and \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} for exporting AI interaction logs from Cursor.
     \item A brief \textbf{post-session survey} about your experience using each AI-coding framework.
-    See Sections \hyperref[sec:tool-a-survey]{\ref*{sec:tool-a-survey}} and \hyperref[sec:session-2-tool-b]{\ref*{sec:session-2-tool-b}} for links to the surveys.
+    See Sections \hyperref[sec:session-1-survey]{\ref*{sec:session-1-survey}} and \hyperref[sec:session-2-tool-b]{\ref*{sec:session-2-tool-b}} for links to the surveys.
 \end{itemize}
 
 
@@ -350,38 +360,47 @@ Opening Cursor in your designated workspace directory would look like this:
 
 Verify that all the base dependencies are installed by running:
 \begin{codebox}
-/PATH/TO/YOUR/PYTHON3 --version   # Check Python version
+# Check Python and build tools
+/PATH/TO/YOUR/PYTHON3 --version   # Check Python version (should be 3.10+)
 uv --version                      # Check UV version  
 npm --version                     # Check NPM version (for APM)
 
 # Check Python codebase dependencies (silent success, errors shown)
 cd eclass-mcp-server
-/PATH/TO/YOUR/PYTHON3 -c "import mcp"
-/PATH/TO/YOUR/PYTHON3 -c "import requests"
-/PATH/TO/YOUR/PYTHON3 -c "import bs4"
-/PATH/TO/YOUR/PYTHON3 -c "import dotenv"
+/PATH/TO/YOUR/PYTHON3 -c "import mcp, requests, bs4, dotenv"
+
+# Check C compiler and build tools
+gcc --version                     # Check GCC version (or clang on macOS)
+make --version                    # Check Make version
+
+# Check C development libraries (libcurl and libxml2 as per Specification.md)
+pkg-config --exists libcurl && echo "libcurl: OK" || echo "libcurl: NOT FOUND"
+pkg-config --exists libxml-2.0 && echo "libxml2: OK" || echo "libxml2: NOT FOUND"
+
+# Check valgrind (required for C replica memory testing per Specification.md Section 3)
+valgrind --version && echo "valgrind: OK" || echo "valgrind: NOT FOUND (required for task)"
 \end{codebox}
 
-\subsection{Session 1: Tool A}
+\subsection{Session 1: First Tool}
 
 
 \subsubsection*{Initialize Git and Create Branch:}
     
-    Ensure you're starting from a clean state and create an isolated branch:
+    Ensure you're starting from a clean state and create an isolated branch (replace \verb|{tool}| with your assigned tool identifier, e.g., \verb|apm|, \verb|spec-kit|, or \verb|cursor-plan|):
     \begin{codebox}
 cd eclass-mcp-server                # go to implementation codebase root
 git checkout main                   # switch to main branch
-git checkout -b tool-a-attempt      # create new branch for Tool A patch
+git checkout -b s1_{tool}-attempt   # create new branch for Session 1 patch
     \end{codebox}
 
 \subsubsection*{Before you start working:}
     
     \begin{itemize}
-        \item Launch your first assigned AI tool (Tool A) following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
+        \item Launch your first assigned AI tool following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
         \item \textbf{Thoroughly read the} \inlinecode{Specification.md} (the PRD) provided alongside this guide.
         \item Use the \textbf{default task prompt} provided with the PRD to initiate your first chat.
         \item \textbf{Note the start time}; it will be used to track your request statistics and session duration.
-        \item Use \textbf{only} your assigned Tool A for AI assistance during this session.
+        \item Use \textbf{only} your assigned tool for AI assistance during this session.
         \item Start the timer and get to work!
     \end{itemize}
 
@@ -400,83 +419,84 @@ git checkout -b tool-a-attempt      # create new branch for Tool A patch
 \subsubsection*{Create Code Patch:}
 \label{sec:creating-patch}
 
-    After the 3 hour mark or upon task completion, generate your solution patch file for this session (replace \verb|{PID}| with your participant ID, e.g., \verb|P001|):
+    After the 3 hour mark or upon task completion, generate your solution patch file for this session (replace \texttt{\{PID\}} with your participant ID, \texttt{\{S1\textbar{}S2\}} with the session number, \texttt{\{platform\}} with \texttt{cursor}, and \texttt{\{tool\}} with your assigned tool identifier):
     \begin{codebox}
-git add . && git commit -m "Tool A solution"                # commit changes
-git diff main tool-a-attempt > {PID}_tool_a_solution.patch  # create patch file
+git add . && git commit -m "Session 1 solution"                # commit changes
+git diff main s1_{tool}-attempt > {PID}_S1_cursor_{tool}_solution.patch  # create patch file
     \end{codebox}
 
 \subsubsection*{Export AI Interaction Logs:}
     
-    Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations and retrieve request statistics. Organize these in a \verb|{PID}_tool_a_logs/| folder.
+    Follow the specific instructions in \hyperref[sec:exporting-logs]{Section~\ref*{sec:exporting-logs}} to export chat conversations and retrieve request statistics. Organize these in a \verb|{PID}_S1_cursor_{tool}_logs/| folder (replace placeholders with your actual values).
     
 \subsubsection*{Clean Up and Ensure Isolation:}
     
     Return to main branch and remove the solution branch:
     \begin{codebox}
 git checkout main
-git branch -D tool-a-attempt
+git branch -D s1_{tool}-attempt
     \end{codebox}
     
     \begin{mainbox}{Git Note}
-Feel free to use Git for version control during your session. However, ensure that you \textbf{do not modify the main branch directly}. All code changes related to your task should be committed to your isolated branch (\inlinecode{tool-a-attempt} for Tool A and \inlinecode{tool-b-attempt} for Tool B) before concluding the session.\newline\newline
+Feel free to use Git for version control during your session. However, ensure that you \textbf{do not modify the main branch directly}. All code changes related to your task should be committed to your isolated branch (\texttt{s1\_\{tool\}-attempt} for Session 1 and \texttt{s2\_\{tool\}-attempt} for Session 2) before concluding the session.\newline\newline
 \textbf{Important:} After creating the patch file, \textbf{immediately save/move it to a safe location outside your repository} (e.g., your desktop or a dedicated submission folder). \textbf{Do not} delete your branch until you have saved the patch file and exported all logs; these files will be lost if you delete the branch first.
     \end{mainbox}
 
-\subsubsection*{Complete Tool A Survey:}
-\label{sec:tool-a-survey}
+\subsubsection*{Complete Session 1 Survey:}
+\label{sec:session-1-survey}
 
-Fill out the brief \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-session survey}.
+Fill out the brief \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Session 1 post-session survey}.
 
 \subsubsection*{Session 1 Checklist:}
 \label{sec:session-1-checklist}
 Before moving to Session 2, ensure you have completed the following:
 \begin{itemize}
-    \item Created the patch file \verb|{PID}_tool_a_solution.patch| and deleted the \inlinecode{tool-a-attempt} branch.
-    \item Collected AI interaction logs and organized them in \verb|{PID}_tool_a_logs/| folder:
+    \item Created the patch file \texttt{\{PID\}\_S1\_cursor\_\{tool\}\_solution.patch} and deleted the \texttt{s1\_\{tool\}-attempt} branch.
+    \item Collected AI interaction logs and organized them in \texttt{\{PID\}\_S1\_cursor\_\{tool\}\_logs/} folder:
     \begin{itemize}
-        \item Exported all chat conversations as \inlinecode{.md} files in \verb|{PID}_tool_a_logs/chats/| subfolder.
-        \item Exported and filtered your token usage as \verb|{PID}_tool_a_requests.csv| in \verb|{PID}_tool_a_logs/stats/| subfolder.
+        \item Exported all chat conversations as \texttt{.md} files in \texttt{\{PID\}\_S1\_cursor\_\{tool\}\_logs/chats/} subfolder.
+        \item Exported and filtered your token usage as \texttt{\{PID\}\_S1\_cursor\_\{tool\}\_requests.csv} in \texttt{\{PID\}\_S1\_cursor\_\{tool\}\_logs/stats/} subfolder.
     \end{itemize}
-    \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool A post-session survey}.
+    \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Session 1 post-session survey}.
 \end{itemize}
 
 \newpage
 % ============================================================================
 
-\subsection{Session 2: Tool B}
+\subsection{Session 2: Second Tool}
 \label{sec:session-2-tool-b}
 
 Follow the same workflow as Session 1, but with the following adjustments:
 
 \begin{itemize}
-    \item Create a branch named \inlinecode{tool-b-attempt} from the clean \inlinecode{main} branch.
-    \item Use \textbf{Tool B} with \textbf{Cursor's Composer 1} model, following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
-    \item After the 3 hour mark or upon task completion, generate the patch file (replace \verb|{PID}| with your participant ID):
+    \item Create a branch named \texttt{s2\_\{tool\}-attempt} from the clean \texttt{main} branch (replace \texttt{\{tool\}} with your assigned tool identifier for Session 2).
+    \item Use your second assigned tool with \textbf{Cursor's Composer 1} model, following its setup instructions in \hyperref[sec:ai-tools]{Section~\ref*{sec:ai-tools}}.
+    \item After the 3 hour mark or upon task completion, generate the patch file (replace \texttt{\{PID\}} with your participant ID, \texttt{\{S2\}} with the session number, \texttt{\{platform\}} with \texttt{cursor}, and \texttt{\{tool\}} with your assigned tool identifier):
     \begin{codebox}
-git diff main tool-b-attempt > {PID}_tool_b_solution.patch
+git diff main s2_{tool}-attempt > {PID}_S2_cursor_{tool}_solution.patch
     \end{codebox}
-    \item Export logs to \verb|{PID}_tool_b_logs/| folder following the same procedure as Tool A.
-    \item Complete the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
+    \item Export logs to \verb|{PID}_S2_cursor_{tool}_logs/| folder following the same procedure as Session 1.
+    \item Complete the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Session 2 post-session survey}.
 \end{itemize}
 
 You may start Session 2 immediately after Session 1 or take a break. Ensure you are ready to approach Session 2 from scratch, maintaining a fresh perspective and minimizing any influence from Session 1.
 
 \begin{mainbox}{Important Session 2 Note}
-    To accurately track your interaction statistics for Tool B, please \textbf{make absolutely sure you note the start time at the beginning of Session 2}. This timestamp will help isolate the request data specific to this session.
+    To accurately track your interaction statistics for Session 2, please \textbf{make absolutely sure you note the start time at the beginning of Session 2}. This timestamp will help isolate the request data specific to this session.\newline\newline
+    Before starting Session 2, please \textbf{make absolutely sure you have all the artifacts from \hyperref[sec:session-1-checklist]{Section~\ref*{sec:session-1-checklist}}} safely stored.
 \end{mainbox}
 
 \subsubsection*{Session 2 Checklist:}
 \label{sec:session-2-checklist}
 Before concluding your work, ensure you have completed the following:
 \begin{itemize}
-    \item Created the patch file \verb|{PID}_tool_b_solution.patch| and deleted the \inlinecode{tool-b-attempt} branch.
-    \item Collected AI interaction logs and organized them in \verb|{PID}_tool_b_logs/| folder:
+    \item Created the patch file \texttt{\{PID\}\_S2\_cursor\_\{tool\}\_solution.patch} and deleted the \texttt{s2\_\{tool\}-attempt} branch.
+    \item Collected AI interaction logs and organized them in \texttt{\{PID\}\_S2\_cursor\_\{tool\}\_logs/} folder:
     \begin{itemize}
-        \item Exported all chat conversations as \inlinecode{.md} files in \verb|{PID}_tool_b_logs/chats/| subfolder.
-        \item Exported and filtered your token usage as \verb|{PID}_tool_b_requests.csv| in \verb|{PID}_tool_b_logs/stats/| subfolder.
+        \item Exported all chat conversations as \texttt{.md} files in \texttt{\{PID\}\_S2\_cursor\_\{tool\}\_logs/chats/} subfolder.
+        \item Exported and filtered your token usage as \texttt{\{PID\}\_S2\_cursor\_\{tool\}\_requests.csv} in \texttt{\{PID\}\_S2\_cursor\_\{tool\}\_logs/stats/} subfolder.
     \end{itemize}
-    \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Tool B post-session survey}.
+    \item Completed the \href{https://forms.gle/dPJY5vYg6XwU4T5b8}{Session 2 post-session survey}.
 \end{itemize}
 
 \newpage
@@ -489,7 +509,7 @@ To export your AI interaction logs (chat conversations and AI request statistics
 
 \subsection{Export Chat Conversations}
 
-When using Tool A or Tool B, you may open multiple chat conversations in Cursor. For example, with APM, you will typically open at least three conversations: \textbf{Setup Agent}, \textbf{Manager Agent}, and at least one \textbf{Implementation Agent}. For Spec-kit or Plan Mode, the number of conversations may vary depending on your usage of these tools.\newline\newline
+When using your assigned tools, you may open multiple chat conversations in Cursor. For example, with APM, you will typically open at least three conversations: \textbf{Setup Agent}, \textbf{Manager Agent}, and at least one \textbf{Implementation Agent}. For Spec-kit or Plan Mode, the number of conversations may vary depending on your usage of these tools.\newline\newline
 It is crucial to retain \textbf{all workflow conversations} for analysis. Do not delete any conversations during your sessions. \underline{If a conversation is accidentally deleted, please notify the researcher immediately.}\newline\newline
 To export each conversation, follow these steps:
 \begin{itemize}
@@ -499,18 +519,18 @@ To export each conversation, follow these steps:
     \begin{center}
         \includegraphics[width=1\textwidth]{assets/cursor/cursor-export-chat.png}
     \end{center}
-    \item Choose a location on your local machine to save the exported \inlinecode{.md} file.
+    \item Choose a location on your local machine to save the exported \texttt{.md} file.
 \end{itemize}
 
-\noindent Save the exported \inlinecode{.md} file using the \textbf{strict naming format}:\newline
-\texttt{\{PID\}\_tool\_\{a$|$b\}\_chat\_\{NN\}.md}\newline
-where \texttt{\{PID\}} is your participant ID (e.g., \texttt{P001}), \texttt{\{a$|$b\}} is the tool identifier, and \texttt{\{NN\}} is the chat number starting from \texttt{01} (e.g., \texttt{P001\_tool\_a\_chat\_01.md}, \texttt{P001\_tool\_a\_chat\_02.md}).\newline\newline
+\noindent Save the exported \texttt{.md} file using the \textbf{strict naming format}:\newline
+\texttt{\{PID\}\_\{S1\textbar{}S2\}\_\{platform\}\_\{tool\}\_chat\_\{NN\}.md}\newline
+where \texttt{\{PID\}} is your participant ID (e.g., \texttt{P001}), \texttt{\{S1\textbar{}S2\}} is the session number, \texttt{\{platform\}} is \texttt{cursor}, \texttt{\{tool\}} is your assigned tool identifier (e.g., \texttt{apm}, \texttt{spec-kit}, \texttt{cursor-plan}), and \texttt{\{NN\}} is the chat number starting from \texttt{01} (e.g., \texttt{P001\_S1\_cursor\_apm\_chat\_01.md}, \texttt{P001\_S1\_cursor\_apm\_chat\_02.md}).\newline\newline
 \noindent Organize your exported files as follows:
 
 \begin{itemize}
-    \item Create a subfolder \verb|{PID}_tool_a_logs/chats/| for your chat exports
-    \item Save all chat conversation \inlinecode{.md} files in this subfolder
-    \item Save the filtered request statistics CSV in \verb|{PID}_tool_a_logs/stats/| subfolder
+    \item Create a subfolder \texttt{\{PID\}\_\{S1\textbar{}S2\}\_cursor\_\{tool\}\_logs/chats/} for your chat exports
+    \item Save all chat conversation \texttt{.md} files in this subfolder
+    \item Save the filtered request statistics CSV in \texttt{\{PID\}\_\{S1\textbar{}S2\}\_cursor\_\{tool\}\_logs/stats/} subfolder
 \end{itemize}
 \begin{mainbox}{Important Chat Export Note}
 Consider exporting conversations \textbf{immediately after completion} during your session to avoid accidental deletions. For example, export APM's Setup Agent conversation right after the setup phase.
@@ -533,29 +553,29 @@ To retrieve your AI request statistics from Cursor, follow these steps:
 \end{itemize}
 
 \noindent This will immediately download a CSV file containing your AI request statistics to your local machine. This file contains AI requests made across all your sessions. \newline\newline
-To isolate the requests made during your specific session, use the provided python script\newline\inlinecode{filter\_csv\_by\_datetime.py} with the \textbf{start time} you noted at the beginning of each session and rename the output file using the \textbf{strict naming format}: \texttt{\{PID\}\_tool\_\{a$|$b\}\_requests.csv} (e.g., \texttt{P001\_tool\_a\_requests.csv}).\newline\newline
+To isolate the requests made during your specific session, use the provided python script\newline\texttt{filter\_csv\_by\_datetime.py} with the \textbf{start time} you noted at the beginning of each session and rename the output file using the \textbf{strict naming format}: \texttt{\{PID\}\_\{S1\textbar{}S2\}\_\{platform\}\_\{tool\}\_requests.csv} (e.g., \texttt{P001\_S1\_cursor\_apm\_requests.csv}).\newline\newline
 For example, if your session started on 2025-11-06 at 14:30 in the Europe/Athens timezone:
 \begin{codebox}
 python3 filter_csv_by_datetime.py usage-events.csv 2025-11-06 14:30 Europe/Athens
 \end{codebox}
 
 \begin{mainbox}{Important Timing Note}
-This will create a filtered CSV file containing only requests from that point onward (e.g.,\newline \inlinecode{usage-events\_filtered\_2025-11-06\_14:30\_Europe\_Athens.csv}).\newline\newline
+This will create a filtered CSV file containing only requests from that point onward (e.g.,\newline \texttt{usage-events\_filtered\_2025-11-06\_14:30\_Europe\_Athens.csv}).\newline\newline
 Run the filtering script \textbf{immediately after completing your session} to ensure the CSV includes all requests from the session start up to your last AI request. If you wait too long before filtering, additional requests from other activities may be included.
 \end{mainbox}
 
 \subsection{Organize Logs for Submission}
 
-Save the exported chat conversations and filtered request statistics in a dedicated logs folder. Create the following folder structure using your participant ID:
+Save the exported chat conversations and filtered request statistics in a dedicated logs folder. Create the following folder structure using your participant ID, session number, platform, and tool identifier:
 
 \begin{codebox}
-{PID}_tool_a_logs/
+{PID}_S1_cursor_{tool}_logs/
     chats/
-        {PID}_tool_a_chat_01.md
-        {PID}_tool_a_chat_02.md
+        {PID}_S1_cursor_{tool}_chat_01.md
+        {PID}_S1_cursor_{tool}_chat_02.md
         ...
     stats/
-        {PID}_tool_a_requests.csv
+        {PID}_S1_cursor_{tool}_requests.csv
 \end{codebox}
 
 \newpage
@@ -565,26 +585,26 @@ Save the exported chat conversations and filtered request statistics in a dedica
 
 After completing the above steps for both sessions, you will have organized logs folders: 
 \begin{itemize}
-    \item \verb|{PID}_tool_a_logs/| folder for Tool A
-    \item \verb|{PID}_tool_b_logs/| folder for Tool B
+    \item \verb|{PID}_S1_cursor_{tool}_logs/| folder for Session 1
+    \item \verb|{PID}_S2_cursor_{tool}_logs/| folder for Session 2
 \end{itemize}
 These folders will be included in your final submission zip files alongside the patch files.
 
 \subsection{Create Submission Zip Files}
 
-Once you have your patch file and organized logs folder for each session, create the final submission zip files using your assigned participant ID:
+Once you have your patch file and organized logs folder for each session, create the final submission zip files using the correct naming format (replace \texttt{\{PID\}} with your participant ID, \texttt{\{S1\textbar{}S2\}} with the session number, \texttt{\{platform\}} with \texttt{cursor}, and \texttt{\{tool\}} with your assigned tool identifier):
 
 \begin{codebox}
-# Replace {PID} with your participant ID (e.g., P001)
-# For Tool A
-zip -r {PID}_tool_a_submission.zip {PID}_tool_a_solution.patch {PID}_tool_a_logs/
+# Replace placeholders with your actual values (e.g., P001, S1, cursor, apm)
+# For Session 1
+zip -r {PID}_S1_cursor_{tool}_submission.zip {PID}_S1_cursor_{tool}_solution.patch {PID}_S1_cursor_{tool}_logs/
 
-# For Tool B
-zip -r {PID}_tool_b_submission.zip {PID}_tool_b_solution.patch {PID}_tool_b_logs/
+# For Session 2
+zip -r {PID}_S2_cursor_{tool}_submission.zip {PID}_S2_cursor_{tool}_solution.patch {PID}_S2_cursor_{tool}_logs/
 \end{codebox}
 
 \begin{mainbox}{Important Submission Note}
-Ensure both the patch file and logs folder are at the root level of your zip file (not in subdirectories). The zip file should contain exactly two items: the \verb|.patch| file and the \verb|{PID}_tool_X_logs/| folder. Use your assigned participant ID in the filename format \verb|{PID}_tool_X_submission.zip| as shown above.
+Ensure both the patch file and logs folder are at the root level of your zip file (not in subdirectories). The zip file should contain exactly two items: the \texttt{.patch} file and the \texttt{\{PID\}\_\{S1\textbar{}S2\}\_cursor\_\{tool\}\_logs/} folder. Use the strict naming format \texttt{\{PID\}\_\{S1\textbar{}S2\}\_\{platform\}\_\{tool\}\_submission.zip} as shown above. Only \texttt{\{PID\}} and \texttt{S} are uppercase; all other components must be lowercase.
 \end{mainbox}
 
 \section{Final Submission}
@@ -596,8 +616,8 @@ After completing both sessions, submit all your data to our \href{https://forms.
 Please be sure to upload the following single \inlinecode{.zip} files (one for each session):
 
 \begin{codebox}
-{PID}_tool_a_submission.zip    # Contains: {PID}_tool_a_solution.patch + {PID}_tool_a_logs/
-{PID}_tool_b_submission.zip    # Contains: {PID}_tool_b_solution.patch + {PID}_tool_b_logs/
+{PID}_S1_cursor_{tool}_submission.zip    # Contains: {PID}_S1_cursor_{tool}_solution.patch + {PID}_S1_cursor_{tool}_logs/
+{PID}_S2_cursor_{tool}_submission.zip    # Contains: {PID}_S2_cursor_{tool}_solution.patch + {PID}_S2_cursor_{tool}_logs/
 \end{codebox}
 
 \newpage
