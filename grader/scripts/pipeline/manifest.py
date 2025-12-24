@@ -6,6 +6,8 @@ Manifest operations module for the data processing pipeline.
 
 Provides atomic read/write operations for the pipeline manifest file,
 checksum computation, and entry management with file locking.
+
+Manifest key format: {PID}_{S1|2}_{Platform}_{Tool} (e.g., 'P001_S1_copilot_apm').
 """
 
 import fcntl
@@ -106,24 +108,9 @@ def save_manifest(manifest: Dict[str, Any], path: Path) -> None:
     temp_path.rename(manifest_path)
 
 
-def get_entry_key(pid: str, tool: str) -> str:
-    """
-    Generate manifest entry key from participant ID and tool.
-    
-    Args:
-        pid: Participant ID (e.g., 'P001').
-        tool: Tool identifier ('a' or 'b').
-        
-    Returns:
-        Entry key string (e.g., 'P001_tool_a').
-    """
-    return f"{pid}_tool_{tool}"
-
-
 def add_entry(
     manifest: Dict[str, Any],
-    pid: str,
-    tool: str,
+    manifest_key: str,
     stage: str,
     entry: Dict[str, Any]
 ) -> None:
@@ -132,23 +119,19 @@ def add_entry(
     
     Args:
         manifest: Manifest dictionary to modify.
-        pid: Participant ID.
-        tool: Tool identifier.
+        manifest_key: Manifest entry key (e.g., 'P001_S1_copilot_apm').
         stage: Pipeline stage (validate, grade, parse, combine, add_to_dataset).
         entry: Entry data to store.
     """
-    key = get_entry_key(pid, tool)
+    if manifest_key not in manifest["entries"]:
+        manifest["entries"][manifest_key] = {}
     
-    if key not in manifest["entries"]:
-        manifest["entries"][key] = {}
-    
-    manifest["entries"][key][stage] = entry
+    manifest["entries"][manifest_key][stage] = entry
 
 
 def get_entry(
     manifest: Dict[str, Any],
-    pid: str,
-    tool: str,
+    manifest_key: str,
     stage: str
 ) -> Optional[Dict[str, Any]]:
     """
@@ -156,19 +139,30 @@ def get_entry(
     
     Args:
         manifest: Manifest dictionary.
-        pid: Participant ID.
-        tool: Tool identifier.
+        manifest_key: Manifest entry key (e.g., 'P001_S1_copilot_apm').
         stage: Pipeline stage.
         
     Returns:
         Entry dictionary or None if not found.
     """
-    key = get_entry_key(pid, tool)
-    
-    if key not in manifest["entries"]:
+    if manifest_key not in manifest["entries"]:
         return None
     
-    return manifest["entries"][key].get(stage)
+    return manifest["entries"][manifest_key].get(stage)
+
+
+def get_all_stages(manifest: Dict[str, Any], manifest_key: str) -> Dict[str, Dict[str, Any]]:
+    """
+    Get all stages for a manifest entry.
+    
+    Args:
+        manifest: Manifest dictionary.
+        manifest_key: Manifest entry key (e.g., 'P001_S1_copilot_apm').
+        
+    Returns:
+        Dictionary of all stages for the entry, or empty dict if not found.
+    """
+    return manifest["entries"].get(manifest_key, {})
 
 
 def create_stage_entry(
@@ -180,10 +174,12 @@ def create_stage_entry(
     
     Args:
         status: Status string ('success', 'warning', 'error').
-        **kwargs: Additional fields to include.
+        **kwargs: Additional fields to include (e.g., input_file, output_file,
+                 checksums, warnings, errors, platform, etc.).
         
     Returns:
-        Entry dictionary with timestamp and standard fields.
+        Entry dictionary with timestamp, status, and any additional fields
+        provided via kwargs.
     """
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

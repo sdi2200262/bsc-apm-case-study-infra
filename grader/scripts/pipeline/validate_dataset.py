@@ -3,6 +3,9 @@
 # Copyright (C) 2025 BSc Case Study Grader Contributors
 """
 Validate dataset integrity against manifest.
+
+Submission-agnostic validation script that checks dataset CSV against manifest
+for a given platform. Does not log to manifest.
 """
 
 import argparse
@@ -21,12 +24,14 @@ from workspace import (
     find_workspace_root,
     get_data_dir,
 )
+
 DATASET_FILENAME = "dataset.csv"
 
 REQUIRED_COLUMNS = [
     "participant_id",
+    "session",
+    "platform",
     "tool",
-    "sub_study",
     "total_score",
     "max_score",
 ]
@@ -36,8 +41,11 @@ def read_dataset(dataset_path: Path) -> Tuple[List[str], List[Dict[str, str]]]:
     """
     Read dataset CSV.
     
+    Args:
+        dataset_path: Path to dataset CSV file.
+        
     Returns:
-        Tuple of (column names, list of row dicts)
+        Tuple of (column names, list of row dicts).
     """
     if not dataset_path.exists():
         return ([], [])
@@ -51,7 +59,15 @@ def read_dataset(dataset_path: Path) -> Tuple[List[str], List[Dict[str, str]]]:
 
 
 def validate_columns(columns: List[str]) -> List[str]:
-    """Check for missing required columns."""
+    """
+    Check for missing required columns.
+    
+    Args:
+        columns: List of column names from dataset.
+        
+    Returns:
+        List of missing required column names.
+    """
     missing = []
     for col in REQUIRED_COLUMNS:
         if col not in columns:
@@ -60,12 +76,21 @@ def validate_columns(columns: List[str]) -> List[str]:
 
 
 def find_duplicates(rows: List[Dict[str, str]]) -> List[str]:
-    """Find duplicate participant+tool combinations."""
+    """
+    Find duplicate participant+session+platform+tool combinations.
+    
+    Args:
+        rows: List of dataset row dictionaries.
+        
+    Returns:
+        List of duplicate key strings.
+    """
     seen: Set[str] = set()
     duplicates = []
     
     for row in rows:
-        key = f"{row.get('participant_id', '')}_{row.get('tool', '')}"
+        # Key format: {PID}_{S1|2}_{Platform}_{Tool}
+        key = f"{row.get('participant_id', '')}_{row.get('session', '')}_{row.get('platform', '')}_{row.get('tool', '')}"
         if key in seen:
             duplicates.append(key)
         seen.add(key)
@@ -73,28 +98,40 @@ def find_duplicates(rows: List[Dict[str, str]]) -> List[str]:
     return duplicates
 
 
+def build_dataset_key(row: Dict[str, str]) -> str:
+    """
+    Build manifest key from dataset row.
+    
+    Args:
+        row: Dataset row dictionary.
+        
+    Returns:
+        Manifest key string (e.g., 'P001_S1_copilot_apm').
+    """
+    return f"{row.get('participant_id', '')}_{row.get('session', '')}_{row.get('platform', '')}_{row.get('tool', '')}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate dataset integrity against manifest.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Validates dataset CSV against manifest for a given platform.\n"
+            "Example: ./validate_dataset.py --platform copilot\n\n"
+            "This script is submission-agnostic and does not log to manifest."
+        ),
     )
     parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default=None,
-        help="Base data directory (auto-detected from workspace if not specified)"
+        "--platform",
+        choices=["copilot", "cursor"],
+        required=True,
+        help="Platform name (required)"
     )
     parser.add_argument(
         "--workspace-dir",
         type=Path,
         default=None,
         help="Workspace root directory (auto-detected if not specified)"
-    )
-    parser.add_argument(
-        "--sub-study",
-        choices=["copilot", "cursor"],
-        default=None,
-        help="Sub-study name (required if auto-detection fails)"
     )
     parser.add_argument(
         "--verbose",
@@ -104,24 +141,25 @@ def main() -> int:
     
     args = parser.parse_args()
     
-    # Auto-detect data directory
-    if args.data_dir:
-        data_dir = Path(args.data_dir).resolve()
-    elif args.sub_study:
-        workspace_root = find_workspace_root(args.workspace_dir)
-        if workspace_root is None:
-            print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
-            return 2
-        data_dir = get_data_dir(args.sub_study, workspace_root)
-    else:
-        print("Error: Could not auto-detect. Please specify --data-dir or --sub-study", file=sys.stderr)
+    # Auto-detect workspace and get data directory
+    workspace_root = find_workspace_root(args.workspace_dir)
+    if workspace_root is None:
+        print("Error: Could not auto-detect workspace root.", file=sys.stderr)
+        print("Ensure you're in a directory containing:", file=sys.stderr)
+        print("  - bsc-apm-case-study-task/", file=sys.stderr)
+        print("  - bsc-apm-case-study-data/", file=sys.stderr)
+        print("  - eclass-mcp-server/", file=sys.stderr)
+        print("  - openeclass/", file=sys.stderr)
         return 2
+    
+    data_dir = get_data_dir(args.platform, workspace_root)
     
     if not data_dir.exists():
         print(f"Error: Directory not found: {data_dir}", file=sys.stderr)
         return 2
     
-    print(f"Validating: {data_dir}")
+    print(f"Validating platform: {args.platform}")
+    print(f"Data directory: {data_dir}")
     
     errors: List[str] = []
     warnings: List[str] = []
@@ -151,10 +189,10 @@ def main() -> int:
         if duplicates:
             errors.append(f"Duplicate rows found: {', '.join(duplicates)}")
     
-    # Build set of dataset keys
+    # Build set of dataset keys (new format: {PID}_{S1|2}_{Platform}_{Tool})
     dataset_keys: Set[str] = set()
     for row in rows:
-        key = f"{row.get('participant_id', '')}_tool_{row.get('tool', '')}"
+        key = build_dataset_key(row)
         dataset_keys.add(key)
     
     # Cross-check manifest entries against dataset
@@ -172,11 +210,16 @@ def main() -> int:
             combined_file = combine_entry.get("output_file", "")
             expected_checksum = combine_entry.get("output_checksum", "")
             
-            # Parse participant ID and tool from entry key
-            parts = entry_key.split("_tool_")
-            if len(parts) == 2:
-                pid, tool = parts
-                combined_path = data_dir / pid / f"tool_{tool}" / combined_file
+            # Parse manifest key: {PID}_{S1|2}_{Platform}_{Tool}
+            # Find combined file in dataset structure: {platform}/{PID}/S{session}_{tool}/{combined_file}
+            parts = entry_key.split("_")
+            if len(parts) >= 4:
+                pid = parts[0]
+                session = parts[1]
+                platform_key = parts[2]
+                tool = "_".join(parts[3:])  # Tool may contain hyphens
+                
+                combined_path = data_dir / pid / f"S{session}_{tool}" / combined_file
                 
                 if not combined_path.exists():
                     errors.append(f"{entry_key}: Combined file missing: {combined_file}")

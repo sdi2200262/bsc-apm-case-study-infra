@@ -3,6 +3,9 @@
 # Copyright (C) 2025 BSc Case Study Grader Contributors
 """
 Append a participant row to the aggregated dataset.
+
+Takes unpacked submission directory, loads combined JSON, and appends row to:
+- dataset.csv at platform level: submissions_sanitized/{platform}/dataset.csv
 """
 
 import argparse
@@ -24,7 +27,9 @@ from manifest import (
 )
 from workspace import (
     find_workspace_root,
-    get_data_dir,
+    get_submission_dataset_dir,
+    get_manifest_key,
+    parse_submission_name,
 )
 
 DATASET_FILENAME = "dataset.csv"
@@ -32,8 +37,9 @@ DATASET_FILENAME = "dataset.csv"
 # CSV column order
 CSV_COLUMNS = [
     "participant_id",
+    "session",
+    "platform",
     "tool",
-    "sub_study",
     "total_score",
     "max_score",
     "python_baseline_score",
@@ -60,13 +66,29 @@ CSV_COLUMNS = [
 
 
 def load_json(path: Path) -> dict:
-    """Load JSON file."""
+    """
+    Load JSON file.
+    
+    Args:
+        path: Path to JSON file.
+        
+    Returns:
+        Parsed JSON data as dictionary.
+    """
     with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
 def combined_to_row(combined: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert combined JSON structure to CSV row."""
+    """
+    Convert combined JSON structure to CSV row.
+    
+    Args:
+        combined: Combined JSON data dictionary.
+        
+    Returns:
+        Dictionary representing a CSV row.
+    """
     grading = combined.get("grading", {})
     metrics = combined.get("metrics", {})
     project_meta = metrics.get("project_metadata", {})
@@ -74,8 +96,9 @@ def combined_to_row(combined: Dict[str, Any]) -> Dict[str, Any]:
     
     row = {
         "participant_id": combined.get("participant_id", ""),
+        "session": combined.get("session", ""),
+        "platform": combined.get("platform", ""),
         "tool": combined.get("tool", ""),
-        "sub_study": combined.get("sub_study", ""),
         "total_score": grading.get("total_score", 0),
         "max_score": grading.get("max_score", 48),
         "python_baseline_score": grading.get("python_baseline", {}).get("score", 0),
@@ -104,7 +127,15 @@ def combined_to_row(combined: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def read_existing_rows(dataset_path: Path) -> List[Dict[str, Any]]:
-    """Read existing dataset rows."""
+    """
+    Read existing dataset rows.
+    
+    Args:
+        dataset_path: Path to dataset CSV file.
+        
+    Returns:
+        List of row dictionaries.
+    """
     if not dataset_path.exists():
         return []
     
@@ -117,7 +148,13 @@ def read_existing_rows(dataset_path: Path) -> List[Dict[str, Any]]:
 
 
 def write_dataset(dataset_path: Path, rows: List[Dict[str, Any]]) -> None:
-    """Write dataset with all rows."""
+    """
+    Write dataset with all rows.
+    
+    Args:
+        dataset_path: Path to dataset CSV file.
+        rows: List of row dictionaries to write.
+    """
     with open(dataset_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         writer.writeheader()
@@ -129,72 +166,67 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Append a participant row to the aggregated dataset.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Takes unpacked submission directory path as argument.\n"
+            "Example: ./add_to_dataset.py P001_S1_copilot_apm_submission\n\n"
+            "Appends row to: dataset repo/{platform}/dataset.csv"
+        ),
     )
     parser.add_argument(
-        "participant_id",
-        help="Participant ID (e.g., P001)"
-    )
-    parser.add_argument(
-        "tool",
-        choices=['a', 'b'],
-        help="Tool identifier"
-    )
-    parser.add_argument(
-        "--data-dir",
+        "submission_dir",
         type=Path,
-        default=None,
-        help="Base data directory (auto-detected from workspace if not specified)"
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        type=Path,
-        default=None,
-        help="Workspace root directory (auto-detected if not specified)"
+        help="Path to unpacked submission directory (at workspace root)"
     )
     
     args = parser.parse_args()
     
-    pid = args.participant_id.upper()
-    tool = args.tool.lower()
+    submission_dir = Path(args.submission_dir).resolve()
     
-    # Auto-detect workspace and data directory
-    workspace_root = find_workspace_root(args.workspace_dir)
-    if args.data_dir:
-        data_dir = Path(args.data_dir).resolve()
-    elif workspace_root:
-        # Get sub-study from manifest
-        for sub_study in ["copilot", "cursor"]:
-            test_data_dir = get_data_dir(sub_study, workspace_root)
-            manifest = load_manifest(test_data_dir)
-            entry = get_entry(manifest, pid, tool, "combine")
-            if entry:
-                data_dir = test_data_dir
-                break
-        else:
-            print("Error: Could not determine sub-study. Please specify --data-dir", file=sys.stderr)
-            return 2
-    else:
-        print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
+    if not submission_dir.exists():
+        print(f"Error: Directory not found: {submission_dir}", file=sys.stderr)
         return 2
     
-    # Locate participant directory
-    participant_dir = data_dir / pid / f"tool_{tool}"
-    if not participant_dir.exists():
-        print(f"Error: Directory not found: {participant_dir}", file=sys.stderr)
+    if not submission_dir.is_dir():
+        print(f"Error: Not a directory: {submission_dir}", file=sys.stderr)
         return 2
     
-    # Locate combined file
-    combined_file = participant_dir / f"{pid}_tool_{tool}_combined.json"
+    # Parse submission directory name
+    parsed = parse_submission_name(submission_dir.name)
+    if not parsed:
+        print(f"Error: Invalid submission directory name: {submission_dir.name}", file=sys.stderr)
+        print("Expected format: {PID}_{S1|2}_{Platform}_{Tool}_submission", file=sys.stderr)
+        return 1
+    
+    pid, session, platform, tool = parsed
+    
+    # Auto-detect workspace
+    workspace_root = find_workspace_root()
+    if workspace_root is None:
+        print("Error: Could not auto-detect workspace root.", file=sys.stderr)
+        print("Ensure you're in a directory containing:", file=sys.stderr)
+        print("  - bsc-apm-case-study-task/", file=sys.stderr)
+        print("  - bsc-apm-case-study-data/", file=sys.stderr)
+        print("  - eclass-mcp-server/", file=sys.stderr)
+        print("  - openeclass/", file=sys.stderr)
+        return 2
+    
+    # Get dataset directory for this submission
+    dataset_dir = get_submission_dataset_dir(submission_dir, workspace_root)
+    
+    # Locate combined file in dataset repo
+    combined_file = dataset_dir / f"{pid}_{session}_{platform}_{tool}_combined.json"
     if not combined_file.exists():
         print(f"Error: Combined file not found: {combined_file}", file=sys.stderr)
         print("Run combine_participant.py first", file=sys.stderr)
         return 1
     
-    print(f"Adding to dataset: {pid} tool_{tool}")
+    print(f"Adding to dataset: {pid} {session} {platform} {tool}")
     
     # Verify checksum against manifest
-    manifest = load_manifest(data_dir)
-    combine_entry = get_entry(manifest, pid, tool, "combine")
+    manifest_dir = dataset_dir.parent.parent  # submissions_sanitized/{platform}/
+    manifest = load_manifest(manifest_dir)
+    manifest_key = get_manifest_key(submission_dir)
+    combine_entry = get_entry(manifest, manifest_key, "combine")
     if combine_entry:
         expected_checksum = combine_entry.get("output_checksum", "")
         if expected_checksum and not validate_checksum(combined_file, expected_checksum):
@@ -208,8 +240,8 @@ def main() -> int:
     processing_timestamp = datetime.now(timezone.utc).isoformat()
     row["processing_timestamp"] = processing_timestamp
     
-    # Load existing dataset
-    dataset_path = data_dir / DATASET_FILENAME
+    # Load existing dataset (at platform level)
+    dataset_path = manifest_dir / DATASET_FILENAME
     existing_rows = read_existing_rows(dataset_path)
     
     dataset_checksum_before = ""
@@ -242,8 +274,8 @@ def main() -> int:
         dataset_checksum_after=dataset_checksum_after,
     )
     
-    add_entry(manifest, pid, tool, "add_to_dataset", entry)
-    save_manifest(manifest, data_dir)
+    add_entry(manifest, manifest_key, "add_to_dataset", entry)
+    save_manifest(manifest, manifest_dir)
     
     print("Manifest updated")
     

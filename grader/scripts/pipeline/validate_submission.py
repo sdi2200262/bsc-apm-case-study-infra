@@ -3,6 +3,9 @@
 # Copyright (C) 2025 BSc Case Study Grader Contributors
 """
 Validate and extract participant submission zip files.
+
+Validates new submission format: {PID}_{S1|2}_{Platform}_{Tool}_submission.zip
+Extracts to workspace root for subsequent pipeline stages.
 """
 
 import argparse
@@ -22,66 +25,69 @@ from manifest import (
 from workspace import (
     find_workspace_root,
     get_data_dir,
-    detect_sub_study_from_zip,
-    get_participant_dir,
+    parse_submission_name,
+    get_manifest_key,
 )
 
-# Regex patterns for validation
+# Regex patterns for validation (internal zip structure)
+# Format: {PID}_{S1|2}_{Platform}_{Tool}_*
 PID_PATTERN = r"[Pp]\d{3}"
-TOOL_PATTERN = r"[ab]"
-ZIP_PATTERN = re.compile(rf"^({PID_PATTERN})_tool_({TOOL_PATTERN})_submission\.zip$")
-PATCH_PATTERN = re.compile(rf"^({PID_PATTERN})_tool_({TOOL_PATTERN})_solution\.patch$")
-LOGS_PATTERN = re.compile(rf"^({PID_PATTERN})_tool_({TOOL_PATTERN})_logs/?$")
-CHAT_COPILOT_PATTERN = re.compile(rf"^({PID_PATTERN})_tool_({TOOL_PATTERN})_chat_(\d{{2}})\.json$")
-CHAT_CURSOR_PATTERN = re.compile(rf"^({PID_PATTERN})_tool_({TOOL_PATTERN})_chat_(\d{{2}})\.md$")
-REQUESTS_PATTERN = re.compile(rf"^({PID_PATTERN})_tool_({TOOL_PATTERN})_requests\.csv$")
+SESSION_PATTERN = r"[Ss][12]"
+PLATFORM_PATTERN = r"[a-z]+(?:-[a-z]+)*"
+TOOL_PATTERN = r"[a-z]+(?:-[a-z]+)*"
 
-
-def parse_zip_filename(filename: str) -> Optional[Tuple[str, str]]:
-    """
-    Extract participant ID and tool from zip filename.
-    
-    Returns:
-        Tuple of (pid, tool) or None if pattern doesn't match.
-    """
-    match = ZIP_PATTERN.match(filename)
-    if not match:
-        return None
-    return (match.group(1).upper(), match.group(2).lower())
+PATCH_PATTERN = re.compile(
+    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_solution\.patch$"
+)
+LOGS_PATTERN = re.compile(
+    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_logs/?$"
+)
+CHAT_COPILOT_PATTERN = re.compile(
+    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_chat_(\d{{2}})\.json$"
+)
+CHAT_CURSOR_PATTERN = re.compile(
+    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_chat_(\d{{2}})\.md$"
+)
+REQUESTS_PATTERN = re.compile(
+    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_requests\.csv$"
+)
 
 
 def validate_zip_structure(zip_path: Path) -> Tuple[bool, List[str], str]:
     """
     Validate the structure of a submission zip file.
     
+    Args:
+        zip_path: Path to submission zip file.
+        
     Returns:
-        Tuple of (is_valid, list of issues, detected sub_study).
+        Tuple of (is_valid, list of issues, detected platform).
     """
     issues: List[str] = []
-    sub_study = "unknown"
+    platform = "unknown"
     
-    parsed = parse_zip_filename(zip_path.name)
+    parsed = parse_submission_name(zip_path.name)
     if not parsed:
         issues.append(f"Invalid zip filename: {zip_path.name}")
-        issues.append("Expected format: {PID}_tool_{a|b}_submission.zip")
-        return (False, issues, sub_study)
+        issues.append("Expected format: {PID}_{S1|2}_{Platform}_{Tool}_submission.zip")
+        return (False, issues, platform)
     
-    pid, tool = parsed
+    pid, session, platform, tool = parsed
     
     try:
         with zipfile.ZipFile(zip_path, 'r') as zf:
             names = zf.namelist()
     except zipfile.BadZipFile:
         issues.append("File is not a valid zip archive")
-        return (False, issues, sub_study)
+        return (False, issues, platform)
     
     # Check for patch file
-    expected_patch = f"{pid}_tool_{tool}_solution.patch"
+    expected_patch = f"{pid}_{session}_{platform}_{tool}_solution.patch"
     patch_found = False
     for name in names:
         basename = Path(name).name
         if PATCH_PATTERN.match(basename):
-            if basename.upper() == expected_patch.upper():
+            if basename.lower() == expected_patch.lower():
                 patch_found = True
                 break
     
@@ -89,21 +95,15 @@ def validate_zip_structure(zip_path: Path) -> Tuple[bool, List[str], str]:
     patch_candidates = [n for n in names if n.endswith('.patch') and 'solution' in n.lower()]
     if not patch_found and patch_candidates:
         patch_found = True
-        if patch_candidates[0] != expected_patch:
+        if patch_candidates[0].lower() != expected_patch.lower():
             issues.append(f"Patch filename mismatch: found '{patch_candidates[0]}', expected '{expected_patch}'")
     
     if not patch_found:
         issues.append(f"Missing patch file: {expected_patch}")
     
     # Check for logs folder
-    expected_logs = f"{pid}_tool_{tool}_logs"
-    logs_found = any(name.startswith(expected_logs) for name in names)
-    if not logs_found:
-        # Try case-insensitive
-        logs_found = any(name.lower().startswith(expected_logs.lower()) for name in names)
-        if logs_found:
-            issues.append(f"Logs folder has incorrect casing")
-    
+    expected_logs = f"{pid}_{session}_{platform}_{tool}_logs"
+    logs_found = any(name.startswith(expected_logs) or name.lower().startswith(expected_logs.lower()) for name in names)
     if not logs_found:
         issues.append(f"Missing logs folder: {expected_logs}/")
     
@@ -116,9 +116,9 @@ def validate_zip_structure(zip_path: Path) -> Tuple[bool, List[str], str]:
     if json_chats and md_chats:
         issues.append("Mixed chat formats found (both .json and .md)")
     elif json_chats:
-        sub_study = "copilot"
+        platform = "copilot"
     elif md_chats:
-        sub_study = "cursor"
+        platform = "cursor"
     else:
         issues.append("No chat files found in logs/chats/")
     
@@ -134,17 +134,23 @@ def validate_zip_structure(zip_path: Path) -> Tuple[bool, List[str], str]:
             issues.append(f"Invalid chat filename: {basename}")
     
     # Cursor-specific: check for requests.csv
-    if sub_study == "cursor":
+    if platform == "cursor":
         stats_files = [n for n in names if '/stats/' in n and n.endswith('.csv')]
         if not stats_files:
             issues.append("Missing stats/requests.csv (required for Cursor submissions)")
     
     is_valid = len(issues) == 0
-    return (is_valid, issues, sub_study)
+    return (is_valid, issues, platform)
 
 
 def extract_submission(zip_path: Path, output_dir: Path) -> None:
-    """Extract submission zip to output directory."""
+    """
+    Extract submission zip to output directory.
+    
+    Args:
+        zip_path: Path to submission zip file.
+        output_dir: Directory to extract to (will be created if needed).
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     
     with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -155,29 +161,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate and extract participant submission zip files.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Expected format: {PID}_{S1|2}_{Platform}_{Tool}_submission.zip\n"
+            "Example: P001_S1_copilot_apm_submission.zip\n\n"
+            "Extracts to workspace root for subsequent pipeline stages."
+        ),
     )
     parser.add_argument(
         "zip_file",
         type=Path,
         help="Path to submission zip file"
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=None,
-        help="Directory to extract validated submission (auto-detected from workspace if not specified)"
-    )
-    parser.add_argument(
-        "--manifest-dir",
-        type=Path,
-        default=None,
-        help="Directory containing pipeline manifest (defaults to output-dir parent)"
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        type=Path,
-        default=None,
-        help="Workspace root directory (auto-detected if not specified)"
     )
     
     args = parser.parse_args()
@@ -187,17 +180,21 @@ def main() -> int:
         return 2
     
     # Parse filename
-    parsed = parse_zip_filename(args.zip_file.name)
+    parsed = parse_submission_name(args.zip_file.name)
     if not parsed:
         print(f"Error: Invalid zip filename: {args.zip_file.name}", file=sys.stderr)
-        print("Expected format: {PID}_tool_{a|b}_submission.zip", file=sys.stderr)
+        print("Expected format: {PID}_{S1|2}_{Platform}_{Tool}_submission.zip", file=sys.stderr)
         return 1
     
-    pid, tool = parsed
-    print(f"Validating: {pid} tool_{tool}")
+    pid, session, platform, tool = parsed
+    print(f"Validating: {pid} {session} {platform} {tool}")
     
     # Validate structure
-    is_valid, issues, sub_study = validate_zip_structure(args.zip_file)
+    is_valid, issues, detected_platform = validate_zip_structure(args.zip_file)
+    
+    # Use detected platform if validation succeeded, otherwise use parsed
+    if detected_platform != "unknown":
+        platform = detected_platform
     
     if issues:
         print("\nIssues found:")
@@ -209,38 +206,45 @@ def main() -> int:
         return 1
     
     print(f"\nValidation PASSED")
-    print(f"Sub-study: {sub_study}")
+    print(f"Platform: {platform}")
     
-    # Determine output directory
-    if args.output_dir:
-        output_dir = Path(args.output_dir).resolve()
-    else:
-        # Auto-detect from workspace
-        workspace_root = find_workspace_root(args.workspace_dir)
-        if workspace_root is None:
-            print("Error: Could not auto-detect workspace. Please specify --output-dir or --workspace-dir", file=sys.stderr)
-            return 2
-        
-        output_dir = get_participant_dir(pid, tool, sub_study, workspace_root)
-        print(f"\nAuto-detected workspace: {workspace_root}")
-        print(f"Extracting to: {output_dir}")
+    # Auto-detect workspace and extract to workspace root
+    workspace_root = find_workspace_root()
+    if workspace_root is None:
+        print("Error: Could not auto-detect workspace root.", file=sys.stderr)
+        print("Ensure you're in a directory containing:", file=sys.stderr)
+        print("  - bsc-apm-case-study-task/", file=sys.stderr)
+        print("  - bsc-apm-case-study-data/", file=sys.stderr)
+        print("  - eclass-mcp-server/", file=sys.stderr)
+        print("  - openeclass/", file=sys.stderr)
+        return 2
+    
+    # Extract to workspace root (unpacked submission stays at root)
+    # Output directory name matches zip filename without .zip extension
+    output_dir = workspace_root / args.zip_file.stem
+    print(f"\nWorkspace root: {workspace_root}")
+    print(f"Extracting to: {output_dir}")
     
     # Extract submission
     extract_submission(args.zip_file, output_dir)
     
-    # Update manifest
-    manifest_dir = args.manifest_dir or output_dir.parent.parent
+    # Update manifest (manifest is at platform level in dataset repo)
+    manifest_dir = get_data_dir(platform, workspace_root)
     manifest = load_manifest(manifest_dir)
+    
+    # Generate manifest key from submission directory name
+    manifest_key = get_manifest_key(output_dir)
     
     entry = create_stage_entry(
         status="success" if is_valid else "error",
         input_file=args.zip_file.name,
         input_checksum=compute_checksum(args.zip_file),
-        sub_study=sub_study,
+        output_dir=str(output_dir.relative_to(workspace_root)),
+        platform=platform,
         warnings=issues if issues else [],
     )
     
-    add_entry(manifest, pid, tool, "validate", entry)
+    add_entry(manifest, manifest_key, "validate", entry)
     save_manifest(manifest, manifest_dir)
     print(f"Manifest updated: {manifest_dir / 'pipeline_manifest.json'}")
     

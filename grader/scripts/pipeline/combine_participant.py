@@ -3,6 +3,9 @@
 # Copyright (C) 2025 BSc Case Study Grader Contributors
 """
 Merge grading results with interaction metrics.
+
+Takes unpacked submission directory, combines results and metrics, and outputs:
+- Combined JSON to dataset repo: {platform}/{PID}/S{session}_{tool}/{PID}_{S1|2}_{platform}_{tool}_combined.json
 """
 
 import argparse
@@ -22,18 +25,34 @@ from manifest import (
 )
 from workspace import (
     find_workspace_root,
-    get_data_dir,
+    get_submission_dataset_dir,
+    get_manifest_key,
+    parse_submission_name,
 )
 
 
 def load_json(path: Path) -> dict:
-    """Load JSON file."""
+    """
+    Load JSON file.
+    
+    Args:
+        path: Path to JSON file.
+        
+    Returns:
+        Parsed JSON data as dictionary.
+    """
     with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
 def save_json(data: dict, path: Path) -> None:
-    """Save JSON file with formatting."""
+    """
+    Save JSON file with formatting.
+    
+    Args:
+        data: Dictionary to save as JSON.
+        path: Path to output file.
+    """
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -42,63 +61,57 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Merge grading results with interaction metrics.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Takes unpacked submission directory path as argument.\n"
+            "Example: ./combine_participant.py P001_S1_copilot_apm_submission\n\n"
+            "Outputs:\n"
+            "  - Combined JSON: dataset repo/{platform}/{PID}/S{session}_{tool}/{PID}_{S1|2}_{platform}_{tool}_combined.json"
+        ),
     )
     parser.add_argument(
-        "participant_id",
-        help="Participant ID (e.g., P001)"
-    )
-    parser.add_argument(
-        "tool",
-        choices=['a', 'b'],
-        help="Tool identifier"
-    )
-    parser.add_argument(
-        "--data-dir",
+        "submission_dir",
         type=Path,
-        default=None,
-        help="Base data directory (auto-detected from workspace if not specified)"
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        type=Path,
-        default=None,
-        help="Workspace root directory (auto-detected if not specified)"
+        help="Path to unpacked submission directory (at workspace root)"
     )
     
     args = parser.parse_args()
     
-    pid = args.participant_id.upper()
-    tool = args.tool.lower()
+    submission_dir = Path(args.submission_dir).resolve()
     
-    # Auto-detect workspace and data directory
-    workspace_root = find_workspace_root(args.workspace_dir)
-    if args.data_dir:
-        data_dir = Path(args.data_dir).resolve()
-    elif workspace_root:
-        # Get sub-study from manifest
-        for sub_study in ["copilot", "cursor"]:
-            test_data_dir = get_data_dir(sub_study, workspace_root)
-            manifest = load_manifest(test_data_dir)
-            entry = get_entry(manifest, pid, tool, "parse")
-            if entry:
-                data_dir = test_data_dir
-                break
-        else:
-            print("Error: Could not determine sub-study. Please specify --data-dir", file=sys.stderr)
-            return 2
-    else:
-        print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
+    if not submission_dir.exists():
+        print(f"Error: Directory not found: {submission_dir}", file=sys.stderr)
         return 2
     
-    # Locate participant directory
-    participant_dir = data_dir / pid / f"tool_{tool}"
-    if not participant_dir.exists():
-        print(f"Error: Directory not found: {participant_dir}", file=sys.stderr)
+    if not submission_dir.is_dir():
+        print(f"Error: Not a directory: {submission_dir}", file=sys.stderr)
         return 2
     
-    # Locate input files
-    results_file = participant_dir / f"{pid}_tool_{tool}_results.json"
-    metrics_file = participant_dir / f"{pid}_tool_{tool}_metrics.json"
+    # Parse submission directory name
+    parsed = parse_submission_name(submission_dir.name)
+    if not parsed:
+        print(f"Error: Invalid submission directory name: {submission_dir.name}", file=sys.stderr)
+        print("Expected format: {PID}_{S1|2}_{Platform}_{Tool}_submission", file=sys.stderr)
+        return 1
+    
+    pid, session, platform, tool = parsed
+    
+    # Auto-detect workspace
+    workspace_root = find_workspace_root()
+    if workspace_root is None:
+        print("Error: Could not auto-detect workspace root.", file=sys.stderr)
+        print("Ensure you're in a directory containing:", file=sys.stderr)
+        print("  - bsc-apm-case-study-task/", file=sys.stderr)
+        print("  - bsc-apm-case-study-data/", file=sys.stderr)
+        print("  - eclass-mcp-server/", file=sys.stderr)
+        print("  - openeclass/", file=sys.stderr)
+        return 2
+    
+    # Get dataset directory for this submission
+    dataset_dir = get_submission_dataset_dir(submission_dir, workspace_root)
+    
+    # Locate input files in dataset repo
+    results_file = dataset_dir / f"{pid}_{session}_{platform}_{tool}_results.json"
+    metrics_file = dataset_dir / f"{pid}_{session}_{platform}_{tool}_metrics.json"
     
     if not results_file.exists():
         print(f"Error: Results file not found: {results_file}", file=sys.stderr)
@@ -110,27 +123,24 @@ def main() -> int:
         print("Run parse_submission.py first", file=sys.stderr)
         return 1
     
-    print(f"Combining: {pid} tool_{tool}")
+    print(f"Combining: {pid} {session} {platform} {tool}")
     
     # Verify checksums against manifest
-    manifest = load_manifest(data_dir)
+    manifest_dir = dataset_dir.parent.parent  # submissions_sanitized/{platform}/
+    manifest = load_manifest(manifest_dir)
+    manifest_key = get_manifest_key(submission_dir)
     
-    grade_entry = get_entry(manifest, pid, tool, "grade")
+    grade_entry = get_entry(manifest, manifest_key, "grade")
     if grade_entry:
         expected_checksum = grade_entry.get("output_checksum", "")
         if expected_checksum and not validate_checksum(results_file, expected_checksum):
             print(f"Warning: Results file checksum mismatch", file=sys.stderr)
     
-    parse_entry = get_entry(manifest, pid, tool, "parse")
+    parse_entry = get_entry(manifest, manifest_key, "parse")
     if parse_entry:
         expected_checksum = parse_entry.get("output_checksum", "")
         if expected_checksum and not validate_checksum(metrics_file, expected_checksum):
             print(f"Warning: Metrics file checksum mismatch", file=sys.stderr)
-    
-    # Determine sub-study
-    sub_study = "unknown"
-    if parse_entry:
-        sub_study = parse_entry.get("sub_study", "unknown")
     
     # Load data
     results = load_json(results_file)
@@ -180,8 +190,9 @@ def main() -> int:
     # Build combined structure
     combined = {
         "participant_id": pid,
+        "session": session,
+        "platform": platform,
         "tool": tool,
-        "sub_study": sub_study,
         "processing_timestamp": datetime.now(timezone.utc).isoformat(),
         "grading": {
             "total_score": total_score,
@@ -202,8 +213,8 @@ def main() -> int:
         "metrics": metrics
     }
     
-    # Save combined output
-    output_file = participant_dir / f"{pid}_tool_{tool}_combined.json"
+    # Save combined output to dataset repo
+    output_file = dataset_dir / f"{pid}_{session}_{platform}_{tool}_combined.json"
     save_json(combined, output_file)
     
     print(f"\nCombined output: {output_file}")
@@ -217,8 +228,8 @@ def main() -> int:
         output_checksum=compute_checksum(output_file),
     )
     
-    add_entry(manifest, pid, tool, "combine", entry)
-    save_manifest(manifest, data_dir)
+    add_entry(manifest, manifest_key, "combine", entry)
+    save_manifest(manifest, manifest_dir)
     
     print("Manifest updated")
     

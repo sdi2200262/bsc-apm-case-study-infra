@@ -3,6 +3,10 @@
 # Copyright (C) 2025 BSc Case Study Grader Contributors
 """
 Run the grader on a validated submission.
+
+Takes unpacked submission directory, applies patch, runs grader, and outputs:
+- JSON results to dataset repo: {platform}/{PID}/S{session}_{tool}/{PID}_{S1|2}_{platform}_{tool}_results.json
+- TXT report to workspace root: results_{PID}_{S1|2}_{platform}_{tool}.txt
 """
 
 import argparse
@@ -24,7 +28,9 @@ from manifest import (
 from workspace import (
     find_workspace_root,
     get_workspace_paths,
-    get_data_dir,
+    get_submission_dataset_dir,
+    get_manifest_key,
+    parse_submission_name,
 )
 
 # Import PatchManager for cleanup on interruption
@@ -35,10 +41,18 @@ sys.path.insert(0, str(grader_dir))
 from src.patch_manager import PatchManager
 
 
-def find_patch_file(participant_dir: Path) -> Optional[Path]:
-    """Find the patch file in a participant's tool directory."""
-    for f in participant_dir.iterdir():
-        if f.suffix == '.patch':
+def find_patch_file(submission_dir: Path) -> Optional[Path]:
+    """
+    Find the patch file in submission directory.
+    
+    Args:
+        submission_dir: Path to unpacked submission directory.
+        
+    Returns:
+        Path to patch file or None if not found.
+    """
+    for f in submission_dir.iterdir():
+        if f.suffix == '.patch' and 'solution' in f.name.lower():
             return f
     return None
 
@@ -107,135 +121,103 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run the grader on a validated submission.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Takes unpacked submission directory path as argument.\n"
+            "Example: ./grade_submission.py P001_S1_copilot_apm_submission\n\n"
+            "Outputs:\n"
+            "  - JSON: dataset repo/{platform}/{PID}/S{session}_{tool}/{PID}_{S1|2}_{platform}_{tool}_results.json\n"
+            "  - TXT: workspace root/results_{PID}_{S1|2}_{platform}_{tool}.txt"
+        ),
     )
     parser.add_argument(
-        "participant_id",
-        help="Participant ID (e.g., P001)"
-    )
-    parser.add_argument(
-        "tool",
-        choices=['a', 'b'],
-        help="Tool identifier"
-    )
-    parser.add_argument(
-        "--data-dir",
+        "submission_dir",
         type=Path,
-        default=None,
-        help="Base data directory (auto-detected from workspace if not specified)"
-    )
-    parser.add_argument(
-        "--grader-dir",
-        type=Path,
-        default=None,
-        help="Path to grader directory (auto-detected from workspace if not specified)"
-    )
-    parser.add_argument(
-        "--eclass-dir",
-        type=Path,
-        default=None,
-        help="Path to eclass-mcp-server directory (auto-detected from workspace if not specified)"
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        type=Path,
-        default=None,
-        help="Workspace root directory (auto-detected if not specified)"
+        help="Path to unpacked submission directory (at workspace root)"
     )
     
     args = parser.parse_args()
     
-    pid = args.participant_id.upper()
-    tool = args.tool.lower()
+    submission_dir = Path(args.submission_dir).resolve()
     
-    # Auto-detect workspace and paths
-    workspace_root = find_workspace_root(args.workspace_dir)
-    if workspace_root is None:
-        if args.data_dir is None:
-            print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
-            return 2
-        # Use provided data-dir, but still try to find workspace for grader/eclass
-        workspace_root = find_workspace_root(args.data_dir)
-    
-    # Determine data directory
-    if args.data_dir:
-        data_dir = Path(args.data_dir).resolve()
-    else:
-        # Get sub-study from manifest if available
-        # Try to find existing manifest to determine sub-study
-        if workspace_root:
-            # Try both sub-studies
-            for sub_study in ["copilot", "cursor"]:
-                test_data_dir = get_data_dir(sub_study, workspace_root)
-                manifest = load_manifest(test_data_dir)
-                entry = get_entry(manifest, pid, tool, "validate")
-                if entry:
-                    data_dir = test_data_dir
-                    break
-            else:
-                print("Error: Could not determine sub-study. Please specify --data-dir", file=sys.stderr)
-                return 2
-        else:
-            print("Error: Could not auto-detect workspace. Please specify --data-dir or --workspace-dir", file=sys.stderr)
-            return 2
-    
-    # Locate participant directory
-    participant_dir = data_dir / pid / f"tool_{tool}"
-    if not participant_dir.exists():
-        print(f"Error: Directory not found: {participant_dir}", file=sys.stderr)
+    if not submission_dir.exists():
+        print(f"Error: Directory not found: {submission_dir}", file=sys.stderr)
         return 2
     
-    # Find patch file
-    patch_file = find_patch_file(participant_dir)
-    if not patch_file:
-        print(f"Error: No patch file found in {participant_dir}", file=sys.stderr)
+    if not submission_dir.is_dir():
+        print(f"Error: Not a directory: {submission_dir}", file=sys.stderr)
+        return 2
+    
+    # Parse submission directory name
+    parsed = parse_submission_name(submission_dir.name)
+    if not parsed:
+        print(f"Error: Invalid submission directory name: {submission_dir.name}", file=sys.stderr)
+        print("Expected format: {PID}_{S1|2}_{Platform}_{Tool}_submission", file=sys.stderr)
         return 1
     
-    print(f"Grading: {pid} tool_{tool}")
+    pid, session, platform, tool = parsed
+    
+    # Auto-detect workspace
+    workspace_root = find_workspace_root()
+    if workspace_root is None:
+        print("Error: Could not auto-detect workspace root.", file=sys.stderr)
+        print("Ensure you're in a directory containing:", file=sys.stderr)
+        print("  - bsc-apm-case-study-task/", file=sys.stderr)
+        print("  - bsc-apm-case-study-data/", file=sys.stderr)
+        print("  - eclass-mcp-server/", file=sys.stderr)
+        print("  - openeclass/", file=sys.stderr)
+        return 2
+    
+    # Verify submission directory is at workspace root
+    if submission_dir.parent != workspace_root:
+        print(f"Warning: Submission directory is not at workspace root: {submission_dir}", file=sys.stderr)
+        print(f"Expected location: {workspace_root / submission_dir.name}", file=sys.stderr)
+    
+    # Get dataset directory for this submission
+    dataset_dir = get_submission_dataset_dir(submission_dir, workspace_root)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Find patch file
+    patch_file = find_patch_file(submission_dir)
+    if not patch_file:
+        print(f"Error: No patch file found in {submission_dir}", file=sys.stderr)
+        return 1
+    
+    print(f"Grading: {pid} {session} {platform} {tool}")
     print(f"Patch: {patch_file.name}")
     
     # Verify manifest entry exists
-    manifest = load_manifest(data_dir)
-    validate_entry = get_entry(manifest, pid, tool, "validate")
+    manifest_dir = dataset_dir.parent.parent  # submissions_sanitized/{platform}/
+    manifest = load_manifest(manifest_dir)
+    manifest_key = get_manifest_key(submission_dir)
+    validate_entry = get_entry(manifest, manifest_key, "validate")
     if not validate_entry:
         print("Warning: No validation entry found in manifest", file=sys.stderr)
     
-    # Locate grader
-    if args.grader_dir:
-        grader_path = Path(args.grader_dir).resolve() / "grade"
-    elif workspace_root:
-        paths = get_workspace_paths(workspace_root)
-        grader_path = paths["grader_dir"] / "grade"
-    else:
-        script_dir = Path(__file__).parent
-        grader_path = script_dir.parent.parent / "grade"
+    # Locate grader and eclass directory
+    paths = get_workspace_paths(workspace_root)
+    grader_path = paths["grader_dir"] / "grade"
+    eclass_dir = paths["eclass_dir"]
     
     if not grader_path.exists():
         print(f"Error: Grader not found: {grader_path}", file=sys.stderr)
         return 2
     
-    # Determine eclass directory
-    if args.eclass_dir:
-        eclass_dir = Path(args.eclass_dir).resolve()
-    elif workspace_root:
-        paths = get_workspace_paths(workspace_root)
-        eclass_dir = paths["eclass_dir"]
-    else:
-        eclass_dir = None
-    
     # Run grader with cleanup on interruption
     print(f"\nRunning grader...")
     grader_cmd = [str(grader_path), str(patch_file)]
-    if eclass_dir:
+    if eclass_dir.exists():
         grader_cmd.extend(["--eclass-dir", str(eclass_dir)])
     
     # Initialize patch manager for potential cleanup
     patch_manager = None
-    if eclass_dir and eclass_dir.exists():
+    if eclass_dir.exists():
         patch_manager = PatchManager(eclass_dir)
+    
+    # Files created by this script (for cleanup on error)
+    created_files = []
     
     try:
         # Use subprocess.run but ensure stdin is closed to prevent hangs
-        # The key fix: close stdin (DEVNULL) so no process waits for input
         result = subprocess.run(
             grader_cmd,
             cwd=grader_path.parent,
@@ -261,33 +243,52 @@ def main() -> int:
                 print(f"Warning: Cleanup failed: {e}", file=sys.stderr)
         return 130  # Standard exit code for SIGINT
     
-    # Find results file - grade script writes to workspace_root, not grader_path.parent
-    if workspace_root:
-        grader_results = workspace_root / f"results_{patch_file.stem}.json"
-    else:
-        # Fallback to grader_path.parent if workspace_root not available
-        grader_results = grader_path.parent / f"results_{patch_file.stem}.json"
-    if not grader_results.exists():
-        print(f"Error: Results file not found: {grader_results}", file=sys.stderr)
+    # Find results files - grade script writes to workspace_root
+    # Format: results_{patch_stem}.json and results_{patch_stem}.txt
+    patch_stem = patch_file.stem
+    grader_results_json = workspace_root / f"results_{patch_stem}.json"
+    grader_results_txt = workspace_root / f"results_{patch_stem}.txt"
+    
+    if not grader_results_json.exists():
+        print(f"Error: Results file not found: {grader_results_json}", file=sys.stderr)
         return 1
     
-    # Copy to standardized name
-    output_results = participant_dir / f"{pid}_tool_{tool}_results.json"
-    shutil.copy(grader_results, output_results)
+    # Generate output filenames
+    output_results_json = dataset_dir / f"{pid}_{session}_{platform}_{tool}_results.json"
+    output_results_txt = workspace_root / f"results_{pid}_{session}_{platform}_{tool}.txt"
     
-    # Clean up temporary results file from workspace root
+    # Copy JSON to dataset repo
     try:
-        if grader_results.exists():
-            grader_results.unlink()
-            # Also clean up .txt file if it exists
-            txt_file = grader_results.with_suffix('.txt')
-            if txt_file.exists():
-                txt_file.unlink()
+        shutil.copy(grader_results_json, output_results_json)
+        created_files.append(output_results_json)
     except Exception as e:
-        print(f"Warning: Could not clean up temporary results file: {e}", file=sys.stderr)
+        print(f"Error: Failed to copy results JSON: {e}", file=sys.stderr)
+        return 1
     
-    # Parse scores
-    total, max_score, breakdown = parse_grading_results(output_results)
+    # Copy TXT to workspace root (keep for review)
+    if grader_results_txt.exists():
+        try:
+            shutil.copy(grader_results_txt, output_results_txt)
+            created_files.append(output_results_txt)
+        except Exception as e:
+            print(f"Warning: Failed to copy results TXT: {e}", file=sys.stderr)
+    
+    # Clean up temporary results files from workspace root
+    try:
+        if grader_results_json.exists():
+            grader_results_json.unlink()
+        if grader_results_txt.exists():
+            grader_results_txt.unlink()
+    except Exception as e:
+        print(f"Warning: Could not clean up temporary results files: {e}", file=sys.stderr)
+    
+    # Parse scores (if this fails, we still have the files for debugging)
+    try:
+        total, max_score, breakdown = parse_grading_results(output_results_json)
+    except Exception as e:
+        print(f"Error: Failed to parse grading results: {e}", file=sys.stderr)
+        print("Results files were created but parsing failed.", file=sys.stderr)
+        return 1
     print(f"\nScore: {total}/{max_score}")
     for category, score in breakdown.items():
         print(f"  {category}: {score}")
@@ -297,16 +298,20 @@ def main() -> int:
         status="success",
         input_file=patch_file.name,
         input_checksum=compute_checksum(patch_file),
-        output_file=output_results.name,
-        output_checksum=compute_checksum(output_results),
+        output_file_json=output_results_json.name,
+        output_file_txt=output_results_txt.name if output_results_txt.exists() else None,
+        output_checksum=compute_checksum(output_results_json),
         score=f"{total}/{max_score}",
         score_breakdown=breakdown,
     )
     
-    add_entry(manifest, pid, tool, "grade", entry)
-    save_manifest(manifest, data_dir)
+    add_entry(manifest, manifest_key, "grade", entry)
+    save_manifest(manifest, manifest_dir)
     
-    print(f"\nResults saved: {output_results}")
+    print(f"\nResults saved:")
+    print(f"  JSON: {output_results_json}")
+    if output_results_txt.exists():
+        print(f"  TXT: {output_results_txt}")
     print("Manifest updated")
     
     return 0
