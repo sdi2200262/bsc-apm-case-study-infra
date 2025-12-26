@@ -18,43 +18,50 @@ Total: **48 points**
 | Python Feature | 12 | `get_course_announcements` implementation |
 | C Replica | 24 | Full C implementation with memory safety |
 
-See [task/SCORING.md](SCORING.md) for the detailed rubric.
-
-## Overview
-
-This repository consolidates:
-- **Task Specification** - The PRD and Default Prompt provided to participants
-- **Grading Suite** - Black-box testing infrastructure for evaluating submissions
-- **Participant Guides** - LaTeX guide for study participants
+See [task/SCORING.md](task/SCORING.md) for the detailed rubric.
 
 ## Repository Structure
 
 ```
 bsc-apm-case-study-task/
-├── README.md                       
-├── LICENSE                             # GPL-3.0-or-later
-├── task/                               # Task specification materials
+├── README.md
+├── LICENSE
+├── task/                               # Task specification
 │   ├── README.md
-|   ├── SCORING.md                      # Scoring rubric (48 points total)
-│   ├── Specification.md                # Product Requirements Document (PRD)
-│   └── Default-Prompt.md               # Default prompt for AI assistants
+│   ├── SCORING.md
+│   ├── Specification.md
+│   └── Default-Prompt.md
 ├── grader/                             # Grading infrastructure
 │   ├── README.md
-│   ├── SETUP.md                        # Environment setup instructions
-│   ├── grade                           # Entry point script
-│   ├── docker-compose.eclass.yaml  
-│   ├── src/                            # Grading modules
-│   ├── fixtures/                       # HTML fixtures for SSO mock
-│   └── scripts/                        # Utility scripts
-└── participant-guides/                 # Study participation guides
+│   ├── SETUP.md
+│   ├── PIPELINE.md
+│   ├── grade
+│   ├── docker-compose.eclass.yaml
+│   ├── src/                            # Core grading modules
+│   ├── pipeline/                       # Data processing pipeline
+│   │   ├── README.md
+│   │   └── *.py
+│   ├── scripts/                        # Utility scripts
+│   │   ├── README.md
+│   │   └── *.py
+│   └── fixtures/                       # SSO mock fixtures
+│       ├── README.md
+│       └── *.html
+└── participant-guides/                 # Study guides
     ├── README.md
-    ├── latexmkrc                       # LaTeX build configuration
-    ├── participant_guide_copilot.tex
-    ├── participant_guide_copilot.pdf
-    ├── participant_guide_cursor.tex
-    ├── participant_guide_cursor.pdf
-    └── build/                          # LaTeX auxiliary files
+    └── *.tex, *.pdf, assets/
 ```
+
+## Documentation
+
+- **[task/README.md](task/README.md)** - Task specification overview
+- **[grader/README.md](grader/README.md)** - Grading system overview
+- **[grader/SETUP.md](grader/SETUP.md)** - Environment setup
+- **[grader/PIPELINE.md](grader/PIPELINE.md)** - Pipeline protocol
+- **[grader/pipeline/README.md](grader/pipeline/README.md)** - Pipeline scripts
+- **[grader/scripts/README.md](grader/scripts/README.md)** - Utility scripts
+- **[grader/fixtures/README.md](grader/fixtures/README.md)** - SSO fixtures
+- **[participant-guides/README.md](participant-guides/README.md)** - Guide building
 
 ## Related Repositories
 
