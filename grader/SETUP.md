@@ -13,16 +13,47 @@ This document describes how to set up the grading environment and workspace stru
 - OpenSSL (for SSL certificate generation)
 
 **Required for C Tests:**
-- `libcurl4-openssl-dev` (or equivalent libcurl development package)
-- `libxml2-dev`
+- `gcc` (minimum version 9.0, for C11 support)
+- `libcurl4-openssl-dev` (libcurl library minimum version 7.81.0 required)
+- `libxml2-dev` (libxml2 library minimum version 2.9.13 required)
 - `valgrind`
-- `make` and `gcc`
+- `make`
 
 Install on Ubuntu/Debian:
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip docker.io docker-compose-plugin git openssl \
     libcurl4-openssl-dev libxml2-dev valgrind build-essential
+```
+
+**Critical:** The grader expects library versions that meet or exceed the minimum requirements for consistent evaluation. Verify installed versions with:
+```bash
+gcc --version                        # Must be >= 9.0
+pkg-config --modversion libcurl    # Must be >= 7.81.0
+pkg-config --modversion libxml-2.0  # Must be >= 2.9.13
+```
+
+**Note:** The grader uses black-box testing principles - it will attempt to build with any versions and only fail if the build actually fails. Version mismatches will generate warnings but won't cause automatic failure unless compilation fails.
+
+**Version Compatibility:**
+- **Ubuntu 22.04 LTS (Jammy):** Provides libcurl 7.81.0 and libxml2 2.9.13 (meets requirements)
+- **Ubuntu 24.04 LTS (Noble):** Provides libcurl 8.5.0 and libxml2 2.9.14 (meets requirements)
+- **Debian 12 (Bookworm):** Provides compatible versions
+
+The grader will accept submissions compiled against any version meeting these minimums.
+
+**Optional: Docker for Exact Version Matching**
+
+For participants who want to ensure exact version compatibility with the grading environment, you can use Docker:
+
+```bash
+# Use Ubuntu 22.04 LTS container for development
+docker run -it --rm -v $(pwd):/workspace ubuntu:22.04 bash
+# Inside container:
+apt-get update && apt-get install -y build-essential libcurl4-openssl-dev libxml2-dev valgrind
+# Verify versions match Ubuntu 22.04 LTS
+pkg-config --modversion libcurl    # Should be 7.81.0
+pkg-config --modversion libxml-2.0  # Should be 2.9.13
 ```
 
 Install `uv` (recommended Python package manager):
@@ -237,7 +268,15 @@ Install the development packages:
 sudo apt-get install libcurl4-openssl-dev libxml2-dev
 ```
 
-These are required for compiling the C replica, as specified in the task specification.
+**Important:** Verify the library versions meet the minimum requirements:
+```bash
+pkg-config --modversion libcurl    # Must be >= 7.81.0
+pkg-config --modversion libxml-2.0  # Must be >= 2.9.13
+```
+
+These are required for compiling the C replica, as specified in the task specification. The grader accepts any version meeting these minimums. Common distributions:
+- Ubuntu 22.04 LTS: libcurl 7.81.0, libxml2 2.9.13
+- Ubuntu 24.04 LTS: libcurl 8.5.0, libxml2 2.9.14
 
 ### Pipeline workspace detection fails
 

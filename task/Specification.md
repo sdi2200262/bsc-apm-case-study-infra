@@ -71,12 +71,15 @@ The C microservice must be fully configurable via environment variables to suppo
 To ensure the binary remains lightweight but functional, you must adhere to the following **strict technical stack**:
 
 * **Language:** C (Standard C99 or C11).
-* **Networking:** **`libcurl`** is required.
+* **Compiler:** GCC 9.0+ or compatible compiler with full C11 support.
+* **Networking:** **`libcurl`** (minimum version 7.81.0) is required.
   * You must use the `libcurl` cookie engine (`CURLOPT_COOKIEFILE`) to handle SSO redirects and session persistence.
   * The authentication flow (Login Form -> SSO -> CAS -> Redirect) must match the logic found in the Python `authentication.py`.
-* **HTML Parsing:** **`libxml2`** is required.
+  * **Note:** Ubuntu 22.04 LTS provides libcurl 7.81.0; Ubuntu 24.04 provides 8.5.0. Both are acceptable as they meet the minimum requirement.
+* **HTML Parsing:** **`libxml2`** (minimum version 2.9.13) is required.
   * You must use this parser to strip tags and normalize whitespace exactly as `BeautifulSoup` does in the Python reference.
   * To pass validation, your C output must textually match the Python output.
+  * **Note:** Ubuntu 22.04 LTS provides libxml2 2.9.13; Ubuntu 24.04 provides 2.9.14. Both are acceptable as they meet the minimum requirement.
 * **JSON & Protocol:**
   * **Strictly Forbidden:** `cJSON`, `Jansson`, or *any* external JSON library.
   * **Requirement:** You must implement the JSON-RPC 2.0 protocol (parsing and serialization) **manually** using standard C string manipulation (`<string.h>`, `<stdio.h>`, `snprintf`, etc.).

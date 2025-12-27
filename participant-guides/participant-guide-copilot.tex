@@ -236,18 +236,26 @@ To ensure the two sessions are completed in a controlled environment, make sure 
         After cloning, run: \inlinecode{cd openeclass \&\& git checkout e8b3329}.
     \end{itemize}
     \item \textbf{Python Version: 3.10+}
-    \item \textbf{C Development Libraries:} Install the required C development libraries on your Linux system: \inlinecode{sudo apt-get install libcurl4-openssl-dev libxml2-dev valgrind}
+    \item \textbf{C Development Libraries:} Install the required C development libraries on your Linux system: \inlinecode{sudo apt-get install build-essential libcurl4-openssl-dev libxml2-dev valgrind}\newline
+    \textbf{Critical:} The grader expects minimum versions. Verify installation with:
+    \begin{codebox}
+gcc --version                       # Must be >= 9.0 (for C11 support)
+pkg-config --modversion libcurl     # Must be >= 7.81.0
+pkg-config --modversion libxml-2.0  # Must be >= 2.9.13
+    \end{codebox}
+    \textbf{Compatibility:} Ubuntu 22.04 LTS (gcc 11, libcurl 7.81.0, libxml2 2.9.13) and Ubuntu 24.04 (gcc 13, libcurl 8.5.0, libxml2 2.9.14) both meet requirements.\newline
     \item \href{https://code.visualstudio.com/}{\textbf{IDE: Visual Studio Code}} of at least version \href{https://code.visualstudio.com/updates/v1_106}{1.106}
     \item \href{https://github.com/features/copilot}{\textbf{AI Tool: GitHub Copilot}}
-    \begin{mainbox}{Important Copilot Access Note}
-    This study requires access to GitHub Copilot's premium features. Note that \textbf{verified students are eligible for the GitHub Education Pack}, which provides free access to GitHub Copilot Pro. You can sign up for the GitHub Education Pack for free at:
-    \href{https://education.github.com/pack}{\texttt{https://education.github.com/pack}}
-    \newline\newline
-    Please ensure you have access to GitHub Copilot's premium features in VS Code before beginning the session.
-    \end{mainbox}
 \end{itemize}
 
 \newpage
+
+\begin{mainbox}{Important Copilot Access Note}
+This study requires access to GitHub Copilot's premium features. Note that \textbf{verified students are eligible for the GitHub Education Pack}, which provides free access to GitHub Copilot Pro. You can sign up for the GitHub Education Pack for free at:
+\href{https://education.github.com/pack}{\texttt{https://education.github.com/pack}}
+\newline\newline
+Please ensure you have access to GitHub Copilot's premium features in VS Code before beginning the session.
+\end{mainbox}
 
 \subsection{What You Will Deliver}
 At the end of each session, you will submit:
