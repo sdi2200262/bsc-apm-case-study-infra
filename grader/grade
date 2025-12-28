@@ -27,6 +27,7 @@ from pathlib import Path
 # Add grader directory to Python path for imports
 GRADER_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(GRADER_DIR))
+sys.path.insert(0, str(GRADER_DIR / "pipeline"))
 
 from src.patch_manager import PatchManager
 from src.build_tester import BuildTester
@@ -36,6 +37,7 @@ from src.eclass_manager import EclassManager
 from src.protocol_tester import ProtocolTester
 from src.scorer import Scorer
 from src.report import ReportWriter
+import workspace
 
 
 def main() -> None:
@@ -106,8 +108,12 @@ def main() -> None:
     if args.eclass_dir:
         eclass_dir = Path(args.eclass_dir).resolve()
     else:
-        # Default: assume eclass-mcp-server is at same level as grader directory
-        eclass_dir = GRADER_DIR.parent / "eclass-mcp-server"
+        try:
+            paths = workspace.get_workspace_paths()
+            eclass_dir = paths["eclass_dir"]
+        except RuntimeError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(2)
     
     if not eclass_dir.exists():
         print(f"Error: eclass-mcp-server directory not found at {eclass_dir}", file=sys.stderr)
