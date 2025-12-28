@@ -4,10 +4,16 @@
 """
 Scorer - Point allocation and test result aggregation.
 
-Scoring structure (48 points total):
-- Python Baseline: 12 points (existing main branch functionality)
-- Python Feature: 12 points (get_course_announcements implementation)
-- C Replica: 24 points (full C implementation)
+Scoring structure (100 points total):
+- Python Implementation: 48 points
+  - Baseline: 12 points
+  - Course Announcements: 18 points
+  - General Announcements: 18 points
+- C Replica Implementation: 52 points
+  - Infrastructure: 6 points
+  - Baseline: 10 points
+  - Course Announcements: 18 points
+  - General Announcements: 18 points
 """
 
 from typing import Dict, List, Tuple
@@ -25,7 +31,10 @@ class TestDefinition:
     group: str  # "baseline" or "feature"
 
 
-# Test definitions organized by execution order
+# -----------------------------------------------------------------------------
+# PYTHON TESTS (48 Points)
+# -----------------------------------------------------------------------------
+
 PYTHON_BASELINE_TESTS: List[TestDefinition] = [
     TestDefinition("B1", 2, "build", "python", "Python dependency installation", "baseline"),
     TestDefinition("P1", 1, "protocol", "python", "initialize response structure", "baseline"),
@@ -40,17 +49,34 @@ PYTHON_BASELINE_TESTS: List[TestDefinition] = [
     TestDefinition("A1", 1, "authstatus", "python", "Authstatus when not logged in", "baseline"),
 ]
 
-PYTHON_FEATURE_TESTS: List[TestDefinition] = [
-    TestDefinition("AN1", 2, "announcements", "python", "Not logged in error (exact string)", "feature"),
-    TestDefinition("AN2", 2, "announcements", "python", "Invalid course URL error (exact string)", "feature"),
-    TestDefinition("AN3", 2, "announcements", "python", "No announcements found (exact string)", "feature"),
+PYTHON_COURSE_TESTS: List[TestDefinition] = [
+    TestDefinition("AN1", 3, "announcements", "python", "Not logged in error (exact string)", "feature"),
+    TestDefinition("AN2", 3, "announcements", "python", "Invalid course URL error (exact string)", "feature"),
+    TestDefinition("AN3", 3, "announcements", "python", "No announcements found (exact string)", "feature"),
     TestDefinition("AN4", 3, "announcements", "python", "Valid announcements with default days_back", "feature"),
     TestDefinition("AN5", 3, "announcements", "python", "Valid announcements with custom days_back", "feature"),
+    TestDefinition("AN6", 3, "announcements", "python", "Invalid days_back (<=0) error", "feature"),
 ]
 
-C_TESTS: List[TestDefinition] = [
+PYTHON_GENERAL_TESTS: List[TestDefinition] = [
+    TestDefinition("GAN1", 3, "general_announcements", "python", "Not logged in error", "feature"),
+    TestDefinition("GAN2", 3, "general_announcements", "python", "Invalid days_back (<=0) error", "feature"),
+    TestDefinition("GAN3", 3, "general_announcements", "python", "Invalid days_back (>30) error", "feature"),
+    TestDefinition("GAN4", 3, "general_announcements", "python", "No announcements found", "feature"),
+    TestDefinition("GAN5", 3, "general_announcements", "python", "Valid Aggregation (System + Course)", "feature"),
+    TestDefinition("GAN6", 3, "general_announcements", "python", "Valid Filtering (Respects days_back)", "feature"),
+]
+
+# -----------------------------------------------------------------------------
+# C REPLICA TESTS (52 Points)
+# -----------------------------------------------------------------------------
+
+C_INFRA_TESTS: List[TestDefinition] = [
     TestDefinition("B2", 3, "build", "c", "C compilation (make c-server)", "baseline"),
     TestDefinition("M1", 3, "memory", "c", "Valgrind memory clean", "baseline"),
+]
+
+C_BASELINE_TESTS: List[TestDefinition] = [
     TestDefinition("P1_c", 1, "protocol", "c", "initialize response structure", "baseline"),
     TestDefinition("P2_c", 1, "protocol", "c", "tools/list response structure", "baseline"),
     TestDefinition("L1_c", 1, "login", "c", "Successful login", "baseline"),
@@ -61,11 +87,24 @@ C_TESTS: List[TestDefinition] = [
     TestDefinition("C1_c", 1, "courses", "c", "Get courses when logged in", "baseline"),
     TestDefinition("C2_c", 1, "courses", "c", "Get courses when not logged in", "baseline"),
     TestDefinition("A1_c", 1, "authstatus", "c", "Authstatus when not logged in", "baseline"),
-    TestDefinition("AN1_c", 2, "announcements", "c", "Not logged in error", "feature"),
-    TestDefinition("AN2_c", 2, "announcements", "c", "Invalid course URL error", "feature"),
-    TestDefinition("AN3_c", 1, "announcements", "c", "No announcements found", "feature"),
-    TestDefinition("AN4_c", 2, "announcements", "c", "Valid announcements with default days_back", "feature"),
-    TestDefinition("AN5_c", 1, "announcements", "c", "Valid announcements with custom days_back", "feature"),
+]
+
+C_COURSE_TESTS: List[TestDefinition] = [
+    TestDefinition("AN1_c", 3, "announcements", "c", "Not logged in error", "feature"),
+    TestDefinition("AN2_c", 3, "announcements", "c", "Invalid course URL error", "feature"),
+    TestDefinition("AN3_c", 3, "announcements", "c", "No announcements found", "feature"),
+    TestDefinition("AN4_c", 3, "announcements", "c", "Valid announcements with default days_back", "feature"),
+    TestDefinition("AN5_c", 3, "announcements", "c", "Valid announcements with custom days_back", "feature"),
+    TestDefinition("AN6_c", 3, "announcements", "c", "Invalid days_back (<=0) error", "feature"),
+]
+
+C_GENERAL_TESTS: List[TestDefinition] = [
+    TestDefinition("GAN1_c", 3, "general_announcements", "c", "Not logged in error", "feature"),
+    TestDefinition("GAN2_c", 3, "general_announcements", "c", "Invalid days_back (<=0) error", "feature"),
+    TestDefinition("GAN3_c", 3, "general_announcements", "c", "Invalid days_back (>30) error", "feature"),
+    TestDefinition("GAN4_c", 3, "general_announcements", "c", "No announcements found", "feature"),
+    TestDefinition("GAN5_c", 3, "general_announcements", "c", "Valid Aggregation (System + Course)", "feature"),
+    TestDefinition("GAN6_c", 3, "general_announcements", "c", "Valid Filtering (Respects days_back)", "feature"),
 ]
 
 
@@ -76,7 +115,8 @@ def get_all_tests() -> Dict[str, TestDefinition]:
     Returns:
         Dictionary mapping test_id to TestDefinition for all tests.
     """
-    all_tests = PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS + C_TESTS
+    all_tests = (PYTHON_BASELINE_TESTS + PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS + 
+                 C_INFRA_TESTS + C_BASELINE_TESTS + C_COURSE_TESTS + C_GENERAL_TESTS)
     return {t.id: t for t in all_tests}
 
 
@@ -89,10 +129,10 @@ def get_max_scores() -> Dict[str, int]:
     """
     return {
         "python_baseline": sum(t.points for t in PYTHON_BASELINE_TESTS),
-        "python_feature": sum(t.points for t in PYTHON_FEATURE_TESTS),
-        "python_total": sum(t.points for t in PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS),
-        "c_total": sum(t.points for t in C_TESTS),
-        "total": sum(t.points for t in PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS + C_TESTS),
+        "python_features": sum(t.points for t in PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS),
+        "python_total": sum(t.points for t in PYTHON_BASELINE_TESTS + PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS),
+        "c_total": sum(t.points for t in C_INFRA_TESTS + C_BASELINE_TESTS + C_COURSE_TESTS + C_GENERAL_TESTS),
+        "total": 100,
     }
 
 
@@ -151,7 +191,7 @@ class Scorer:
         """
         score = 0
         max_score = 0
-        for test in PYTHON_FEATURE_TESTS:
+        for test in PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS:
             max_score += test.points
             if self.results.get(test.id, TestResult(test.id, False, "")).passed:
                 score += test.points
@@ -177,7 +217,7 @@ class Scorer:
         """
         score = 0
         max_score = 0
-        for test in C_TESTS:
+        for test in C_INFRA_TESTS + C_BASELINE_TESTS + C_COURSE_TESTS + C_GENERAL_TESTS:
             max_score += test.points
             if self.results.get(test.id, TestResult(test.id, False, "")).passed:
                 score += test.points
@@ -205,9 +245,9 @@ class Scorer:
             Dictionary mapping category name to (score: int, max_score: int).
         """
         if target == "python":
-            tests = PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS
+            tests = PYTHON_BASELINE_TESTS + PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS
         else:
-            tests = C_TESTS
+            tests = C_INFRA_TESTS + C_BASELINE_TESTS + C_COURSE_TESTS + C_GENERAL_TESTS
         
         categories: Dict[str, List[int]] = {}
         for test in tests:

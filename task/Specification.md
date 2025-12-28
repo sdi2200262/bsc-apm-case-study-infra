@@ -6,17 +6,17 @@ This document specifies the goals, functional requirements, and acceptance crite
 
 ### Background
 
-The `eclass-mcp-server` is a Python-based web crawling service that interfaces with the `openeclass` platform (a legacy PHP codebase) via the Model Context Protocol (MCP). While the current Python implementation handles basic authentication and course retrieval, we require extended functionality for course announcements.
+The `eclass-mcp-server` is a Python-based web crawling service that interfaces with the `openeclass` platform (a legacy PHP codebase) via the Model Context Protocol (MCP). While the current Python implementation handles basic authentication and course retrieval, we require extended functionality for announcements.
 
 ### Objective
 
 To support low-resource deployment environments, we require a dual-deliverable:
-1.  **Feature Expansion:** Implement a new `get_course_announcements` tool in the existing Python codebase.
+1.  **Feature Expansion:** Implement new **announcements functionality** in the existing Python codebase.
 2.  **Native Replication:** Create a standalone **C Microservice** (`server_c`) that replicates the **entire functionality** of the enhanced Python server (Auth, Course Listing, and Announcements). This native server must serve as a functional drop-in replacement, adhering strictly to the same wire protocol.
 
-## 2. Feature Specification (New Tool)
+## 2. Feature Specification (New Tools)
 
-The following tool must be implemented in the Python server and subsequently included in the C Replica.
+The following tools must be implemented in the Python server and subsequently included in the C Replica.
 
 ### Tool: `get_course_announcements`
 
@@ -39,7 +39,7 @@ The following tool must be implemented in the Python server and subsequently inc
   }
   ```
 
-* **Output:** A list of announcements in a standard JSON format. If `days_back` is provided, we return all the announcements until -`days_back` days ago. The tool must return a single `types.TextContent` object.
+* **Output:** A list of announcements in a standard format. If `days_back` is provided, we return all the announcements until -`days_back` days ago. The tool must return a single `types.TextContent` object.
   * **On Success:** Returns a formatted text block.
     ```text
     Found [N] announcement(s):
@@ -50,12 +50,48 @@ The following tool must be implemented in the Python server and subsequently inc
 
     2. ...
     ```
+  * **Validation:**
+    * If `days_back` <= 0: Return `Error: days_back must be a positive integer.`
+  * **On Failure:** Returns a clear error message (e.g., `Error: Not logged in.`).
+  * **No Announcements:** If none match the criteria, return: `No announcements found.`.
+
+### Tool: `get_general_announcements`
+
+* **Description:** Fetches system-wide announcements (admin announcements) combined with announcements from all registered courses.
+* **Input Schema:**
+  ```json
+  {
+    "type": "object",
+    "properties": {
+      "days_back": {
+        "type": "integer",
+        "description": "Number of days to look back. Must be between 1 and 30. Default is 30."
+      }
+    }
+  }
+  ```
+
+* **Output:** A list of system and course announcements. If `days_back` is provided, we return all the announcements until -`days_back` days ago. The tool must return a single `types.TextContent` object.
+  * **On Success:** Returns a formatted text block with source attribution.
+    ```text
+    Found [N] announcement(s):
+
+    1. [Announcement Title]
+        Source: [System OR Course Name]
+        Date: [Date String]
+        Content: [Full Announcement Content...]
+
+    2. ...
+    ```
+  * **Validation:**
+    * If `days_back` <= 0: Return `Error: days_back must be a positive integer.`
+    * If `days_back` > 30: Return `Error: Cannot retrieve announcements older than 30 days.`
   * **On Failure:** Returns a clear error message (e.g., `Error: Not logged in.`).
   * **No Announcements:** If none match the criteria, return: `No announcements found.`.
 
 ## 3. C Replica Specifications
 
-The C implementation serves as a high-performance native alternative. It must replicate the **exact behavior** of the final Python server (including existing tools: `login`, `logout`, `get_courses`, `authstatus` AND the new `get_course_announcements`).
+The C implementation serves as a high-performance native alternative. It must replicate the **exact behavior** of the final Python server (including existing tools: `login`, `logout`, `get_courses`, `authstatus` AND the new `get_course_announcements` and `get_general_announcements`).
 
 ### Configuration & Target
 
@@ -137,7 +173,7 @@ Both Python and C implementations must be functional and responsive. All JSON-RP
 
 ## 5. Acceptance Criteria
 
-All responses from the `get_course_announcements` tool must match the exact formats specified below. Deviations in string content, punctuation, or output structure will result in non-conforming behavior.
+All responses from the announcement tools must match the exact formats specified below. Deviations in string content, punctuation, or output structure will result in non-conforming behavior.
 
 ### Tool: `get_course_announcements` (Both Implementations)
 
@@ -145,9 +181,20 @@ All responses from the `get_course_announcements` tool must match the exact form
 | :--- | :--- |
 | **User is not logged in** | Must return exact error string: `"Error: Not logged in."` |
 | **Invalid `course_url`** | Must return exact error string: `"Error: Could not extract course code."` |
+| **`days_back` <= 0** | Must return exact error string: `"Error: days_back must be a positive integer."` |
 | **No announcements found** | Must return exact success string: `"No announcements found."` |
 | **Valid URL + `days_back=X`** | Returns list containing *only* announcements from the last `X` days. Output must follow the format defined in Section 2 (Feature Specification). |
 | **Valid URL + No `days_back`** | Returns list containing announcements from the last 30 days (default). Output must follow the format defined in Section 2 (Feature Specification). |
+
+### Tool: `get_general_announcements` (Both Implementations)
+
+| WHEN... | THEN... |
+| :--- | :--- |
+| **User is not logged in** | Must return exact error string: `"Error: Not logged in."` |
+| **`days_back` <= 0** | Must return exact error string: `"Error: days_back must be a positive integer."` |
+| **`days_back` > 30** | Must return exact error string: `"Error: Cannot retrieve announcements older than 30 days."` |
+| **No announcements found** | Must return exact success string: `"No announcements found."` |
+| **Valid Request** | Returns list containing system and course announcements with source attribution. Output must follow the format defined in Section 2. |
 
 ### C Replica System Behavior
 
@@ -163,7 +210,7 @@ All responses from the `get_course_announcements` tool must match the exact form
 
 ### 1. Python Implementation
 * **Location:** `eclass-mcp-server/`
-* **Artifacts:** The complete updated Python project directory, including any modified or new modules required for the `get_course_announcements` tool.
+* **Artifacts:** The complete updated Python project directory, including any modified or new modules required for the announcement tools.
 
 ### 2. C Replica Implementation
 * **Location:** A new directory named `c-replica/` inside the `eclass-mcp-server/` codebase.

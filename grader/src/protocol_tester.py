@@ -74,7 +74,7 @@ class ServerProcess:
             cwd = self.ctx.eclass_dir / "c-replica"
         
         if self.ctx.debug:
-            print(f"[DEBUG] Starting server: {' '.join(cmd)}")
+            print(f"[DEBUG] Starting server: {" ".join(cmd)}")
             print(f"[DEBUG] Working dir: {cwd}")
         
         try:
@@ -595,7 +595,7 @@ class ProtocolTester:
             server.stop()
     
     # -------------------------------------------------------------------------
-    # Announcements Tests (AN1-AN5)
+    # Course Announcements Tests (AN1-AN6)
     # -------------------------------------------------------------------------
     
     def test_announcements_not_logged_in(self, impl: str) -> Tuple[bool, str, str]:
@@ -796,6 +796,279 @@ class ProtocolTester:
             return False, f"Unexpected response: '{text[:200]}'", text
         finally:
             server.stop()
+
+    def test_announcements_invalid_days(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        AN6: Test announcements with invalid days_back <= 0 (exact error string).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+            return False, "Could not start server", "Server failed to start"
+        
+        try:
+            self._initialize_server(server)
+            
+            if not self._tool_exists(server, "get_course_announcements"):
+                return False, "get_course_announcements tool not implemented", "Tool not found"
+            
+            self._call_tool(server, "login", {})
+            response = self._call_tool(server, "get_course_announcements", 
+                                       {"course_url": "http://localhost/courses/TEST101/", 
+                                        "days_back": 0})
+            text = self._extract_text(response)
+            
+            if not text:
+                return False, "Empty or invalid response", json.dumps(response)
+            
+            # Must be exact match per spec
+            if text == "Error: days_back must be a positive integer.":
+                return True, "Exact error string matched", text
+            
+            return False, f"Expected exact 'Error: days_back must be a positive integer.', got: '{text}'", text
+        finally:
+            server.stop()
+
+    # -------------------------------------------------------------------------
+    # General Announcements Tests (GAN1-GAN6)
+    # -------------------------------------------------------------------------
+
+    def test_general_not_logged_in(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        GAN1: Test general announcements when not logged in.
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+            return False, "Could not start server", "Server failed to start"
+        
+        try:
+            self._initialize_server(server)
+            
+            if not self._tool_exists(server, "get_general_announcements"):
+                return False, "get_general_announcements tool not implemented", "Tool not found in tools/list"
+            
+            response = self._call_tool(server, "get_general_announcements", {})
+            text = self._extract_text(response)
+            
+            if not text:
+                return False, "Empty or invalid response", json.dumps(response)
+            
+            if text == "Error: Not logged in.":
+                return True, "Exact error string matched", text
+            
+            return False, f"Expected 'Error: Not logged in.', got: '{text}'", text
+        finally:
+            server.stop()
+
+    def test_general_invalid_days_low(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        GAN2: Test general announcements with days_back <= 0 (exact error).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+            return False, "Could not start server", "Server failed to start"
+        
+        try:
+            self._initialize_server(server)
+            
+            if not self._tool_exists(server, "get_general_announcements"):
+                return False, "get_general_announcements tool not implemented", "Tool not found"
+            
+            self._call_tool(server, "login", {})
+            response = self._call_tool(server, "get_general_announcements", {{"days_back": 0}})
+            text = self._extract_text(response)
+            
+            if not text:
+                return False, "Empty or invalid response", json.dumps(response)
+            
+            if text == "Error: days_back must be a positive integer.":
+                return True, "Exact error string matched", text
+            
+            return False, f"Expected exact error, got: '{text}'", text
+        finally:
+            server.stop()
+
+    def test_general_invalid_days_high(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        GAN3: Test general announcements with days_back > 30 (exact error).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+            return False, "Could not start server", "Server failed to start"
+        
+        try:
+            self._initialize_server(server)
+            
+            if not self._tool_exists(server, "get_general_announcements"):
+                return False, "get_general_announcements tool not implemented", "Tool not found"
+            
+            self._call_tool(server, "login", {})
+            response = self._call_tool(server, "get_general_announcements", {{"days_back": 31}})
+            text = self._extract_text(response)
+            
+            if not text:
+                return False, "Empty or invalid response", json.dumps(response)
+            
+            if text == "Error: Cannot retrieve announcements older than 30 days.":
+                return True, "Exact error string matched", text
+            
+            return False, f"Expected exact error, got: '{text}'", text
+        finally:
+            server.stop()
+
+    def test_general_none_found(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        GAN4: Test general announcements with no results (mocked empty case).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        # This test relies on valid parsing or "No announcements found" string.
+        # Strict enforcement is tricky with seeded data, so we verify tool execution
+        # and standard response format.
+        
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+             return False, "Could not start server", "Server failed to start"
+             
+        try:
+            self._initialize_server(server)
+            if not self._tool_exists(server, "get_general_announcements"):
+                 return False, "Tool not implemented", "Tool not found"
+                 
+            self._call_tool(server, "login", {})
+            # We try a very short window. Note: System announcements are 1 day old.
+            # Using days_back=1 might catch it depending on exact hour. 
+            # We accept either valid announcements or "No announcements found".
+            response = self._call_tool(server, "get_general_announcements", {{"days_back": 1}})
+            text = self._extract_text(response)
+            
+            if not text:
+                 return False, "Empty response", json.dumps(response)
+            
+            if text == "No announcements found." or ("Found" in text and "announcement" in text):
+                 return True, "Valid response format (None found or filtered list)", text
+            
+            return False, f"Unexpected response format: {text[:100]}", text
+        finally:
+            server.stop()
+
+    def test_general_aggregation(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        GAN5: Test general announcements aggregation (System + Course).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+            return False, "Could not start server", "Server failed to start"
+        
+        try:
+            self._initialize_server(server)
+            if not self._tool_exists(server, "get_general_announcements"):
+                return False, "get_general_announcements tool not implemented", "Tool not found"
+            
+            self._call_tool(server, "login", {})
+            response = self._call_tool(server, "get_general_announcements", {{"days_back": 30}})
+            text = self._extract_text(response)
+            
+            if not text:
+                return False, "Empty or invalid response", json.dumps(response)
+            
+            # Check for "Source: System" and "Source: [Course]" (e.g., TEST101 or Test Course)
+            # The seed data has "Welcome" in TEST101. 
+            has_system = "Source: System" in text
+            
+            if has_system and "Source:" in text and text.count("Source:") >= 2:
+                 return True, f"Aggregation verified (System+Course): {text[:100]}", text
+            
+            return False, f"Missing source attribution. Got: {text[:200]}", text
+        finally:
+            server.stop()
+
+    def test_general_filtering(self, impl: str) -> Tuple[bool, str, str]:
+        """
+        GAN6: Test general announcements filtering (days_back).
+        
+        Args:
+            impl: Implementation to test ("python" or "c").
+        
+        Returns:
+            Tuple of (success: bool, message: str, full_output: str).
+        """
+        ctx = TestContext(impl, self.eclass_dir, self.env_vars, self.debug)
+        server = ServerProcess(ctx)
+        
+        if not server.start():
+            return False, "Could not start server", "Server failed to start"
+        
+        try:
+            self._initialize_server(server)
+            if not self._tool_exists(server, "get_general_announcements"):
+                return False, "get_general_announcements tool not implemented", "Tool not found"
+            
+            self._call_tool(server, "login", {})
+            # Use small days_back (e.g. 5) to exclude "Ancient History" (60 days old)
+            response = self._call_tool(server, "get_general_announcements", {{"days_back": 5}})
+            text = self._extract_text(response)
+            
+            if not text:
+                return False, "Empty or invalid response", json.dumps(response)
+            
+            # Should NOT contain "Ancient History"
+            if "Ancient History" in text:
+                return False, "Filtering failed: Found old announcement 'Ancient History'", text
+            
+            # Should contain "System Maintenance" (1 day old)
+            if "System Maintenance" not in text and "No announcements" not in text:
+                 # It's possible maintenance is exactly > 5 days if run late? No, it's 1 day.
+                 return False, "Filtering failed: Missing recent announcement", text
+            
+            return True, "Filtering verified (Old excluded, Recent included)", text
+        finally:
+            server.stop()
     
     # -------------------------------------------------------------------------
     # Helper Methods
@@ -910,6 +1183,13 @@ class ProtocolTester:
             "AN3": self.test_announcements_none_found("python"),
             "AN4": self.test_announcements_default_days("python"),
             "AN5": self.test_announcements_custom_days("python"),
+            "AN6": self.test_announcements_invalid_days("python"),
+            "GAN1": self.test_general_not_logged_in("python"),
+            "GAN2": self.test_general_invalid_days_low("python"),
+            "GAN3": self.test_general_invalid_days_high("python"),
+            "GAN4": self.test_general_none_found("python"),
+            "GAN5": self.test_general_aggregation("python"),
+            "GAN6": self.test_general_filtering("python"),
         }
     
     def run_c_baseline_tests(self) -> Dict[str, Tuple[bool, str, str]]:
@@ -945,4 +1225,11 @@ class ProtocolTester:
             "AN3_c": self.test_announcements_none_found("c"),
             "AN4_c": self.test_announcements_default_days("c"),
             "AN5_c": self.test_announcements_custom_days("c"),
+            "AN6_c": self.test_announcements_invalid_days("c"),
+            "GAN1_c": self.test_general_not_logged_in("c"),
+            "GAN2_c": self.test_general_invalid_days_low("c"),
+            "GAN3_c": self.test_general_invalid_days_high("c"),
+            "GAN4_c": self.test_general_none_found("c"),
+            "GAN5_c": self.test_general_aggregation("c"),
+            "GAN6_c": self.test_general_filtering("c"),
         }

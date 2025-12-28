@@ -262,8 +262,11 @@ def _skip_python_tests(scorer: Scorer) -> None:
     Args:
         scorer: Scorer instance to record skipped test results.
     """
-    python_tests = ["P1", "P2", "L1", "L2", "L3", "O1", "O2", "C1", "C2", "A1",
-                   "AN1", "AN2", "AN3", "AN4", "AN5"]
+    python_tests = [
+        "P1", "P2", "L1", "L2", "L3", "O1", "O2", "C1", "C2", "A1",
+        "AN1", "AN2", "AN3", "AN4", "AN5", "AN6",
+        "GAN1", "GAN2", "GAN3", "GAN4", "GAN5", "GAN6"
+    ]
     for test_id in python_tests:
         scorer.record(test_id, False, "Skipped - Python build failed", "Build failed")
 
@@ -275,8 +278,12 @@ def _skip_c_tests(scorer: Scorer) -> None:
     Args:
         scorer: Scorer instance to record skipped test results.
     """
-    c_tests = ["M1", "P1_c", "P2_c", "L1_c", "L2_c", "L3_c", "O1_c", "O2_c", 
-               "C1_c", "C2_c", "A1_c", "AN1_c", "AN2_c", "AN3_c", "AN4_c", "AN5_c"]
+    c_tests = [
+        "M1", 
+        "P1_c", "P2_c", "L1_c", "L2_c", "L3_c", "O1_c", "O2_c", "C1_c", "C2_c", "A1_c",
+        "AN1_c", "AN2_c", "AN3_c", "AN4_c", "AN5_c", "AN6_c",
+        "GAN1_c", "GAN2_c", "GAN3_c", "GAN4_c", "GAN5_c", "GAN6_c"
+    ]
     for test_id in c_tests:
         scorer.record(test_id, False, "Skipped - C build failed", "Build failed")
 

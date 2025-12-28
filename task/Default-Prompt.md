@@ -8,7 +8,7 @@ You have the following codebases in your workspace:
 
 **Deliverables:**
 The final implementation must include two distinct artifact sets, as specified in the PRD (Section 6):
-1.  **Python Implementation:** The updated `eclass-mcp-server` containing the new `get_course_announcements` tool logic and necessary support modules.
+1.  **Python Implementation:** The updated `eclass-mcp-server` containing the new announcement tools logic and necessary support modules.
 2.  **C Replica:** A directory `c-replica/` containing the source code (`.c`, `.h`) and Makefile for the native C microservice inside the `eclass-mcp-server` codebase. This must compile via the specified command and strictly adhere to the technical stack defined in the Spec.
 
 **Crucial Constraints:**

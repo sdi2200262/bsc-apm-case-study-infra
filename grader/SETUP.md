@@ -197,6 +197,11 @@ INSERT INTO announcement (course_id, title, content, date, visible) VALUES
 ((SELECT id FROM course WHERE code='TEST101'), 'Welcome', 'Welcome to the course!', NOW() - INTERVAL 3 DAY, 1),
 ((SELECT id FROM course WHERE code='TEST101'), 'Assignment 1', 'First assignment.', NOW() - INTERVAL 10 DAY, 1),
 ((SELECT id FROM course WHERE code='TEST101'), 'Old News', 'Old announcement.', NOW() - INTERVAL 45 DAY, 1);
+
+INSERT INTO admin_announcement (title, body, date, visible, lang) VALUES
+('System Maintenance', 'System will be down on Sunday.', NOW() - INTERVAL 1 DAY, 1, 'el'),
+('Policy Update', 'New usage policy available.', NOW() - INTERVAL 20 DAY, 1, 'el'),
+('Ancient History', 'This is from last year.', NOW() - INTERVAL 60 DAY, 1, 'el');
 "
 ```
 
