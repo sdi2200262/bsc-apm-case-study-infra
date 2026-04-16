@@ -4,19 +4,19 @@ The task specification, grading suite and participant guides for the BSc Thesis 
 
 ## Task Summary
 
-*Get Course Announcements and C Replica*
+*Announcements Functionality and C Replica*
 
-Participants implement new functionality in a Python MCP server (`get_course_announcements` tool) and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that replicates the participant's working environment.
+Participants implement new announcement tools (`get_course_announcements` and `get_general_announcements`) in a Python MCP server and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that replicates the participant's working environment.
 
 ## Scoring
 
-Total: **48 points**
+Total: **100 points**
 
 | Category | Points | Description |
 |----------|--------|-------------|
 | Python Baseline | 12 | Existing functionality (must not break) |
-| Python Feature | 12 | `get_course_announcements` implementation |
-| C Replica | 24 | Full C implementation with memory safety |
+| Python Features | 36 | `get_course_announcements` and `get_general_announcements` |
+| C Replica | 52 | Full C implementation with memory safety |
 
 See [task/SCORING.md](task/SCORING.md) for the detailed rubric.
 
@@ -29,8 +29,8 @@ bsc-apm-case-study-task/
 ├── task/                               # Task specification
 │   ├── README.md
 │   ├── SCORING.md
-│   ├── Specification.md
-│   └── Default-Prompt.md
+│   ├── PRD.md
+│   └── Prompt.md
 ├── grader/                             # Grading infrastructure
 │   ├── README.md
 │   ├── SETUP.md

@@ -36,7 +36,7 @@ The grader evaluates submissions as git patches applied against baseline reposit
 - `eclass-mcp-server` at commit `8b4e39c`
 - `openeclass` at commit `e8b3329` (Docker image `openeclass:test`)
 
-Tests cover Python baseline (12 points), Python feature (12 points), and C replica (24 points). Baseline score (no patch): **12/48**.
+Tests cover Python baseline (12 points), Python features (36 points), and C replica (52 points). Baseline score (no patch): **12/100**.
 
 See source code docstrings in `src/` for detailed test specifications.
 

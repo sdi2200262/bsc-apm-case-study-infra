@@ -6,15 +6,15 @@ This directory contains the task specification materials provided to participant
 
 | File | Description |
 |------|-------------|
-| [Specification.md](Specification.md) | Product Requirements Document (PRD) - the single source of truth |
-| [Default-Prompt.md](Default-Prompt.md) | Default prompt to start AI assistant conversations |
+| [PRD.md](PRD.md) | Product Requirements Document - the single source of truth |
+| [Prompt.md](Prompt.md) | Default prompt to start AI assistant conversations |
 
 ## Task Overview
 
-*Get Course Announcements and C Replica*
+*Announcements Functionality and C Replica*
 
 Participants are tasked with:
-1. Implementing a new `get_course_announcements` tool in the existing Python MCP server: `eclass-mcp-server`
+1. Implementing `get_course_announcements` and `get_general_announcements` tools in the existing Python MCP server: `eclass-mcp-server`
 2. Creating a native C replica of the entire MCP server inside `eclass-mcp-server/c-replica`
 
 ## Key Challenges

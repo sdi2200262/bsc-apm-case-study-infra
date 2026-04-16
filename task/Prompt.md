@@ -1,6 +1,6 @@
 My task is to expand the functionality of the `./eclass-mcp-server` and create a high-performance native C replica.
 
-The single source of truth for all requirements is the `Specification.md` file. I must strictly ensure the final implementation adheres to all functional requirements and acceptance criteria defined within it.
+The single source of truth for all requirements is the `PRD.md` file. I must strictly ensure the final implementation adheres to all functional requirements and acceptance criteria defined within it.
 
 You have the following codebases in your workspace:
 1.  `./eclass-mcp-server` (The main Python codebase to be modified)

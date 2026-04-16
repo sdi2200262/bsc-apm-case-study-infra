@@ -70,10 +70,10 @@ The grader tests against these baseline versions:
 | eclass-mcp-server | `8b4e39c` (main branch) |
 | openeclass | `e8b3329` / Docker image `openeclass:test` |
 
-**Expected baseline score (no patch):** 12/48 points
+**Expected baseline score (no patch):** 12/100 points
 - Python Baseline: 12/12
-- Python Feature: 0/12 (not implemented in baseline)
-- C Replica: 0/24 (not implemented in baseline)
+- Python Features: 0/36 (not implemented in baseline)
+- C Replica: 0/52 (not implemented in baseline)
 
 ## Workspace Structure
 
@@ -237,7 +237,7 @@ cd bsc-apm-case-study-task/grader
 ./grade --no-patch
 ```
 
-Expected output: 12/48 points (Python Baseline: 12/12).
+Expected output: 12/100 points (Python Baseline: 12/12).
 
 ## Troubleshooting
 
