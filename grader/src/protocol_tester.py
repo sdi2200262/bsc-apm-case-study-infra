@@ -74,7 +74,8 @@ class ServerProcess:
             cwd = self.ctx.eclass_dir / "c-replica"
         
         if self.ctx.debug:
-            print(f"[DEBUG] Starting server: {" ".join(cmd)}")
+            cmd_str = " ".join(cmd)
+            print(f"[DEBUG] Starting server: {cmd_str}")
             print(f"[DEBUG] Working dir: {cwd}")
         
         try:
