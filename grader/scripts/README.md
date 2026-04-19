@@ -5,7 +5,6 @@ CLI utilities for analyzing grading outputs and chat exports.
 ## Overview
 
 - **copilot_chat_parser.py** - Analyzes GitHub Copilot chat exports
-- **cursor_chat_parser.py** - Analyzes Cursor markdown chat exports
 - **results_viewer.py** - Interactive browser for grading results JSON files
 
 ## Quick Start
@@ -24,20 +23,6 @@ export CHAT_PARSER_SECRET='your-secret-key'
 ./copilot_chat_parser.py --help
 ```
 
-### cursor_chat_parser.py
-
-```bash
-# Extract metrics from multiple files
-./cursor_chat_parser.py chat1.md chat2.md --metrics
-
-# Sanitize files (requires CHAT_PARSER_SECRET)
-export CHAT_PARSER_SECRET='your-secret-key'
-./cursor_chat_parser.py chat1.md --sanitize
-
-# View full usage
-./cursor_chat_parser.py --help
-```
-
 ### results_viewer.py
 
 ```bash
@@ -53,7 +38,7 @@ export CHAT_PARSER_SECRET='your-secret-key'
 
 ## Environment Variables
 
-- **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization operations in chat parsers. Must be the same for both encrypt and decrypt operations. Can be set via environment variable or `.env` file.
+- **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization operations in the chat parser. Must be the same for both encrypt and decrypt operations. Can be set via environment variable or `.env` file.
 
 ## Documentation
 

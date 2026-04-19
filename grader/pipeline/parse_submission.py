@@ -44,27 +44,22 @@ from workspace import (
 def detect_platform(chats_dir: Path) -> Tuple[str, List[Path]]:
     """
     Detect platform from chat file extensions.
-    
+
     Args:
         chats_dir: Path to chats directory.
-        
+
     Returns:
         Tuple of (platform, list of chat files).
     """
     if not chats_dir.exists():
         return ("unknown", [])
-    
+
     json_files = list(chats_dir.glob("*.json"))
-    md_files = list(chats_dir.glob("*.md"))
-    
-    if json_files and not md_files:
+
+    if json_files:
         return ("copilot", json_files)
-    elif md_files and not json_files:
-        return ("cursor", md_files)
-    elif json_files and md_files:
-        return ("mixed", json_files + md_files)
-    else:
-        return ("unknown", [])
+
+    return ("unknown", [])
 
 
 def run_parser(
@@ -77,7 +72,7 @@ def run_parser(
     Run the appropriate parser script.
     
     Args:
-        parser_script: Path to parser script (copilot_chat_parser.py or cursor_chat_parser.py).
+        parser_script: Path to parser script (copilot_chat_parser.py).
         chat_files: List of chat file paths to process.
         output_metrics: Path to output metrics JSON file.
         sanitize: Whether to sanitize chat files.
@@ -260,11 +255,8 @@ def main() -> int:
     
     # Locate parser script
     script_dir = Path(__file__).parent
-    if platform == "copilot":
-        parser_script = script_dir.parent / "scripts" / "copilot_chat_parser.py"
-    else:
-        parser_script = script_dir.parent / "scripts" / "cursor_chat_parser.py"
-    
+    parser_script = script_dir.parent / "scripts" / "copilot_chat_parser.py"
+
     if not parser_script.exists():
         print(f"Error: Parser not found: {parser_script}", file=sys.stderr)
         return 2

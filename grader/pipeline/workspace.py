@@ -102,7 +102,7 @@ def get_data_dir(platform: str, workspace_root: Optional[Path] = None) -> Path:
     Get data directory for a platform.
     
     Args:
-        platform: Platform name ('copilot' or 'cursor')
+        platform: Platform name ('copilot')
         workspace_root: Workspace root (auto-detected if None)
         
     Returns:
@@ -149,7 +149,7 @@ def detect_platform_from_zip(zip_path: Path) -> Optional[str]:
         zip_path: Path to submission zip file
         
     Returns:
-        'copilot' or 'cursor' or None if cannot determine
+        'copilot' or None if cannot determine
     """
     # Try parsing filename first
     parsed = parse_submission_name(zip_path.name)
@@ -169,13 +169,10 @@ def detect_platform_from_zip(zip_path: Path) -> Optional[str]:
     # Check for chat files
     chat_files = [n for n in names if '/chats/' in n and not n.endswith('/')]
     json_chats = [f for f in chat_files if f.endswith('.json')]
-    md_chats = [f for f in chat_files if f.endswith('.md')]
-    
-    if json_chats and not md_chats:
+
+    if json_chats:
         return "copilot"
-    elif md_chats and not json_chats:
-        return "cursor"
-    
+
     return None
 
 

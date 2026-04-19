@@ -86,10 +86,7 @@ workspace/
 │       └── pipeline/
 ├── bsc-apm-case-study-data/    # Data repository
 │   └── submissions_sanitized/
-│       ├── copilot/
-│       │   ├── pipeline_manifest.json
-│       │   └── dataset.csv
-│       └── cursor/
+│       └── copilot/
 │           ├── pipeline_manifest.json
 │           └── dataset.csv
 ├── eclass-mcp-server/          # eClass MCP Server repository
@@ -128,7 +125,7 @@ git checkout e8b3329
 cd ..
 ```
 
-**Note:** The data repository already contains the required directory structure (`submissions_sanitized/copilot/` and `submissions_sanitized/cursor/`). The pipeline scripts will automatically create `pipeline_manifest.json` and `dataset.csv` files when processing submissions.
+**Note:** The data repository already contains the required directory structure (`submissions_sanitized/copilot/`). The pipeline scripts will automatically create `pipeline_manifest.json` and `dataset.csv` files when processing submissions.
 
 ### 3. Build OpenEclass Docker Image
 

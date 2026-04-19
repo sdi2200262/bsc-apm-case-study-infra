@@ -45,12 +45,6 @@ LOGS_PATTERN = re.compile(
 CHAT_COPILOT_PATTERN = re.compile(
     rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_chat_(\d{{2}})\.json$"
 )
-CHAT_CURSOR_PATTERN = re.compile(
-    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_chat_(\d{{2}})\.md$"
-)
-REQUESTS_PATTERN = re.compile(
-    rf"^({PID_PATTERN})_({SESSION_PATTERN})_({PLATFORM_PATTERN})_({TOOL_PATTERN})_requests\.csv$"
-)
 
 
 def validate_zip_structure(zip_path: Path) -> Tuple[bool, List[str], str]:
@@ -109,35 +103,18 @@ def validate_zip_structure(zip_path: Path) -> Tuple[bool, List[str], str]:
     
     # Check for chats
     chat_files = [n for n in names if '/chats/' in n and not n.endswith('/')]
-    
     json_chats = [f for f in chat_files if f.endswith('.json')]
-    md_chats = [f for f in chat_files if f.endswith('.md')]
-    
-    if json_chats and md_chats:
-        issues.append("Mixed chat formats found (both .json and .md)")
-    elif json_chats:
+
+    if json_chats:
         platform = "copilot"
-    elif md_chats:
-        platform = "cursor"
     else:
         issues.append("No chat files found in logs/chats/")
-    
+
     # Validate chat naming
     for chat in json_chats:
         basename = Path(chat).name
         if not CHAT_COPILOT_PATTERN.match(basename):
             issues.append(f"Invalid chat filename: {basename}")
-    
-    for chat in md_chats:
-        basename = Path(chat).name
-        if not CHAT_CURSOR_PATTERN.match(basename):
-            issues.append(f"Invalid chat filename: {basename}")
-    
-    # Cursor-specific: check for requests.csv
-    if platform == "cursor":
-        stats_files = [n for n in names if '/stats/' in n and n.endswith('.csv')]
-        if not stats_files:
-            issues.append("Missing stats/requests.csv (required for Cursor submissions)")
     
     is_valid = len(issues) == 0
     return (is_valid, issues, platform)

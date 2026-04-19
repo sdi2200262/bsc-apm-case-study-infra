@@ -62,7 +62,6 @@ grader/
 │   └── report.py                # Report generation
 ├── scripts/                     # Grader utility scripts
 │   ├── copilot_chat_parser.py  # Copilot chat analyzer
-│   ├── cursor_chat_parser.py   # Cursor chat analyzer
 │   └── results_viewer.py       # Results browser
 ├── pipeline/                    # Pipeline infrastructure
 │   ├── validate_submission.py  # Validation and extraction

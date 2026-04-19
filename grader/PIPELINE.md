@@ -31,8 +31,8 @@ Submissions follow format: `{PID}_{S1|2}_{Platform}_{Tool}_submission.zip`
 
 - `{PID}` - Participant ID (e.g., `P001`)
 - `{S1|2}` - Session number (`S1` = first tool, `S2` = second tool)
-- `{Platform}` - `copilot` or `cursor`
-- `{Tool}` - Tool identifier (`apm`, `spec-kit`, `cursor-plan`, `copilot-plan`)
+- `{Platform}` - `copilot`
+- `{Tool}` - Tool identifier (`apm`, `spec-kit`, `copilot-plan`)
 
 Example: `P001_S1_copilot_apm_submission.zip`
 
@@ -65,12 +65,11 @@ workspace/
 │       └── pipeline/
 ├── bsc-apm-case-study-data/    # Data repository
 │   └── submissions_sanitized/
-│       ├── copilot/
-│       │   ├── pipeline_manifest.json
-│       │   ├── dataset.csv
-│       │   └── {PID}/
-│       │       └── S{S1|2}_{tool}/
-│       └── cursor/
+│       └── copilot/
+│           ├── pipeline_manifest.json
+│           ├── dataset.csv
+│           └── {PID}/
+│               └── S{S1|2}_{tool}/
 ├── eclass-mcp-server/           # eClass MCP Server repository
 └── openeclass/                  # Local openeclass repository
 ```
@@ -119,19 +118,17 @@ Processed data is stored in `bsc-apm-case-study-data/submissions_sanitized/{plat
 
 ```
 submissions_sanitized/
-├── copilot/
-│   ├── pipeline_manifest.json    # Audit trail for all operations
-│   ├── dataset.csv                # Aggregated dataset
-│   └── {PID}/
-│       └── S{S1|2}_{tool}/
-│           ├── {PID}_{S1|2}_{platform}_{tool}_solution.patch
-│           ├── {PID}_{S1|2}_{platform}_{tool}_results.json
-│           ├── {PID}_{S1|2}_{platform}_{tool}_metrics.json
-│           ├── {PID}_{S1|2}_{platform}_{tool}_combined.json
-│           └── chats/
-│               └── sanitized_*.json
-└── cursor/
-    └── (same structure)
+└── copilot/
+    ├── pipeline_manifest.json    # Audit trail for all operations
+    ├── dataset.csv                # Aggregated dataset
+    └── {PID}/
+        └── S{S1|2}_{tool}/
+            ├── {PID}_{S1|2}_{platform}_{tool}_solution.patch
+            ├── {PID}_{S1|2}_{platform}_{tool}_results.json
+            ├── {PID}_{S1|2}_{platform}_{tool}_metrics.json
+            ├── {PID}_{S1|2}_{platform}_{tool}_combined.json
+            └── chats/
+                └── sanitized_*.json
 ```
 
 The `pipeline_manifest.json` file tracks all operations with checksums and timestamps, enabling validation at each checkpoint and error recovery.

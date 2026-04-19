@@ -76,7 +76,7 @@ See [../PIPELINE.md](../PIPELINE.md) for the complete protocol and workflow.
 ./validate_dataset.py --platform copilot
 
 # Verbose output
-./validate_dataset.py --platform cursor --verbose
+./validate_dataset.py --platform copilot --verbose
 
 # View full usage
 ./validate_dataset.py --help

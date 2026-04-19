@@ -898,7 +898,7 @@ class ProtocolTester:
                 return False, "get_general_announcements tool not implemented", "Tool not found"
             
             self._call_tool(server, "login", {})
-            response = self._call_tool(server, "get_general_announcements", {{"days_back": 0}})
+            response = self._call_tool(server, "get_general_announcements", {"days_back": 0})
             text = self._extract_text(response)
             
             if not text:
@@ -934,7 +934,7 @@ class ProtocolTester:
                 return False, "get_general_announcements tool not implemented", "Tool not found"
             
             self._call_tool(server, "login", {})
-            response = self._call_tool(server, "get_general_announcements", {{"days_back": 31}})
+            response = self._call_tool(server, "get_general_announcements", {"days_back": 31})
             text = self._extract_text(response)
             
             if not text:
@@ -976,7 +976,7 @@ class ProtocolTester:
             # We try a very short window. Note: System announcements are 1 day old.
             # Using days_back=1 might catch it depending on exact hour. 
             # We accept either valid announcements or "No announcements found".
-            response = self._call_tool(server, "get_general_announcements", {{"days_back": 1}})
+            response = self._call_tool(server, "get_general_announcements", {"days_back": 1})
             text = self._extract_text(response)
             
             if not text:
@@ -1011,7 +1011,7 @@ class ProtocolTester:
                 return False, "get_general_announcements tool not implemented", "Tool not found"
             
             self._call_tool(server, "login", {})
-            response = self._call_tool(server, "get_general_announcements", {{"days_back": 30}})
+            response = self._call_tool(server, "get_general_announcements", {"days_back": 30})
             text = self._extract_text(response)
             
             if not text:
@@ -1051,7 +1051,7 @@ class ProtocolTester:
             
             self._call_tool(server, "login", {})
             # Use small days_back (e.g. 5) to exclude "Ancient History" (60 days old)
-            response = self._call_tool(server, "get_general_announcements", {{"days_back": 5}})
+            response = self._call_tool(server, "get_general_announcements", {"days_back": 5})
             text = self._extract_text(response)
             
             if not text:

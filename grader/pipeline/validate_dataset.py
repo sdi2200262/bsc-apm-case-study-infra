@@ -123,7 +123,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--platform",
-        choices=["copilot", "cursor"],
+        choices=["copilot"],
         required=True,
         help="Platform name (required)"
     )
