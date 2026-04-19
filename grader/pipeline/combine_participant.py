@@ -166,15 +166,15 @@ def main() -> int:
     # Extract nested structure
     python = scores.get('python', {})
     python_baseline = python.get('baseline', {'score': 0, 'max': 12})
-    python_feature = python.get('feature', {'score': 0, 'max': 12})
+    python_feature = python.get('feature', {'score': 0, 'max': 36})
     c = scores.get('c', {})
-    c_total = c.get('total', {'score': 0, 'max': 24})
-    
+    c_total = c.get('total', {'score': 0, 'max': 52})
+
     # Use grand_total if available, otherwise calculate
     grand_total = scores.get('grand_total', {})
     if grand_total:
         total_score = grand_total.get('score', 0)
-        max_score = grand_total.get('max', 48)
+        max_score = grand_total.get('max', 100)
     else:
         total_score = (
             python_baseline.get('score', 0) +
@@ -183,8 +183,8 @@ def main() -> int:
         )
         max_score = (
             python_baseline.get('max', 12) +
-            python_feature.get('max', 12) +
-            c_total.get('max', 24)
+            python_feature.get('max', 36) +
+            c_total.get('max', 52)
         )
     
     # Build combined structure
@@ -203,11 +203,11 @@ def main() -> int:
             },
             "python_feature": {
                 "score": python_feature.get('score', 0),
-                "max": python_feature.get('max', 12)
+                "max": python_feature.get('max', 36)
             },
             "c_replica": {
                 "score": c_total.get('score', 0),
-                "max": c_total.get('max', 24)
+                "max": c_total.get('max', 52)
             }
         },
         "metrics": metrics

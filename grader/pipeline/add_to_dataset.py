@@ -100,7 +100,7 @@ def combined_to_row(combined: Dict[str, Any]) -> Dict[str, Any]:
         "platform": combined.get("platform", ""),
         "tool": combined.get("tool", ""),
         "total_score": grading.get("total_score", 0),
-        "max_score": grading.get("max_score", 48),
+        "max_score": grading.get("max_score", 100),
         "python_baseline_score": grading.get("python_baseline", {}).get("score", 0),
         "python_feature_score": grading.get("python_feature", {}).get("score", 0),
         "c_replica_score": grading.get("c_replica", {}).get("score", 0),

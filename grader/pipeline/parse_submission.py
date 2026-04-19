@@ -114,10 +114,10 @@ def run_parser(
 def create_metrics_summary(metrics_path: Path) -> str:
     """
     Create human-readable summary of metrics.
-    
+
     Args:
         metrics_path: Path to metrics JSON file.
-        
+
     Returns:
         Summary text string.
     """
@@ -126,34 +126,47 @@ def create_metrics_summary(metrics_path: Path) -> str:
             metrics = json.load(f)
     except Exception as e:
         return f"Error reading metrics: {e}"
-    
+
+    project_meta = metrics.get('project_metadata', {})
+    m = metrics.get('metrics', {})
+
     lines = []
     lines.append("=" * 70)
     lines.append("INTERACTION METRICS SUMMARY")
     lines.append("=" * 70)
     lines.append("")
-    
-    # Extract key metrics
-    total_turns = metrics.get('total_turns', 0)
-    total_messages = metrics.get('total_messages', 0)
-    total_tokens = metrics.get('total_tokens', 0)
-    user_behavior = metrics.get('user_behavior', 'Unknown')
-    
-    lines.append(f"Total Turns: {total_turns}")
-    lines.append(f"Total Messages: {total_messages}")
-    lines.append(f"Total Tokens: {total_tokens}")
-    lines.append(f"User Behavior: {user_behavior}")
+
+    # Session envelope
+    model_ids = project_meta.get('unique_model_ids', [])
+    lines.append(f"Conversations:           {project_meta.get('file_count', 0)}")
+    lines.append(f"Total requests:          {m.get('total_requests', 0)}")
+    lines.append(f"Session duration (min):  {m.get('session_duration_minutes', 0.0)}")
+    lines.append(f"Models:                  {', '.join(model_ids) if model_ids else 'none'}")
     lines.append("")
-    
-    # Add any other relevant metrics
-    if 'avg_turn_length' in metrics:
-        lines.append(f"Average Turn Length: {metrics['avg_turn_length']}")
-    if 'apm_usage' in metrics:
-        lines.append(f"APM Usage: {metrics['apm_usage']}")
-    
+
+    # Reliability sub-metrics
+    lines.append("Reliability")
+    lines.append(f"  Tool success rate:     {m.get('tool_success_rate', 0.0)}")
+    lines.append(f"  Tool retry rate:       {m.get('tool_retry_rate', 0.0)}")
+    lines.append(f"  User edit rate:        {m.get('user_edit_rate', 0.0)}")
     lines.append("")
+
+    # Behavior distribution (share of user inputs per bucket)
+    lines.append("Behavior distribution")
+    lines.append(f"  Short inputs:          {m.get('ratio_short_inputs', 0.0)}")
+    lines.append(f"  Protocol inputs:       {m.get('ratio_protocol_inputs', 0.0)}")
+    lines.append(f"  Standard inputs:       {m.get('ratio_standard_inputs', 0.0)}")
+    lines.append("")
+
+    # Behavior magnitude (average characters per bucket)
+    lines.append("Behavior magnitude (avg chars)")
+    lines.append(f"  Short inputs:          {m.get('avg_chars_short', 0.0)}")
+    lines.append(f"  Protocol inputs:       {m.get('avg_chars_protocol', 0.0)}")
+    lines.append(f"  Standard inputs:       {m.get('avg_chars_standard', 0.0)}")
+    lines.append("")
+
     lines.append("=" * 70)
-    
+
     return "\n".join(lines)
 
 

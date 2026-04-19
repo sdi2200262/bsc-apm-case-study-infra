@@ -95,7 +95,7 @@ def parse_grading_results(results_path: Path) -> Tuple[int, int, dict]:
     # Use grand_total if available, otherwise calculate
     if grand_total:
         total = grand_total.get('score', 0)
-        max_score = grand_total.get('max', 48)
+        max_score = grand_total.get('max', 100)
     else:
         total = (
             python_baseline.get('score', 0) +
@@ -104,14 +104,14 @@ def parse_grading_results(results_path: Path) -> Tuple[int, int, dict]:
         )
         max_score = (
             python_baseline.get('max', 12) +
-            python_feature.get('max', 12) +
-            c_total.get('max', 24)
+            python_feature.get('max', 36) +
+            c_total.get('max', 52)
         )
-    
+
     breakdown = {
         "python_baseline": f"{python_baseline.get('score', 0)}/{python_baseline.get('max', 12)}",
-        "python_feature": f"{python_feature.get('score', 0)}/{python_feature.get('max', 12)}",
-        "c_replica": f"{c_total.get('score', 0)}/{c_total.get('max', 24)}",
+        "python_feature": f"{python_feature.get('score', 0)}/{python_feature.get('max', 36)}",
+        "c_replica": f"{c_total.get('score', 0)}/{c_total.get('max', 52)}",
     }
     
     return (total, max_score, breakdown)
