@@ -63,51 +63,56 @@ def detect_platform(chats_dir: Path) -> Tuple[str, List[Path]]:
 
 
 def run_parser(
-    parser_script: Path,
+    scripts_dir: Path,
     chat_files: List[Path],
     output_metrics: Path,
     sanitize: bool = True
 ) -> Tuple[bool, str]:
     """
-    Run the appropriate parser script.
-    
+    Run the Copilot Chat Parser package on the submission's chat files.
+
     Args:
-        parser_script: Path to parser script (copilot_chat_parser.py).
+        scripts_dir: Directory that contains the ``copilot_chat_parser``
+            package. Added to ``PYTHONPATH`` for the subprocess so
+            ``python -m copilot_chat_parser`` resolves.
         chat_files: List of chat file paths to process.
         output_metrics: Path to output metrics JSON file.
-        sanitize: Whether to sanitize chat files.
-        
+        sanitize: Whether to sanitize chat files after metrics extraction.
+
     Returns:
         Tuple of (success, error_message).
     """
-    # Extract metrics
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{scripts_dir}{os.pathsep}{existing_pythonpath}"
+        if existing_pythonpath
+        else str(scripts_dir)
+    )
+
     cmd = [
-        sys.executable, str(parser_script),
+        sys.executable, "-m", "copilot_chat_parser",
         *[str(f) for f in chat_files],
         "--metrics",
         "--format", "json",
         "-o", str(output_metrics)
     ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0:
         return (False, f"Metrics extraction failed: {result.stderr}")
-    
-    # Sanitize
+
     if sanitize:
         if not os.environ.get('CHAT_PARSER_SECRET'):
             return (False, "CHAT_PARSER_SECRET environment variable not set")
-        
         cmd = [
-            sys.executable, str(parser_script),
+            sys.executable, "-m", "copilot_chat_parser",
             *[str(f) for f in chat_files],
             "--sanitize"
         ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         if result.returncode != 0:
             return (False, f"Sanitization failed: {result.stderr}")
-    
+
     return (True, "")
 
 
@@ -266,26 +271,27 @@ def main() -> int:
     print(f"Parsing: {pid} {session} {platform} {tool}")
     print(f"Chat files: {len(chat_files)}")
     
-    # Locate parser script
+    # Locate parser package
     script_dir = Path(__file__).parent
-    parser_script = script_dir.parent / "scripts" / "copilot_chat_parser.py"
+    scripts_dir = script_dir.parent / "scripts"
+    parser_package_init = scripts_dir / "copilot_chat_parser" / "__init__.py"
 
-    if not parser_script.exists():
-        print(f"Error: Parser not found: {parser_script}", file=sys.stderr)
+    if not parser_package_init.exists():
+        print(f"Error: Parser package not found at: {scripts_dir / 'copilot_chat_parser'}", file=sys.stderr)
         return 2
-    
+
     # Output paths
     output_metrics = dataset_dir / f"{pid}_{session}_{platform}_{tool}_metrics.json"
     output_txt = workspace_root / f"results_{pid}_{session}_{platform}_{tool}.txt"
-    
+
     # Files created by this script (for cleanup on error)
     created_files = []
-    
+
     # Run parser
     print(f"\nExtracting metrics...")
     try:
         success, error = run_parser(
-            parser_script,
+            scripts_dir,
             chat_files,
             output_metrics,
             sanitize=not args.no_sanitize

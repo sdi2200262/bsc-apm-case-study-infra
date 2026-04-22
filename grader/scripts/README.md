@@ -4,24 +4,38 @@ CLI utilities for analyzing grading outputs and chat exports.
 
 ## Overview
 
-- **copilot_chat_parser.py** - Analyzes GitHub Copilot chat exports
-- **results_viewer.py** - Interactive browser for grading results JSON files
+- **copilot_chat_parser/** - Package that analyzes GitHub Copilot chat exports.
+- **results_viewer.py** - Interactive browser for grading results JSON files.
 
 ## Quick Start
 
-### copilot_chat_parser.py
+### copilot_chat_parser
+
+Invoke as a Python module from the `scripts/` directory (the package
+location). The package is runnable without installation:
 
 ```bash
-# Extract metrics from multiple files
-./copilot_chat_parser.py chat1.json chat2.json --metrics
+cd bsc-apm-case-study-task/grader/scripts
+
+# Extract metrics from one or more chat exports
+python -m copilot_chat_parser chat1.json chat2.json --metrics
+
+# Pick a single output format and location
+python -m copilot_chat_parser chat1.json --metrics --format json -o metrics.json
 
 # Sanitize files (requires CHAT_PARSER_SECRET)
 export CHAT_PARSER_SECRET='your-secret-key'
-./copilot_chat_parser.py chat1.json --sanitize
+python -m copilot_chat_parser chat1.json --sanitize
+
+# Adjust the short-input threshold
+python -m copilot_chat_parser chat1.json --metrics --short-threshold 30
 
 # View full usage
-./copilot_chat_parser.py --help
+python -m copilot_chat_parser --help
 ```
+
+The pipeline (`../pipeline/parse_submission.py`) invokes the package the
+same way, setting `PYTHONPATH` to this `scripts/` directory.
 
 ### results_viewer.py
 
@@ -38,16 +52,16 @@ export CHAT_PARSER_SECRET='your-secret-key'
 
 ## Environment Variables
 
-- **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization operations in the chat parser. Must be the same for both encrypt and decrypt operations. Can be set via environment variable or `.env` file.
+- **CHAT_PARSER_SECRET** - Required for sanitization/unsanitization operations in the chat parser. Must match across encrypt and decrypt. Can be set via environment variable or `.env` file.
 
 ## Documentation
 
 For detailed usage, command-line options, and output formats, see:
-- Script help: `./<script_name> --help`
-- Source code docstrings: See function documentation in each script file
+- Module help: `python -m copilot_chat_parser --help`
+- Source code docstrings: each module in `copilot_chat_parser/` and its
+  `metrics/` subpackage.
 
 ## Pipeline Scripts
 
-Pipeline scripts for end-to-end submission processing are located in `../pipeline/`.
-
+Pipeline scripts for end-to-end submission processing live in `../pipeline/`.
 See [../pipeline/README.md](../pipeline/README.md) for script documentation and [../PIPELINE.md](../PIPELINE.md) for the full protocol.

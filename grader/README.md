@@ -61,7 +61,7 @@ grader/
 │   ├── scorer.py                # Point allocation
 │   └── report.py                # Report generation
 ├── scripts/                     # Grader utility scripts
-│   ├── copilot_chat_parser.py  # Copilot chat analyzer
+│   ├── copilot_chat_parser/    # Copilot chat analyzer package
 │   └── results_viewer.py       # Results browser
 ├── pipeline/                    # Pipeline infrastructure
 │   ├── validate_submission.py  # Validation and extraction
