@@ -99,8 +99,9 @@ class ConversationView:
             sequential index suffix (``planner-1``, ``manager-2``,
             ``worker-3``); the literal string ``unassigned-N`` for
             APM conversations whose first slash command is not a role
-            initiator; the literal string ``unassigned-N`` for any
-            Spec-kit conversation (Spec-kit has no role concept).
+            initiator; the literal string ``conversation-N`` for any
+            Spec-kit conversation (Spec-kit has no role concept, so
+            the label is descriptive rather than role-bearing).
         first_command: Verbatim first slash command observed in the
             conversation, including any arguments, typos, or
             whitespace as written by the participant. Empty string
@@ -242,10 +243,9 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
     views: list[ConversationView] = []
     for index, (conversation, first_command, first_record, first_ts) in enumerate(initial, start=1):
         per_conversation: dict[str, str] = {
-            record.uuid: phase
+            record.uuid: phase_by_uuid_global[record.uuid]
             for record in conversation.records
             if record.uuid and record.uuid in phase_by_uuid_global
-            for phase in (phase_by_uuid_global[record.uuid],)
         }
         views.append(ConversationView(
             conversation=conversation,

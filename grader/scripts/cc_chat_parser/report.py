@@ -257,7 +257,7 @@ def _build_scope_block(
     than the union of intervals, reflecting that a role is one
     conversation file whose own turns do not overlap.
     """
-    steer_events = _steer_events_in_scope(session, scope_kind, role_view)
+    steer_events = _steer_events_in_scope(session, scope_kind, role_view, turns)
     economic = _compute_economic_for_scope(session, turns, rate_table)
     time_metrics = compute_time_metrics(turns, scope_start, scope_end)
     user_input = compute_user_input_metrics(turns, steer_events, short_threshold)
@@ -267,7 +267,7 @@ def _build_scope_block(
     if scope_kind == "role":
         time_block = _time_block_role(time_metrics)
     else:
-        time_block = _time_block(time_metrics)
+        time_block = _time_block(time_metrics, scope_kind)
     return {
         "economic": _economic_block(economic),
         "process": {
@@ -316,6 +316,7 @@ def _steer_events_in_scope(
     session: Session,
     scope_kind: str,
     role_view: ConversationView | None,
+    turns: tuple[Turn, ...],
 ) -> list[SteerEvent]:
     """Return the steer events that belong to a scope.
 
@@ -323,11 +324,12 @@ def _steer_events_in_scope(
     Role scope sees every steer in the role's conversation,
     regardless of whether the steer's enqueue timestamp falls
     inside a turn's interval; this catches inter-turn steers that
-    happen during a model-quiet moment. Phase scope (APM) attributes
-    each steer to the phase of its conversation's role; phase scope
-    (Spec-kit) is left empty because the phase model uses a
-    per-prompt ratchet whose attribution to phase scope at the
-    steer level is open work.
+    happen during a model-quiet moment. Phase scope attributes
+    each steer to the phase of the turn whose interval contains
+    its enqueue timestamp, which is the same containment relation
+    the per-turn ``Turn.steer_events`` list already encodes; a
+    steer between turns (rare, model-quiet) does not enter any
+    phase aggregate, matching the per-prompt phase model.
     """
     if scope_kind == "session":
         return [
@@ -337,6 +339,8 @@ def _steer_events_in_scope(
         ]
     if scope_kind == "role" and role_view is not None:
         return list(role_view.conversation.steer_events)
+    if scope_kind == "phase":
+        return [event for turn in turns for event in turn.steer_events]
     return []
 
 
@@ -392,10 +396,19 @@ def _economic_block(economic: EconomicSession | None) -> dict[str, Any]:
     }
 
 
-def _time_block(metrics: TimeMetrics) -> dict[str, Any]:
-    """Render a session-or-phase time block with leaf triples."""
+def _time_block(metrics: TimeMetrics, scope_kind: str) -> dict[str, Any]:
+    """Render a session-or-phase time block with leaf triples.
+
+    The ``duration`` leaf carries the constructed flag at phase
+    scope because the phase boundary is itself derived from the
+    per-prompt phase labels rather than read directly from a
+    JSONL field; at session scope ``duration`` is the wall-clock
+    extent between the earliest and latest non-synthetic record
+    and the flag is false.
+    """
+    duration_constructed = scope_kind == "phase"
     return {
-        "duration":             _metric(metrics.duration,             ANCHOR_SECONDARY, False),
+        "duration":             _metric(metrics.duration,             ANCHOR_SECONDARY, duration_constructed),
         "turn_time":            _metric(metrics.turn_time,            ANCHOR_SECONDARY, True),
         "turn_time_solo":       _metric(metrics.turn_time_solo,       ANCHOR_SECONDARY, True),
         "turn_time_concurrent": _metric(metrics.turn_time_concurrent, ANCHOR_SECONDARY, True),
