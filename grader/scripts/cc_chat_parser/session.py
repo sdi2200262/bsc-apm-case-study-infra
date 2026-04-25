@@ -74,7 +74,12 @@ from .commands import (
     role_from_initiate_command,
     speckit_command_phase,
 )
-from .loader import Conversation, discover_conversation_files, load_conversation
+from .loader import (
+    STEER_FATE_DELIVERED,
+    Conversation,
+    discover_conversation_files,
+    load_conversation,
+)
 from .schema import (
     Record,
     SchemaError,
@@ -244,7 +249,7 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
         }
         views.append(ConversationView(
             conversation=conversation,
-            role=f"unassigned-{index}",
+            role=f"conversation-{index}",
             first_command=first_command,
             first_command_record=first_record,
             first_record_timestamp=first_ts,
@@ -256,23 +261,66 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
 def _ratchet_phase_assignments(conversations: list[Conversation]) -> dict[str, str]:
     """Run the Spec-kit phase ratchet over a globally-sorted prompt stream.
 
-    Returns a map from genuine user prompt record uuid to phase label.
-    Records without a uuid (rare; typically anomalous Claude Code
-    rollouts) are skipped silently.
+    The stream merges two populations: genuine user-prompt records
+    and the enqueue records of delivered user-authored steers.
+    Including delivered steers is required because Claude Code
+    writes a steer's content only on the queue-operation enqueue
+    record; when the steer is dequeued, its content goes directly
+    into the model's context with no synthesised user-prompt
+    record to carry it. Without the enqueue records in the stream,
+    the ratchet would never see slash commands the participant
+    typed mid-turn.
+
+    The ratchet maintains a session-scoped current phase that
+    advances forward only along ``other`` -> ``planning`` ->
+    ``implementation``. A prompt or steer carrying a Spec-kit
+    command takes that command's phase as its own; the ratchet
+    advances only when the command's phase index is strictly
+    greater than the current ratchet index. Surgical commands
+    behind the ratchet count their own prompt as the command's
+    phase but do not move the ratchet back. Tiebreak on equal
+    timestamps is deterministic on ``(session_id, parent_uuid,
+    uuid)`` so the ratchet's output does not depend on input
+    iteration order.
+
+    Returns a map keyed by record uuid for genuine user-prompt
+    records and by enqueue record uuid for delivered steer
+    enqueues. Both populations contribute to the ratchet but only
+    the genuine prompt records' phases feed the per-record phase
+    lookup the rest of the parser uses; the steer-enqueue entries
+    are kept in the same map so the diagnostics layer can audit
+    what the ratchet saw.
     """
-    prompt_records: list[Record] = []
+    prompt_entries: list[tuple[Record, str]] = []
     for conversation in conversations:
         for record in conversation.records:
             if not is_genuine_user_prompt(record):
                 continue
             if record.timestamp is None or record.uuid is None:
                 continue
-            prompt_records.append(record)
-    prompt_records.sort(key=lambda r: (r.timestamp, r.session_id or "", r.uuid or ""))
+            prompt_entries.append((record, user_prompt_text(record)))
+        for event in conversation.steer_events:
+            if not event.is_user_authored or event.fate != STEER_FATE_DELIVERED:
+                continue
+            enqueue = event.enqueue_record
+            if enqueue.timestamp is None or enqueue.uuid is None:
+                continue
+            content = enqueue.payload.get("content")
+            if not isinstance(content, str):
+                content = ""
+            prompt_entries.append((enqueue, content))
+    prompt_entries.sort(
+        key=lambda entry: (
+            entry[0].timestamp,
+            entry[0].session_id or "",
+            entry[0].parent_uuid or "",
+            entry[0].uuid or "",
+        )
+    )
     current_phase = PHASE_OTHER
     phase_by_uuid: dict[str, str] = {}
-    for record in prompt_records:
-        commands = extract_command_names(user_prompt_text(record))
+    for record, text in prompt_entries:
+        commands = extract_command_names(text)
         speckit_phases = [
             phase
             for command in commands

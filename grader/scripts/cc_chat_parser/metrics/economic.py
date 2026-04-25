@@ -68,7 +68,6 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from ..loader import Conversation
 from ..rates import (
     CATEGORIES,
     CATEGORY_CACHE_1H,
@@ -80,10 +79,16 @@ from ..rates import (
     cost_in_usd,
 )
 from ..schema import (
-    SYNTHETIC_MODEL_MARKER,
+    CONTENT_BLOCK_TOOL_RESULT,
+    CONTENT_BLOCK_TOOL_USE,
     RECORD_TYPE_ASSISTANT,
+    RECORD_TYPE_USER,
+    Record,
+    SYNTHETIC_MODEL_MARKER,
 )
 from ..session import Session
+
+AGENT_TOOL_NAME = "Agent"
 
 
 @dataclass(frozen=True)
@@ -300,7 +305,7 @@ def _sum_delegated_from_records(
     delegated = TokenSums.zero()
     dispatches_with_usage = 0
     for record in records:
-        if record.record_type != "user":
+        if record.record_type != RECORD_TYPE_USER:
             continue
         tool_use_result = record.payload.get("toolUseResult")
         if not isinstance(tool_use_result, dict):
@@ -329,13 +334,13 @@ def _agent_tool_use_id_index(records: list[Record]) -> dict[str, str]:
         for block in message.get("content", []):
             if not isinstance(block, dict):
                 continue
-            if block.get("type") != "tool_use":
+            if block.get("type") != CONTENT_BLOCK_TOOL_USE:
                 continue
-            if block.get("name") != "Agent":
+            if block.get("name") != AGENT_TOOL_NAME:
                 continue
             tool_use_id = block.get("id")
             if isinstance(tool_use_id, str):
-                index[tool_use_id] = "Agent"
+                index[tool_use_id] = AGENT_TOOL_NAME
     return index
 
 
@@ -353,7 +358,7 @@ def _matches_agent_dispatch(
     for block in content:
         if not isinstance(block, dict):
             continue
-        if block.get("type") != "tool_result":
+        if block.get("type") != CONTENT_BLOCK_TOOL_RESULT:
             continue
         tool_use_id = block.get("tool_use_id")
         if isinstance(tool_use_id, str) and tool_use_id in agent_tool_use_ids:

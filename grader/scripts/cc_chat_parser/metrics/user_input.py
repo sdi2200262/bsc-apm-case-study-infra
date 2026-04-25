@@ -99,9 +99,9 @@ def compute_user_input_metrics(
         A populated ``UserInputMetrics``.
     """
     turn_list = list(turns)
-    event_list = list(steer_events)
-    delivered_events = [e for e in event_list if e.fate == STEER_FATE_DELIVERED]
-    abandoned_events = [e for e in event_list if e.fate != STEER_FATE_DELIVERED]
+    user_events = [e for e in steer_events if e.is_user_authored]
+    delivered_events = [e for e in user_events if e.fate == STEER_FATE_DELIVERED]
+    abandoned_events = [e for e in user_events if e.fate != STEER_FATE_DELIVERED]
     turn_prompt_texts = [_text_of_turn_prompt(t.starting_prompt) for t in turn_list]
     delivered_steer_texts = [
         _text_of_steer(event) for event in delivered_events

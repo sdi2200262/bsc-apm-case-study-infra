@@ -27,7 +27,7 @@ analysis.
 
 from __future__ import annotations
 
-from .commands import extract_command_names, is_known_command
+from .commands import classify_command, extract_command_names
 
 BUCKET_PROTOCOL = "protocol"
 BUCKET_SHORT = "short"
@@ -51,18 +51,33 @@ def classify_bucket(text: str, short_threshold: int) -> str:
             the ``short`` bucket, in characters.
 
     Returns:
-        ``BUCKET_PROTOCOL`` when the text contains a recognised
-        framework command marker, ``BUCKET_SHORT`` when it has no
-        such marker and is shorter than ``short_threshold`` in
-        characters, and ``BUCKET_STANDARD`` otherwise.
+        ``BUCKET_PROTOCOL`` when the text contains any APM or
+        Spec-kit framework command marker (recognised or not),
+        ``BUCKET_SHORT`` when it has no such marker and is shorter
+        than ``short_threshold`` in characters, and
+        ``BUCKET_STANDARD`` otherwise.
     """
-    if has_recognised_command(text):
+    if has_framework_command(text):
         return BUCKET_PROTOCOL
     if len(text) < short_threshold:
         return BUCKET_SHORT
     return BUCKET_STANDARD
 
 
-def has_recognised_command(text: str) -> bool:
-    """Return ``True`` when ``text`` contains a recognised APM or Spec-kit command."""
-    return any(is_known_command(name) for name in extract_command_names(text))
+def has_framework_command(text: str) -> bool:
+    """Return ``True`` when ``text`` contains any APM or Spec-kit command marker.
+
+    Membership in the parser's known-command tables is not
+    required: any marker whose name begins with ``apm-`` or
+    ``speckit.`` puts the input in the protocol bucket, including
+    framework commands the parser does not yet have a phase or role
+    mapping for. This matches the bucket's intent as a measure of
+    framework participation rather than of command-table coverage;
+    unknown framework commands are still flagged separately in the
+    diagnostics block so the analysis layer can audit which command
+    surfaces participants actually used.
+    """
+    for name in extract_command_names(text):
+        if classify_command(name):
+            return True
+    return False

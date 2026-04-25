@@ -66,22 +66,27 @@ STEER_FATE_ABANDONED = "abandoned"
 
 @dataclass(frozen=True)
 class SteerEvent:
-    """One classified user-authored enqueue and the disposition that resolved it.
+    """One classified enqueue and the disposition that resolved it.
 
     Attributes:
         enqueue_record: The ``queue-operation`` record carrying the
-            user-authored enqueue.
+            enqueue.
+        is_user_authored: ``True`` when the enqueue's content is a
+            user-typed message, ``False`` when it is a Claude Code
+            system-generated envelope (typically a task notification
+            wrapped in ``<task-notification>...``). Steer metrics
+            count only user-authored events.
         fate: ``STEER_FATE_DELIVERED`` when a later ``dequeue`` matched
-            this enqueue and the queued message reached the model;
+            this enqueue and the queued content reached the model;
             ``STEER_FATE_ABANDONED`` when a later ``remove`` or
             ``popAll`` cancelled it before delivery.
         resolution_record: The ``queue-operation`` record that resolved
             this enqueue. ``None`` only when the conversation file ends
-            with the enqueue still unresolved, in which case the parser
-            treats the enqueue as abandoned and records a warning.
+            with the enqueue still unresolved.
     """
 
     enqueue_record: Record
+    is_user_authored: bool
     fate: str
     resolution_record: Record | None
 
@@ -351,12 +356,12 @@ def _replay_queue_lifecycle(
                 )
                 continue
             matched, is_user = open_enqueues.pop(0)
-            if is_user:
-                events.append(SteerEvent(
-                    enqueue_record=matched,
-                    fate=STEER_FATE_DELIVERED,
-                    resolution_record=record,
-                ))
+            events.append(SteerEvent(
+                enqueue_record=matched,
+                is_user_authored=is_user,
+                fate=STEER_FATE_DELIVERED,
+                resolution_record=record,
+            ))
             continue
         if op == QUEUE_OP_REMOVE:
             if not open_enqueues:
@@ -366,32 +371,32 @@ def _replay_queue_lifecycle(
                 )
                 continue
             matched, is_user = open_enqueues.pop()
-            if is_user:
-                events.append(SteerEvent(
-                    enqueue_record=matched,
-                    fate=STEER_FATE_ABANDONED,
-                    resolution_record=record,
-                ))
+            events.append(SteerEvent(
+                enqueue_record=matched,
+                is_user_authored=is_user,
+                fate=STEER_FATE_ABANDONED,
+                resolution_record=record,
+            ))
             continue
         if op == QUEUE_OP_POP_ALL:
             for matched, is_user in open_enqueues:
-                if is_user:
-                    events.append(SteerEvent(
-                        enqueue_record=matched,
-                        fate=STEER_FATE_ABANDONED,
-                        resolution_record=record,
-                    ))
+                events.append(SteerEvent(
+                    enqueue_record=matched,
+                    is_user_authored=is_user,
+                    fate=STEER_FATE_ABANDONED,
+                    resolution_record=record,
+                ))
             open_enqueues.clear()
             continue
     for unresolved, is_user in open_enqueues:
-        if not is_user:
-            continue
-        warnings.append(
-            f"{unresolved.source_file} line {unresolved.source_line_index}: "
-            "user-authored enqueue still open at end of file; treated as abandoned"
-        )
+        if is_user:
+            warnings.append(
+                f"{unresolved.source_file} line {unresolved.source_line_index}: "
+                "user-authored enqueue still open at end of file; treated as abandoned"
+            )
         events.append(SteerEvent(
             enqueue_record=unresolved,
+            is_user_authored=is_user,
             fate=STEER_FATE_ABANDONED,
             resolution_record=None,
         ))

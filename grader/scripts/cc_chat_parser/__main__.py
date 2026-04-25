@@ -247,9 +247,10 @@ def print_inspection(session: Session) -> None:
                 synthetic_assistant_records += 1
         unique_request_ids = len(conversation.usage_index.usage_by_request_id)
         total_unique_request_ids += unique_request_ids
-        steer_count = len(conversation.steer_events)
+        user_steer_events = [ev for ev in conversation.steer_events if ev.is_user_authored]
+        steer_count = len(user_steer_events)
         total_steer_events += steer_count
-        delivered = sum(1 for ev in conversation.steer_events if ev.fate == STEER_FATE_DELIVERED)
+        delivered = sum(1 for ev in user_steer_events if ev.fate == STEER_FATE_DELIVERED)
         abandoned = steer_count - delivered
         total_steers_delivered += delivered
         total_steers_abandoned += abandoned
@@ -365,11 +366,16 @@ def print_process(session: Session, short_threshold: int) -> None:
         for view in session.views
         for event in view.conversation.steer_events
     )
+    all_records = [
+        record
+        for view in session.views
+        for record in view.conversation.records
+    ]
     time_metrics = compute_time_metrics(session.turns)
     user_input_metrics = compute_user_input_metrics(
         session.turns, all_steers, short_threshold
     )
-    reliability_metrics = compute_reliability_metrics(session.turns)
+    reliability_metrics = compute_reliability_metrics(all_records)
     print("process dimension (session scope):")
     print()
     print("  time:")

@@ -37,11 +37,14 @@ from ..schema import (
     CONTENT_BLOCK_TEXT,
     CONTENT_BLOCK_THINKING,
     CONTENT_BLOCK_TOOL_USE,
+    RECORD_TYPE_ASSISTANT,
+    RECORD_TYPE_USER,
     Record,
     assistant_content_blocks,
     is_synthetic_assistant,
 )
-from ..turns import Turn
+
+AGENT_TOOL_NAME = "Agent"
 
 
 @dataclass(frozen=True)
@@ -68,31 +71,37 @@ class SupplementaryMetrics:
     reasoning_token_share: float
 
 
-def compute_supplementary_metrics(turns: Iterable[Turn]) -> SupplementaryMetrics:
-    """Compute supplementary metrics over a set of turns."""
+def compute_supplementary_metrics(records: Iterable[Record]) -> SupplementaryMetrics:
+    """Compute supplementary metrics over an arbitrary record subset.
+
+    Iterating the scope's full record stream (rather than a per-turn
+    slice) keeps the counts stable across session, phase, and role
+    aggregations; in well-formed Claude Code data the per-turn and
+    full-record streams coincide for the metrics this module
+    computes.
+    """
     subagent_count = 0
     subagent_tool_count = 0
     thinking_chars = 0
     total_output_chars = 0
-    for turn in turns:
-        for record in turn.records:
-            if is_synthetic_assistant(record):
-                continue
-            if record.record_type == "assistant":
-                for block in assistant_content_blocks(record):
-                    block_type = block.get("type")
-                    if block_type == CONTENT_BLOCK_TOOL_USE and block.get("name") == "Agent":
-                        subagent_count += 1
-                    output_chars = _output_chars(block)
-                    total_output_chars += output_chars
-                    if block_type == CONTENT_BLOCK_THINKING:
-                        thinking_chars += output_chars
-            elif record.record_type == "user":
-                tool_use_result = record.payload.get("toolUseResult")
-                if isinstance(tool_use_result, dict):
-                    total = tool_use_result.get("totalToolUseCount")
-                    if isinstance(total, int):
-                        subagent_tool_count += total
+    for record in records:
+        if is_synthetic_assistant(record):
+            continue
+        if record.record_type == RECORD_TYPE_ASSISTANT:
+            for block in assistant_content_blocks(record):
+                block_type = block.get("type")
+                if block_type == CONTENT_BLOCK_TOOL_USE and block.get("name") == AGENT_TOOL_NAME:
+                    subagent_count += 1
+                output_chars = _output_chars(block)
+                total_output_chars += output_chars
+                if block_type == CONTENT_BLOCK_THINKING:
+                    thinking_chars += output_chars
+        elif record.record_type == RECORD_TYPE_USER:
+            tool_use_result = record.payload.get("toolUseResult")
+            if isinstance(tool_use_result, dict):
+                total = tool_use_result.get("totalToolUseCount")
+                if isinstance(total, int):
+                    subagent_tool_count += total
     share = (thinking_chars / total_output_chars) if total_output_chars > 0 else 0.0
     return SupplementaryMetrics(
         subagent_count=subagent_count,

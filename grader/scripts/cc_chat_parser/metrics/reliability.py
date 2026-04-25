@@ -36,7 +36,6 @@ from ..schema import (
     Record,
     user_content_blocks,
 )
-from ..turns import Turn
 
 
 @dataclass(frozen=True)
@@ -50,9 +49,11 @@ class ReliabilityMetrics:
             contains zero tool results to keep the metric defined
             on every scope.
         tool_result_count: Total number of ``tool_result`` blocks
-            observed in the scope (the denominator).
+            observed in the scope (the denominator). Surfaced for
+            diagnostics only; the only measurement metric exposed
+            from this block is ``tool_success_rate``.
         tool_error_count: Subset of ``tool_result_count`` carrying
-            ``is_error: true``.
+            ``is_error: true``. Diagnostic only.
     """
 
     tool_success_rate: float
@@ -60,24 +61,26 @@ class ReliabilityMetrics:
     tool_error_count: int
 
 
-def compute_reliability_metrics(turns: Iterable[Turn]) -> ReliabilityMetrics:
-    """Compute reliability metrics over the user records inside a set of turns.
+def compute_reliability_metrics(records: Iterable[Record]) -> ReliabilityMetrics:
+    """Compute reliability metrics over an arbitrary record subset.
 
     Args:
-        turns: Turns whose records contribute their tool-result
-            content blocks to the count.
+        records: The records to scan. Only user records contribute;
+            other record types are inert. Iterating the scope's
+            full record stream (rather than a per-turn slice) keeps
+            the denominator stable across session, phase, and role
+            aggregations.
 
     Returns:
         A populated ``ReliabilityMetrics``.
     """
     total = 0
     errors = 0
-    for turn in turns:
-        for record in turn.records:
-            for block in _tool_result_blocks(record):
-                total += 1
-                if block.get("is_error") is True:
-                    errors += 1
+    for record in records:
+        for block in _tool_result_blocks(record):
+            total += 1
+            if block.get("is_error") is True:
+                errors += 1
     rate = (total - errors) / total if total > 0 else 0.0
     return ReliabilityMetrics(
         tool_success_rate=rate,

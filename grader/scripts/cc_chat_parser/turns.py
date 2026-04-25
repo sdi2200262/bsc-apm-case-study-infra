@@ -84,10 +84,10 @@ def derive_turns(conversation: Conversation) -> tuple[Turn, ...]:
         no genuine user prompt; this is rare but possible for files
         that consist entirely of attachments and snapshots.
     """
-    delivered_enqueue_uuids = _delivered_enqueue_uuids(conversation.steer_events)
+    matched_dequeue_keys = _matched_dequeue_keys(conversation.steer_events)
     turn_starts: list[int] = []
     for index, record in enumerate(conversation.records):
-        if not _is_turn_starting(record, conversation.records, index, delivered_enqueue_uuids):
+        if not _is_turn_starting(record, conversation.records, index, matched_dequeue_keys):
             continue
         turn_starts.append(index)
     if not turn_starts:
@@ -120,23 +120,27 @@ def _is_turn_starting(
     record: Record,
     all_records: tuple[Record, ...],
     index: int,
-    delivered_enqueue_uuids: frozenset[str],
+    matched_dequeue_keys: frozenset[tuple[str, int]],
 ) -> bool:
     """Return ``True`` when ``record`` opens a new turn.
 
-    The decision is local to the record: it is a genuine user prompt
-    (not a tool-result, not the post-compaction synthesised summary)
-    AND it was not delivered to the model via a queue ``dequeue``.
-    Identifying "delivered via dequeue" is done by matching the prompt
-    to the immediately preceding ``dequeue`` record in document order
-    when one exists; the dequeue's matching enqueue uuid is then
-    looked up against the delivered-enqueue set the caller provided.
-    A simpler approximation is used here: a genuine user prompt that
-    is immediately preceded by a ``queue-operation`` record with
-    ``operation == "dequeue"`` is treated as steer-delivered. The
-    matching is reliable because Claude Code emits the dequeue
-    immediately before the synthesised user prompt that carries the
-    queued content.
+    A user prompt is turn-starting when it is a genuine
+    user-content record, is not the post-compaction synthesised
+    summary, and is not the result of a matched queue ``dequeue``.
+    The closest preceding non-attachment, non-snapshot record is
+    inspected; when that record is a ``dequeue`` whose matching
+    enqueue was successfully resolved during the loader's
+    queue-lifecycle replay, the prompt is the synthesised payload
+    of that delivery and continues the ongoing turn rather than
+    opening a new one. An unmatched dequeue (recorded as a queue
+    lifecycle warning) does not disqualify the prompt: nothing was
+    actually delivered to absorb it into a previous turn.
+
+    Queue-operation records carry no ``uuid`` field of their own,
+    so the matched-dequeue identity uses ``(source_file,
+    source_line_index)`` instead. Both fields are populated on
+    every parsed ``Record``, and the pair is unique within a
+    conversation.
     """
     if not is_genuine_user_prompt(record):
         return False
@@ -152,25 +156,38 @@ def _is_turn_starting(
             preceding_index -= 1
             continue
         if queue_operation(preceding) == "dequeue":
-            return False
+            key = (preceding.source_file, preceding.source_line_index)
+            if key in matched_dequeue_keys:
+                return False
+            return True
         break
     return True
 
 
-def _delivered_enqueue_uuids(steer_events: tuple[SteerEvent, ...]) -> frozenset[str]:
-    """Return the set of enqueue uuids that resolved to a delivered steer.
+def _matched_dequeue_keys(
+    steer_events: tuple[SteerEvent, ...],
+) -> frozenset[tuple[str, int]]:
+    """Return identity keys of dequeue records that successfully resolved an enqueue.
 
-    Delivered enqueues are those whose matching dequeue successfully
-    pulled them off the open queue. The enqueue uuid (the record's own
-    uuid, not the dequeue's) is the addressable identifier.
+    A dequeue is considered matched when the loader's
+    queue-lifecycle replay paired it with an open enqueue
+    (user-authored or system-generated). Matched dequeues
+    correspond to a real delivery: the queued content reached the
+    model as the next streamed user-side payload. Unmatched
+    dequeues (queue lifecycle warnings) deliver nothing. The
+    identity key is ``(source_file, source_line_index)`` because
+    queue-operation records do not carry their own uuid in the
+    Claude Code rollout.
     """
-    uuids: set[str] = set()
+    keys: set[tuple[str, int]] = set()
     for event in steer_events:
         if event.fate != STEER_FATE_DELIVERED:
             continue
-        if event.enqueue_record.uuid:
-            uuids.add(event.enqueue_record.uuid)
-    return frozenset(uuids)
+        resolution = event.resolution_record
+        if resolution is None:
+            continue
+        keys.add((resolution.source_file, resolution.source_line_index))
+    return frozenset(keys)
 
 
 def _steer_events_in_interval(
