@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+"""
+Time-dimension metrics: turn duration distribution and wall-clock decomposition.
+
+A session's wall-clock extent decomposes into time during which at
+least one model was actively serving a turn (turn-time) and time
+during which no model was active (inter-turn-time). The two sum to
+the session duration.
+
+Turn-time itself decomposes into a solo component (exactly one
+turn covered the instant) and a concurrent component (two or more
+turns covered the instant). The decomposition matters for APM
+sessions where the participant can drive several agents in
+parallel: a Manager dispatching two Workers in quick succession
+produces overlapping turn intervals across conversation files,
+and the parallel-dispatch usage is itself a behavioural signal.
+
+The union-of-intervals computation walks a sorted list of interval
+endpoints and accumulates time at each active-count level. Solo
+time is the duration spent at active-count == 1; concurrent time is
+the duration spent at active-count >= 2. The two sum to the union
+of every interval (turn-time). A session whose turns never overlap
+has zero concurrent time and turn-time equal to the sum of
+individual turn durations.
+
+Per-turn duration distribution metrics (mean, p50, p95, stdev) are
+computed over the per-turn durations directly, with no union-dedup.
+A turn whose interval overlaps another's still counts its full
+length toward the distribution; the deduplication only applies to
+the wall-clock decomposition.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from statistics import median, pstdev
+from typing import Iterable
+
+from ..turns import Turn
+
+
+@dataclass(frozen=True)
+class TimeMetrics:
+    """Time-dimension metric block for a single scope.
+
+    Attributes:
+        duration: Wall-clock extent of the scope in seconds.
+        turn_time: Total wall-clock time during which at least one
+            turn was active inside the scope (union of turn
+            intervals).
+        turn_time_solo: Subset of ``turn_time`` during which
+            exactly one turn was active.
+        turn_time_concurrent: Subset of ``turn_time`` during which
+            two or more turns were active.
+        inter_turn_time: ``duration - turn_time``; time during
+            which no turn was active.
+        turn_count: Number of turns in the scope.
+        mean_turn_duration: Mean of per-turn durations in seconds.
+        turn_duration_p50: Median of per-turn durations in seconds.
+        turn_duration_p95: 95th percentile of per-turn durations
+            via linear interpolation.
+        turn_duration_stdev: Population standard deviation of
+            per-turn durations.
+    """
+
+    duration: float
+    turn_time: float
+    turn_time_solo: float
+    turn_time_concurrent: float
+    inter_turn_time: float
+    turn_count: int
+    mean_turn_duration: float
+    turn_duration_p50: float
+    turn_duration_p95: float
+    turn_duration_stdev: float
+
+
+def compute_time_metrics(turns: Iterable[Turn]) -> TimeMetrics:
+    """Compute time metrics over a set of turns.
+
+    The scope's wall-clock extent is taken from the earliest turn
+    start and the latest turn end inside the supplied turn set.
+    Callers that need the scope to extend beyond the outermost turn
+    boundaries (e.g., a session's wall-clock extent reaching past
+    the last turn's end into trailing inactivity) can substitute
+    their own ``duration`` value after the metrics are computed;
+    the parser does not currently observe trailing wall-clock
+    activity beyond the last turn.
+
+    Args:
+        turns: The turns to aggregate over. Order does not matter;
+            empty input produces a zero metric block.
+
+    Returns:
+        A populated ``TimeMetrics``.
+    """
+    turn_list = list(turns)
+    if not turn_list:
+        return _zero_metrics()
+    intervals = [
+        (turn.start_timestamp, turn.end_timestamp)
+        for turn in turn_list
+    ]
+    scope_start = min(start for start, _ in intervals)
+    scope_end = max(end for _, end in intervals)
+    duration_seconds = max(0.0, (scope_end - scope_start).total_seconds())
+    turn_time, turn_time_solo, turn_time_concurrent = _decompose_intervals(intervals)
+    inter_turn_time = max(0.0, duration_seconds - turn_time)
+    durations = [
+        max(0.0, (end - start).total_seconds())
+        for start, end in intervals
+    ]
+    return TimeMetrics(
+        duration=duration_seconds,
+        turn_time=turn_time,
+        turn_time_solo=turn_time_solo,
+        turn_time_concurrent=turn_time_concurrent,
+        inter_turn_time=inter_turn_time,
+        turn_count=len(turn_list),
+        mean_turn_duration=sum(durations) / len(durations),
+        turn_duration_p50=float(median(durations)),
+        turn_duration_p95=_percentile(durations, 0.95),
+        turn_duration_stdev=float(pstdev(durations)) if len(durations) > 1 else 0.0,
+    )
+
+
+def _decompose_intervals(
+    intervals: list[tuple[datetime, datetime]],
+) -> tuple[float, float, float]:
+    """Return ``(turn_time, turn_time_solo, turn_time_concurrent)`` in seconds.
+
+    Uses a sweep over interval endpoints. Each ``start`` event
+    increases the active count by one; each ``end`` event decreases
+    it. Between consecutive events the active count is constant; the
+    elapsed wall-clock time between them contributes to the solo or
+    concurrent total according to whether the active count is
+    exactly one or at least two.
+    """
+    if not intervals:
+        return 0.0, 0.0, 0.0
+    events: list[tuple[datetime, int]] = []
+    for start, end in intervals:
+        events.append((start, +1))
+        events.append((end, -1))
+    events.sort(key=lambda event: (event[0], -event[1]))
+    active = 0
+    last_time: datetime | None = None
+    solo_seconds = 0.0
+    concurrent_seconds = 0.0
+    for time_point, delta in events:
+        if last_time is not None and time_point > last_time:
+            elapsed = (time_point - last_time).total_seconds()
+            if active == 1:
+                solo_seconds += elapsed
+            elif active >= 2:
+                concurrent_seconds += elapsed
+        active += delta
+        last_time = time_point
+    return solo_seconds + concurrent_seconds, solo_seconds, concurrent_seconds
+
+
+def _percentile(values: list[float], fraction: float) -> float:
+    """Return a linearly-interpolated percentile of a sample.
+
+    Args:
+        values: Sample values; must be non-empty.
+        fraction: Target fraction in ``[0, 1]``; for the 95th
+            percentile pass ``0.95``.
+
+    Returns:
+        The interpolated percentile as a float.
+    """
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = fraction * (len(ordered) - 1)
+    low_index = int(position)
+    high_index = min(low_index + 1, len(ordered) - 1)
+    weight = position - low_index
+    return ordered[low_index] * (1 - weight) + ordered[high_index] * weight
+
+
+def _zero_metrics() -> TimeMetrics:
+    """Return a zeroed ``TimeMetrics`` for an empty scope."""
+    return TimeMetrics(
+        duration=0.0,
+        turn_time=0.0,
+        turn_time_solo=0.0,
+        turn_time_concurrent=0.0,
+        inter_turn_time=0.0,
+        turn_count=0,
+        mean_turn_duration=0.0,
+        turn_duration_p50=0.0,
+        turn_duration_p95=0.0,
+        turn_duration_stdev=0.0,
+    )

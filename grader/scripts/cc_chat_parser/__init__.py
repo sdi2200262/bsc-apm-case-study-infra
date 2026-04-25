@@ -13,6 +13,15 @@ wraps the same surface.
 
 from __future__ import annotations
 
+from .buckets import (
+    BUCKET_PROTOCOL,
+    BUCKET_SHORT,
+    BUCKET_STANDARD,
+    BUCKETS,
+    DEFAULT_SHORT_THRESHOLD,
+    SHORT_THRESHOLD_SWEEP,
+    classify_bucket,
+)
 from .commands import (
     FRAMEWORK_APM,
     FRAMEWORK_SPECKIT,
@@ -34,6 +43,9 @@ from .loader import (
     load_conversations,
 )
 from .metrics.economic import EconomicSession, TokenSums, compute_session_economic
+from .metrics.reliability import ReliabilityMetrics, compute_reliability_metrics
+from .metrics.time import TimeMetrics, compute_time_metrics
+from .metrics.user_input import UserInputMetrics, compute_user_input_metrics
 from .rates import (
     CATEGORIES,
     ModelRates,
@@ -48,10 +60,15 @@ from .session import ConversationView, Session, load_session
 from .turns import Turn, derive_turns
 
 __all__ = [
+    "BUCKETS",
+    "BUCKET_PROTOCOL",
+    "BUCKET_SHORT",
+    "BUCKET_STANDARD",
     "CATEGORIES",
     "CompactionEvent",
     "Conversation",
     "ConversationView",
+    "DEFAULT_SHORT_THRESHOLD",
     "EconomicSession",
     "FRAMEWORK_APM",
     "FRAMEWORK_SPECKIT",
@@ -66,13 +83,21 @@ __all__ = [
     "RateTable",
     "RateTableError",
     "Record",
+    "ReliabilityMetrics",
     "RequestUsageIndex",
+    "SHORT_THRESHOLD_SWEEP",
     "SchemaError",
     "Session",
     "SteerEvent",
+    "TimeMetrics",
     "TokenSums",
     "Turn",
+    "UserInputMetrics",
+    "classify_bucket",
+    "compute_reliability_metrics",
     "compute_session_economic",
+    "compute_time_metrics",
+    "compute_user_input_metrics",
     "cost_in_usd",
     "derive_turns",
     "discover_conversation_files",

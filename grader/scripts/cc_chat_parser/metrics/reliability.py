@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+"""
+Reliability dimension: tool-call success rate.
+
+Anthropic's API marks a failed tool invocation by setting
+``is_error: true`` on the ``tool_result`` content block returned to
+the model. Successful invocations either omit the field or set it to
+``false``. The convention is uniform across every tool the Claude
+Code agent can invoke (Bash, Read, Edit, Write, Grep, Glob, Agent,
+and any MCP tool the participant has configured), making
+``is_error != True`` a single reliable success signal across the
+entire tool surface.
+
+The success rate is the share of tool invocations whose result
+indicated success, where the denominator is every tool result the
+agent received in scope. Synthetic assistant records are not
+involved (they emit no tool calls); subagent-internal tool calls
+are not in this denominator (they live in the subagent's own
+transcript, which the parser does not consume) and therefore the
+metric reflects reliability at the surface visible to the calling
+agent. The thesis methodology declares this measurement boundary:
+internal recoveries within a delegated subagent dispatch are
+attributed to whatever ``is_error`` flag the parent ``Agent`` tool
+result carries.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable
+
+from ..schema import (
+    CONTENT_BLOCK_TOOL_RESULT,
+    Record,
+    user_content_blocks,
+)
+from ..turns import Turn
+
+
+@dataclass(frozen=True)
+class ReliabilityMetrics:
+    """Reliability metric block for a single scope.
+
+    Attributes:
+        tool_success_rate: Share of tool invocations in scope whose
+            ``tool_result`` did not carry ``is_error: true``. In
+            ``[0.0, 1.0]``. Reported as ``0.0`` when the scope
+            contains zero tool results to keep the metric defined
+            on every scope.
+        tool_result_count: Total number of ``tool_result`` blocks
+            observed in the scope (the denominator).
+        tool_error_count: Subset of ``tool_result_count`` carrying
+            ``is_error: true``.
+    """
+
+    tool_success_rate: float
+    tool_result_count: int
+    tool_error_count: int
+
+
+def compute_reliability_metrics(turns: Iterable[Turn]) -> ReliabilityMetrics:
+    """Compute reliability metrics over the user records inside a set of turns.
+
+    Args:
+        turns: Turns whose records contribute their tool-result
+            content blocks to the count.
+
+    Returns:
+        A populated ``ReliabilityMetrics``.
+    """
+    total = 0
+    errors = 0
+    for turn in turns:
+        for record in turn.records:
+            for block in _tool_result_blocks(record):
+                total += 1
+                if block.get("is_error") is True:
+                    errors += 1
+    rate = (total - errors) / total if total > 0 else 0.0
+    return ReliabilityMetrics(
+        tool_success_rate=rate,
+        tool_result_count=total,
+        tool_error_count=errors,
+    )
+
+
+def _tool_result_blocks(record: Record) -> list[dict]:
+    """Return every ``tool_result`` content block on a user record."""
+    return [
+        block
+        for block in user_content_blocks(record)
+        if block.get("type") == CONTENT_BLOCK_TOOL_RESULT
+    ]

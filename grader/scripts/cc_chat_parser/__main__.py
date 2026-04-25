@@ -30,9 +30,13 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from .buckets import BUCKETS, DEFAULT_SHORT_THRESHOLD
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .loader import STEER_FATE_DELIVERED
 from .metrics.economic import EconomicSession, compute_session_economic
+from .metrics.reliability import ReliabilityMetrics, compute_reliability_metrics
+from .metrics.time import TimeMetrics, compute_time_metrics
+from .metrics.user_input import UserInputMetrics, compute_user_input_metrics
 from .rates import (
     CATEGORY_CACHE_1H,
     CATEGORY_CACHE_5M,
@@ -96,6 +100,24 @@ def create_parser() -> argparse.ArgumentParser:
             "and API-equivalent cost) at session scope."
         ),
     )
+    parser.add_argument(
+        "--process",
+        action="store_true",
+        help=(
+            "Print the process-dimension metric blocks (time, user "
+            "input, reliability) at session scope."
+        ),
+    )
+    parser.add_argument(
+        "--short-threshold",
+        type=int,
+        default=DEFAULT_SHORT_THRESHOLD,
+        help=(
+            "Upper bound (exclusive) on text length for the 'short' "
+            "input bucket, in characters. Affects the user-input "
+            "dimension's bucket distributions and magnitudes."
+        ),
+    )
     return parser
 
 
@@ -111,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = create_parser()
     args = parser.parse_args(argv)
-    if not (args.inspect or args.economic):
+    if not (args.inspect or args.economic or args.process):
         parser.print_help(sys.stderr)
         return 2
     try:
@@ -119,10 +141,12 @@ def main(argv: list[str] | None = None) -> int:
     except SchemaError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    printed_any = False
     if args.inspect:
         print_inspection(session)
+        printed_any = True
     if args.economic:
-        if args.inspect:
+        if printed_any:
             print()
         try:
             rate_table = load_rate_table()
@@ -131,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: cost computation failed: {error}", file=sys.stderr)
             return 1
         print_economic(economic, rate_table)
+        printed_any = True
+    if args.process:
+        if printed_any:
+            print()
+        print_process(session, args.short_threshold)
     return 0
 
 
@@ -293,6 +322,65 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
     for label, amount in breakdown:
         print(f"    {label:12} ${amount / 1_000_000.0:>10.4f}")
     print(f"  cost_usd:                     ${economic.cost_usd:.4f}")
+
+
+def print_process(session: Session, short_threshold: int) -> None:
+    """Render the session-scope process metric blocks (time, user input, reliability)."""
+    all_steers = tuple(
+        event
+        for view in session.views
+        for event in view.conversation.steer_events
+    )
+    time_metrics = compute_time_metrics(session.turns)
+    user_input_metrics = compute_user_input_metrics(
+        session.turns, all_steers, short_threshold
+    )
+    reliability_metrics = compute_reliability_metrics(session.turns)
+    print("process dimension (session scope):")
+    print()
+    print("  time:")
+    print(f"    duration:                {time_metrics.duration:14.2f} sec")
+    print(f"    turn_time:               {time_metrics.turn_time:14.2f} sec")
+    print(f"    turn_time_solo:          {time_metrics.turn_time_solo:14.2f} sec")
+    print(f"    turn_time_concurrent:    {time_metrics.turn_time_concurrent:14.2f} sec")
+    print(f"    inter_turn_time:         {time_metrics.inter_turn_time:14.2f} sec")
+    print(f"    turn_count:              {time_metrics.turn_count:14d}")
+    print(f"    mean_turn_duration:      {time_metrics.mean_turn_duration:14.2f} sec")
+    print(f"    turn_duration_p50:       {time_metrics.turn_duration_p50:14.2f} sec")
+    print(f"    turn_duration_p95:       {time_metrics.turn_duration_p95:14.2f} sec")
+    print(f"    turn_duration_stdev:     {time_metrics.turn_duration_stdev:14.2f} sec")
+    print(f"    invariant duration ?= turn_time + inter_turn_time: "
+          f"{time_metrics.duration:.2f} ?= {time_metrics.turn_time + time_metrics.inter_turn_time:.2f}")
+    print(f"    invariant turn_time ?= solo + concurrent:          "
+          f"{time_metrics.turn_time:.2f} ?= "
+          f"{time_metrics.turn_time_solo + time_metrics.turn_time_concurrent:.2f}")
+    print()
+    print("  user_input:")
+    print(f"    short_threshold:         {short_threshold}")
+    print(f"    turn_prompt_count:       {user_input_metrics.turn_prompt_count}")
+    print(f"    steer_delivered_count:   {user_input_metrics.steer_delivered_count}")
+    print(f"    steer_abandoned_count:   {user_input_metrics.steer_abandoned_count}")
+    print(f"    steer_attempted_count:   {user_input_metrics.steer_attempted_count}")
+    print(f"    turn_prompts_bucket_shares:")
+    for bucket in BUCKETS:
+        print(f"      {bucket:10} {user_input_metrics.turn_prompts_bucket_shares[bucket]:.4f}")
+    print(f"    steer_delivered_bucket_shares:")
+    for bucket in BUCKETS:
+        print(f"      {bucket:10} {user_input_metrics.steer_delivered_bucket_shares[bucket]:.4f}")
+    print(f"    all_inputs_bucket_shares:")
+    for bucket in BUCKETS:
+        print(f"      {bucket:10} {user_input_metrics.all_inputs_bucket_shares[bucket]:.4f}")
+    print(f"    turn_prompts_magnitude_by_bucket (mean chars):")
+    for bucket in BUCKETS:
+        print(f"      {bucket:10} {user_input_metrics.turn_prompts_magnitude_by_bucket[bucket]:.1f}")
+    print(f"    steer_delivered_magnitude_by_bucket (mean chars):")
+    for bucket in BUCKETS:
+        print(f"      {bucket:10} {user_input_metrics.steer_delivered_magnitude_by_bucket[bucket]:.1f}")
+    print()
+    print("  reliability:")
+    print(f"    tool_result_count:       {reliability_metrics.tool_result_count}")
+    print(f"    tool_error_count:        {reliability_metrics.tool_error_count}")
+    print(f"    tool_success_rate:       {reliability_metrics.tool_success_rate:.4f}")
 
 
 if __name__ == "__main__":
