@@ -42,6 +42,16 @@ from .loader import (
     load_conversation,
     load_conversations,
 )
+from .io import (
+    SANITIZATION_META_KEY,
+    is_sanitised_payload,
+    iter_jsonl_lines,
+    load_json,
+    looks_like_jsonl,
+    read_file_text,
+    write_file_text,
+    write_json,
+)
 from .metrics.economic import (
     EconomicSession,
     TokenSums,
@@ -54,6 +64,7 @@ from .metrics.supplementary import SupplementaryMetrics, compute_supplementary_m
 from .metrics.time import TimeMetrics, compute_time_metrics
 from .metrics.user_input import UserInputMetrics, compute_user_input_metrics
 from .report import build_report
+from .sanitize import sanitise_jsonl_file, unsanitise_to_text
 from .rates import (
     CATEGORIES,
     ModelRates,
@@ -93,6 +104,7 @@ __all__ = [
     "Record",
     "ReliabilityMetrics",
     "RequestUsageIndex",
+    "SANITIZATION_META_KEY",
     "SHORT_THRESHOLD_SWEEP",
     "SchemaError",
     "Session",
@@ -111,12 +123,21 @@ __all__ = [
     "compute_time_metrics",
     "compute_user_input_metrics",
     "cost_in_usd",
-    "resolve_pinned_model",
     "derive_turns",
     "discover_conversation_files",
+    "is_sanitised_payload",
+    "iter_jsonl_lines",
     "load_conversation",
     "load_conversations",
+    "load_json",
     "load_rate_table",
     "load_session",
+    "looks_like_jsonl",
+    "read_file_text",
+    "resolve_pinned_model",
+    "sanitise_jsonl_file",
+    "unsanitise_to_text",
+    "write_file_text",
+    "write_json",
     "rates_for_model",
 ]

@@ -4,36 +4,58 @@
 """
 Command-line interface for the Claude Code chat parser.
 
-Slice 1 wires only the ``--inspect`` mode that walks a submission and
-prints a counts-and-events summary for verification against ground
-truth. Subsequent slices add the metric-extraction modes
-(``--metrics``), the sanitisation modes (``--sanitize``,
-``--unsanitize``), and the ``inspect`` subcommand that renders an
-emitted metrics artifact in a readable form.
+Five modes are available, all selected by flag and combinable
+(``--inspect``, ``--economic``, and ``--process`` print
+human-readable summaries; ``--metrics`` writes the canonical
+scope-nested JSON artifact; ``--sanitize`` and ``--unsanitize``
+seal and unseal the raw JSONL files for archival).
 
 Usage:
+    python -m cc_chat_parser <path> --framework {apm,speckit} --metrics -o out.json
     python -m cc_chat_parser <path> --framework {apm,speckit} --inspect
+    python -m cc_chat_parser <path> --framework {apm,speckit} --economic
+    python -m cc_chat_parser <path> --framework {apm,speckit} --process
+    python -m cc_chat_parser <path> --sanitize
+    python -m cc_chat_parser <path> --unsanitize
 
-``<path>`` is either a single ``*.jsonl`` file or a directory of such
-files copied straight from ``~/.claude/projects/<dashed-cwd>/``.
-``--framework`` is required; auto-detection by content is not
-performed because in production the framework is known from the
-submission directory naming, and ad-hoc inspection callers must
-declare the framework explicitly so misclassification of a non-
-protocol opening prompt cannot happen silently.
+``<path>`` is either a single ``*.jsonl`` file or a directory of
+``*.jsonl`` files copied straight from
+``~/.claude/projects/<dashed-cwd>/``. ``--framework`` is required
+for the metric and inspection modes (auto-detection by content is
+not performed because in production the framework is known from
+the submission directory naming, and ad-hoc inspection callers
+declare it explicitly so misclassification of a non-protocol
+opening prompt cannot happen silently). The sanitisation modes do
+not require ``--framework`` because they operate on the raw bytes
+without parsing the protocol vocabulary.
+
+Sanitisation requires the ``CC_PARSER_SECRET`` environment
+variable (or a ``.env`` entry of the same name) to hold the
+encryption key. Use the same key for matched ``--sanitize`` and
+``--unsanitize`` invocations.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections import Counter
 from pathlib import Path
 
 import json
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from .buckets import BUCKETS, DEFAULT_SHORT_THRESHOLD
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
-from .loader import STEER_FATE_DELIVERED
+from .io import is_sanitised_payload, load_json, write_file_text, write_json
+from .loader import STEER_FATE_DELIVERED, discover_conversation_files
 from .metrics.economic import EconomicSession, compute_session_economic
 from .metrics.reliability import ReliabilityMetrics, compute_reliability_metrics
 from .metrics.time import TimeMetrics, compute_time_metrics
@@ -50,6 +72,7 @@ from .rates import (
     rates_for_model,
 )
 from .report import build_report
+from .sanitize import sanitise_jsonl_file, unsanitise_to_text
 from .schema import (
     SchemaError,
     is_compact_summary_user,
@@ -58,6 +81,10 @@ from .schema import (
     queue_operation,
 )
 from .session import Session, load_session
+
+SECRET_ENV_VAR = "CC_PARSER_SECRET"
+SANITIZED_FILENAME_PREFIX = "sanitized_"
+UNSANITIZED_FILENAME_PREFIX = "unsanitized_"
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -81,16 +108,21 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--framework",
         choices=[FRAMEWORK_APM, FRAMEWORK_SPECKIT],
-        required=True,
-        help="Framework label for the submission. Strict; no default.",
+        required=False,
+        default=None,
+        help=(
+            "Framework label for the submission. Required for "
+            "metric and inspection modes; ignored by --sanitize "
+            "and --unsanitize."
+        ),
     )
     parser.add_argument(
         "--inspect",
         action="store_true",
         help=(
-            "Print a counts-and-events summary for the submission. Used "
-            "during foundation-layer verification before metric modes "
-            "are wired."
+            "Print a counts-and-events summary for the submission "
+            "(record-type counts, per-conversation roles, queue "
+            "lifecycle counts, derived turn counts)."
         ),
     )
     parser.add_argument(
@@ -137,6 +169,24 @@ def create_parser() -> argparse.ArgumentParser:
             "dimension's bucket distributions and magnitudes."
         ),
     )
+    parser.add_argument(
+        "--sanitize",
+        action="store_true",
+        help=(
+            "Encrypt every *.jsonl file at the path with "
+            "CC_PARSER_SECRET and write a sanitised sidecar "
+            "(sanitized_<name>.json) alongside each input."
+        ),
+    )
+    parser.add_argument(
+        "--unsanitize",
+        action="store_true",
+        help=(
+            "Decrypt every sanitised JSON sidecar at the path "
+            "with CC_PARSER_SECRET and write the restored JSONL "
+            "(unsanitized_<name>.jsonl) alongside each input."
+        ),
+    )
     return parser
 
 
@@ -152,8 +202,21 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = create_parser()
     args = parser.parse_args(argv)
+    if args.sanitize and args.unsanitize:
+        print("error: --sanitize and --unsanitize are mutually exclusive", file=sys.stderr)
+        return 2
+    if args.sanitize:
+        return _run_sanitize(args.path)
+    if args.unsanitize:
+        return _run_unsanitize(args.path)
     if not (args.inspect or args.economic or args.process or args.metrics):
         parser.print_help(sys.stderr)
+        return 2
+    if args.framework is None:
+        print(
+            "error: --framework is required for inspection and metric modes",
+            file=sys.stderr,
+        )
         return 2
     try:
         session = load_session(args.path, args.framework)
@@ -421,6 +484,80 @@ def print_process(session: Session, short_threshold: int) -> None:
     print(f"    tool_result_count:       {reliability_metrics.tool_result_count}")
     print(f"    tool_error_count:        {reliability_metrics.tool_error_count}")
     print(f"    tool_success_rate:       {reliability_metrics.tool_success_rate:.4f}")
+
+
+def _run_sanitize(path: Path) -> int:
+    """Encrypt every ``*.jsonl`` file at ``path`` and write a sidecar next to it."""
+    secret = _read_secret()
+    if secret is None:
+        return 1
+    try:
+        files = discover_conversation_files(path)
+    except SchemaError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    for input_file in files:
+        sidecar = sanitise_jsonl_file(input_file, secret)
+        output_path = input_file.parent / f"{SANITIZED_FILENAME_PREFIX}{input_file.stem}.json"
+        write_json(sidecar, output_path)
+        print(f"sanitised: {input_file.name} -> {output_path.name}")
+    return 0
+
+
+def _run_unsanitize(path: Path) -> int:
+    """Decrypt every sanitised sidecar at ``path`` and write the restored JSONL."""
+    secret = _read_secret()
+    if secret is None:
+        return 1
+    resolved = path.resolve()
+    if not resolved.exists():
+        print(f"error: path not found: {resolved}", file=sys.stderr)
+        return 1
+    if resolved.is_file():
+        candidates = [resolved]
+    else:
+        candidates = sorted(resolved.glob("*.json"))
+    if not candidates:
+        print(f"error: no sanitised sidecar files found at {resolved}", file=sys.stderr)
+        return 1
+    processed = 0
+    for input_file in candidates:
+        try:
+            payload = load_json(input_file)
+        except (OSError, json.JSONDecodeError) as error:
+            print(f"warning: skipping {input_file.name}: {error}", file=sys.stderr)
+            continue
+        if not is_sanitised_payload(payload):
+            continue
+        try:
+            plaintext = unsanitise_to_text(payload, secret)
+        except ValueError as error:
+            print(f"error: cannot unsanitize {input_file.name}: {error}", file=sys.stderr)
+            return 1
+        stem = input_file.stem
+        if stem.startswith(SANITIZED_FILENAME_PREFIX):
+            stem = stem[len(SANITIZED_FILENAME_PREFIX):]
+        output_path = input_file.parent / f"{UNSANITIZED_FILENAME_PREFIX}{stem}.jsonl"
+        write_file_text(output_path, plaintext)
+        print(f"unsanitised: {input_file.name} -> {output_path.name}")
+        processed += 1
+    if processed == 0:
+        print(f"error: no sanitised sidecars matched at {resolved}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _read_secret() -> bytes | None:
+    """Return the configured encryption key, or ``None`` after printing an error."""
+    secret = os.environ.get(SECRET_ENV_VAR, "")
+    if not secret:
+        print(
+            f"error: environment variable {SECRET_ENV_VAR} must be set "
+            "for sanitisation operations",
+            file=sys.stderr,
+        )
+        return None
+    return secret.encode("utf-8")
 
 
 if __name__ == "__main__":
