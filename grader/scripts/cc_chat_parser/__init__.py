@@ -42,6 +42,7 @@ from .loader import (
     load_conversation,
     load_conversations,
 )
+from .inspect import render_artifact
 from .io import (
     SANITIZATION_META_KEY,
     is_sanitised_payload,
@@ -134,6 +135,7 @@ __all__ = [
     "load_session",
     "looks_like_jsonl",
     "read_file_text",
+    "render_artifact",
     "resolve_pinned_model",
     "sanitise_jsonl_file",
     "unsanitise_to_text",
