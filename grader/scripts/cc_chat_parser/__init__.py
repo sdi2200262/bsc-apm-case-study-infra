@@ -42,10 +42,18 @@ from .loader import (
     load_conversation,
     load_conversations,
 )
-from .metrics.economic import EconomicSession, TokenSums, compute_session_economic
+from .metrics.economic import (
+    EconomicSession,
+    TokenSums,
+    compute_economic_for_records,
+    compute_session_economic,
+    resolve_pinned_model,
+)
 from .metrics.reliability import ReliabilityMetrics, compute_reliability_metrics
+from .metrics.supplementary import SupplementaryMetrics, compute_supplementary_metrics
 from .metrics.time import TimeMetrics, compute_time_metrics
 from .metrics.user_input import UserInputMetrics, compute_user_input_metrics
+from .report import build_report
 from .rates import (
     CATEGORIES,
     ModelRates,
@@ -89,16 +97,21 @@ __all__ = [
     "SchemaError",
     "Session",
     "SteerEvent",
+    "SupplementaryMetrics",
     "TimeMetrics",
     "TokenSums",
     "Turn",
     "UserInputMetrics",
+    "build_report",
     "classify_bucket",
+    "compute_economic_for_records",
     "compute_reliability_metrics",
     "compute_session_economic",
+    "compute_supplementary_metrics",
     "compute_time_metrics",
     "compute_user_input_metrics",
     "cost_in_usd",
+    "resolve_pinned_model",
     "derive_turns",
     "discover_conversation_files",
     "load_conversation",

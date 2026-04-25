@@ -30,6 +30,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import json
 from .buckets import BUCKETS, DEFAULT_SHORT_THRESHOLD
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .loader import STEER_FATE_DELIVERED
@@ -48,6 +49,7 @@ from .rates import (
     load_rate_table,
     rates_for_model,
 )
+from .report import build_report
 from .schema import (
     SchemaError,
     is_compact_summary_user,
@@ -109,6 +111,23 @@ def create_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--metrics",
+        action="store_true",
+        help=(
+            "Build the canonical scope-nested metrics artifact "
+            "(session, phases, roles for APM, turns, diagnostics) "
+            "and write it to --output, or stdout when --output is "
+            "absent."
+        ),
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=None,
+        help="Destination path for --metrics output. Default writes to stdout.",
+    )
+    parser.add_argument(
         "--short-threshold",
         type=int,
         default=DEFAULT_SHORT_THRESHOLD,
@@ -133,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = create_parser()
     args = parser.parse_args(argv)
-    if not (args.inspect or args.economic or args.process):
+    if not (args.inspect or args.economic or args.process or args.metrics):
         parser.print_help(sys.stderr)
         return 2
     try:
@@ -160,6 +179,21 @@ def main(argv: list[str] | None = None) -> int:
         if printed_any:
             print()
         print_process(session, args.short_threshold)
+        printed_any = True
+    if args.metrics:
+        try:
+            rate_table = load_rate_table()
+            artifact = build_report(session, rate_table, args.short_threshold)
+        except RateTableError as error:
+            print(f"error: metrics build failed: {error}", file=sys.stderr)
+            return 1
+        if args.output is not None:
+            with args.output.open("w", encoding="utf-8") as sink:
+                json.dump(artifact, sink, indent=2, ensure_ascii=False)
+            print(f"metrics written to {args.output}", file=sys.stderr)
+        else:
+            json.dump(artifact, sys.stdout, indent=2, ensure_ascii=False)
+            print()
     return 0
 
 

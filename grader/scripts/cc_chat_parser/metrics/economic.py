@@ -184,20 +184,45 @@ def compute_session_economic(session: Session, rate_table: RateTable) -> Economi
             responsible for either adding the model to the YAML or
             surfacing the unpinned model as an actionable error.
     """
-    main_total = TokenSums.zero()
-    delegated_total = TokenSums.zero()
-    agent_dispatches_total = 0
-    agent_dispatches_with_usage = 0
-    for view in session.views:
-        conversation = view.conversation
-        main_total = main_total.add(_sum_main_tokens(conversation))
-        delegated, dispatches, dispatches_with_usage = _sum_delegated_tokens(conversation)
-        delegated_total = delegated_total.add(delegated)
-        agent_dispatches_total += dispatches
-        agent_dispatches_with_usage += dispatches_with_usage
+    all_records = [
+        record
+        for view in session.views
+        for record in view.conversation.records
+    ]
+    model = _resolve_pinned_model(session)
+    return compute_economic_for_records(all_records, rate_table, model)
+
+
+def compute_economic_for_records(
+    records: list[Record],
+    rate_table: RateTable,
+    model: str,
+) -> EconomicSession:
+    """Compute economic metrics over an arbitrary subset of records.
+
+    Used both for session-scope aggregation (every record across
+    every conversation) and for phase or role scope (the records
+    that belong to turns whose phase or role match). Deduplication
+    by ``requestId`` is applied locally to the subset so each
+    distinct API call contributes its usage exactly once even when
+    the subset spans multiple turns of the same conversation.
+
+    Args:
+        records: The records to aggregate over.
+        rate_table: The rate table to compute cost against.
+        model: The Claude model identifier to price against.
+
+    Returns:
+        A populated ``EconomicSession``.
+
+    Raises:
+        rates.RateTableError: When ``model`` is not present in
+            ``rate_table.models``.
+    """
+    main_total = _sum_main_from_records(records)
+    delegated_total, dispatches_total, dispatches_with_usage = _sum_delegated_from_records(records)
     total = main_total.add(delegated_total)
     total_prompt = total.input + total.cache_read + total.cache_5m + total.cache_1h
-    model = _resolve_pinned_model(session)
     cost = cost_in_usd(rate_table, model, total.as_dict())
     return EconomicSession(
         main=main_total,
@@ -206,38 +231,75 @@ def compute_session_economic(session: Session, rate_table: RateTable) -> Economi
         total_prompt_tokens=total_prompt,
         cost_usd=cost,
         model=model,
-        agent_dispatches_total=agent_dispatches_total,
-        agent_dispatches_with_usage=agent_dispatches_with_usage,
+        agent_dispatches_total=dispatches_total,
+        agent_dispatches_with_usage=dispatches_with_usage,
     )
 
 
-def _sum_main_tokens(conversation: Conversation) -> TokenSums:
-    """Sum a conversation's main-call tokens from its deduplicated usage index."""
+def resolve_pinned_model(session: Session) -> str:
+    """Return the modal non-synthetic ``message.model`` across the session.
+
+    Public alias for the internal helper, useful to callers that
+    need the same model identifier the cost computation uses (for
+    example, per-scope reports that share a single pinned model
+    across the session, phase, and role blocks).
+    """
+    return _resolve_pinned_model(session)
+
+
+def _sum_main_from_records(records: list[Record]) -> TokenSums:
+    """Sum main-call tokens across an arbitrary record subset, deduplicated by requestId.
+
+    The dedup is local to the subset: the first non-synthetic
+    assistant record encountered for a given ``requestId``
+    contributes its ``message.usage``; later records sharing the
+    id are skipped. This keeps per-scope sums correct for any
+    record subset that does not split a single API call's records
+    across multiple scopes (a property that holds by construction
+    because all records of a streaming response are written
+    contiguously to one conversation file).
+    """
     total = TokenSums.zero()
-    for usage in conversation.usage_index.usage_by_request_id.values():
+    seen: set[str] = set()
+    for record in records:
+        if record.record_type != RECORD_TYPE_ASSISTANT:
+            continue
+        message = record.payload.get("message")
+        if not isinstance(message, dict):
+            continue
+        if message.get("model") == SYNTHETIC_MODEL_MARKER:
+            continue
+        request_id = record.payload.get("requestId")
+        if not isinstance(request_id, str):
+            continue
+        if request_id in seen:
+            continue
+        seen.add(request_id)
+        usage = message.get("usage")
+        if not isinstance(usage, dict):
+            continue
         total = total.add(_token_sums_from_usage(usage))
     return total
 
 
-def _sum_delegated_tokens(
-    conversation: Conversation,
+def _sum_delegated_from_records(
+    records: list[Record],
 ) -> tuple[TokenSums, int, int]:
-    """Sum a conversation's subagent-dispatch tokens and report dispatch counts.
+    """Sum subagent-dispatch tokens across a record subset and report dispatch counts.
 
     Returns ``(delegated_sums, dispatches_total, dispatches_with_usage)``
     where ``dispatches_total`` counts every ``Agent`` tool_use block
-    in the conversation's assistant records and
-    ``dispatches_with_usage`` counts how many of those dispatches had
-    a fully-populated ``toolUseResult.usage`` on the matching user
-    record. The remaining gap reflects dispatches that were in
-    flight, did not return, or otherwise produced no usage at session
-    end; they contribute zero to the token totals.
+    in the assistant records of the subset and
+    ``dispatches_with_usage`` counts how many of those dispatches
+    had populated ``toolUseResult.usage`` on a matching user record
+    in the same subset. The remaining gap reflects dispatches whose
+    response did not return into this scope.
     """
-    tool_name_by_use_id = _build_agent_tool_use_id_index(conversation)
-    dispatches_total = len(tool_name_by_use_id)
+    agent_tool_use_ids = _agent_tool_use_id_index(records)
+    dispatches_total = len(agent_tool_use_ids)
     delegated = TokenSums.zero()
     dispatches_with_usage = 0
-    for record in conversation.records:
+    for record in records:
         if record.record_type != "user":
             continue
         tool_use_result = record.payload.get("toolUseResult")
@@ -246,17 +308,17 @@ def _sum_delegated_tokens(
         usage = tool_use_result.get("usage")
         if not isinstance(usage, dict):
             continue
-        if not _matches_agent_dispatch(record, tool_name_by_use_id):
+        if not _matches_agent_dispatch(record, agent_tool_use_ids):
             continue
         delegated = delegated.add(_token_sums_from_usage(usage))
         dispatches_with_usage += 1
     return delegated, dispatches_total, dispatches_with_usage
 
 
-def _build_agent_tool_use_id_index(conversation: Conversation) -> dict[str, str]:
-    """Return a map from Agent ``tool_use`` block id to the tool name."""
+def _agent_tool_use_id_index(records: list[Record]) -> dict[str, str]:
+    """Return a map from Agent ``tool_use`` block id to the tool name across a record subset."""
     index: dict[str, str] = {}
-    for record in conversation.records:
+    for record in records:
         if record.record_type != RECORD_TYPE_ASSISTANT:
             continue
         message = record.payload.get("message")
