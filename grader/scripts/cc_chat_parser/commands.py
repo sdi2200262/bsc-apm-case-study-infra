@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+"""
+Slash-command vocabulary for the two frameworks the case study compares.
+
+The Agentic Project Management (APM) framework defines nine
+participant-facing slash commands. Three of them (``apm-1-initiate-planner``,
+``apm-2-initiate-manager``, ``apm-3-initiate-worker``) are role
+initiators: the first such command in a conversation file fixes that
+file's role for the whole session. The remaining six commands continue
+work within an existing role's conversation.
+
+In APM, the conversation's role determines the phase. A Planner
+conversation is entirely planning; Manager and Worker conversations are
+entirely implementation. Individual commands within a conversation do
+not change the phase, so APM has no command-to-phase table at the
+classifier level. The set of recognised APM command names is kept here
+to drive the protocol-bucket classifier and to surface unknown
+``apm-*`` commands in diagnostics.
+
+The Spec Kit framework defines eight slash commands. All but
+``speckit.implement`` are planning-side; ``speckit.implement`` is the
+sole implementation-side command. Phase assignment in Spec-kit is
+per-prompt and follows a forward-only ratchet with surgical exceptions:
+once a prompt advances the ratchet to ``implementation``, later
+``planning`` commands count themselves as planning but do not move the
+ratchet back. The command-to-phase table is consumed by the per-prompt
+classifier in the session assembler.
+"""
+
+from __future__ import annotations
+
+import re
+
+FRAMEWORK_APM = "apm"
+FRAMEWORK_SPECKIT = "speckit"
+
+ROLE_PLANNER = "planner"
+ROLE_MANAGER = "manager"
+ROLE_WORKER = "worker"
+ROLE_UNASSIGNED = "unassigned"
+
+PHASE_PLANNING = "planning"
+PHASE_IMPLEMENTATION = "implementation"
+PHASE_OTHER = "other"
+
+SPECKIT_PHASE_ORDER: tuple[str, ...] = (
+    PHASE_OTHER,
+    PHASE_PLANNING,
+    PHASE_IMPLEMENTATION,
+)
+
+APM_KNOWN_COMMANDS: frozenset[str] = frozenset({
+    "apm-1-initiate-planner",
+    "apm-2-initiate-manager",
+    "apm-3-initiate-worker",
+    "apm-4-check-tasks",
+    "apm-5-check-reports",
+    "apm-6-handoff-manager",
+    "apm-7-handoff-worker",
+    "apm-8-summarize-session",
+    "apm-9-recover",
+})
+
+APM_ROLE_BY_INITIATE_COMMAND: dict[str, str] = {
+    "apm-1-initiate-planner": ROLE_PLANNER,
+    "apm-2-initiate-manager": ROLE_MANAGER,
+    "apm-3-initiate-worker": ROLE_WORKER,
+}
+
+APM_PHASE_BY_ROLE: dict[str, str] = {
+    ROLE_PLANNER: PHASE_PLANNING,
+    ROLE_MANAGER: PHASE_IMPLEMENTATION,
+    ROLE_WORKER: PHASE_IMPLEMENTATION,
+}
+
+SPECKIT_PHASE_BY_COMMAND: dict[str, str] = {
+    "speckit.constitution": PHASE_PLANNING,
+    "speckit.specify": PHASE_PLANNING,
+    "speckit.clarify": PHASE_PLANNING,
+    "speckit.checklist": PHASE_PLANNING,
+    "speckit.plan": PHASE_PLANNING,
+    "speckit.tasks": PHASE_PLANNING,
+    "speckit.analyze": PHASE_PLANNING,
+    "speckit.implement": PHASE_IMPLEMENTATION,
+}
+
+SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset(SPECKIT_PHASE_BY_COMMAND.keys())
+
+# A user prompt's slash-command invocation appears inside the prompt
+# text wrapped in a ``<command-name>`` XML-like tag, with a leading
+# slash on the command name itself, e.g.
+# ``<command-name>/apm-1-initiate-planner</command-name>``. The pattern
+# below extracts the command name (without the leading slash) from
+# every such marker in a piece of text. Multiple markers per prompt
+# are possible when a participant types more than one command in one
+# turn; ordering reflects document order in the prompt text.
+_COMMAND_NAME_PATTERN = re.compile(
+    r"<command-name>\s*/?(?P<name>[^<\s/]+)\s*</command-name>",
+    re.IGNORECASE,
+)
+
+
+def extract_command_names(text: str) -> tuple[str, ...]:
+    """Return every slash-command name found in a prompt text, in document order.
+
+    Args:
+        text: The concatenated text content of a user prompt record.
+
+    Returns:
+        A tuple of command names with the leading slash stripped, in
+        the order they appear in ``text``. Empty when no command marker
+        is present.
+    """
+    matches = _COMMAND_NAME_PATTERN.findall(text)
+    return tuple(matches)
+
+
+def classify_command(name: str) -> str:
+    """Return the framework a command name belongs to.
+
+    Args:
+        name: A command name with the leading slash already stripped
+            (e.g. ``apm-1-initiate-planner`` or ``speckit.specify``).
+
+    Returns:
+        ``FRAMEWORK_APM`` for ``apm-*`` names, ``FRAMEWORK_SPECKIT`` for
+        ``speckit.*`` names, the empty string otherwise.
+    """
+    if name.startswith("apm-"):
+        return FRAMEWORK_APM
+    if name.startswith("speckit."):
+        return FRAMEWORK_SPECKIT
+    return ""
+
+
+def role_from_initiate_command(name: str) -> str:
+    """Return the APM role implied by a role-initiating command name.
+
+    Args:
+        name: A command name with the leading slash stripped.
+
+    Returns:
+        ``ROLE_PLANNER``, ``ROLE_MANAGER``, or ``ROLE_WORKER`` for the
+        three role initiators; ``ROLE_UNASSIGNED`` for any other name,
+        including continuation commands like ``apm-4-check-tasks`` and
+        unknown commands.
+    """
+    return APM_ROLE_BY_INITIATE_COMMAND.get(name, ROLE_UNASSIGNED)
+
+
+def speckit_command_phase(name: str) -> str | None:
+    """Return the phase a Spec-kit command belongs to, or ``None`` when unknown.
+
+    Args:
+        name: A command name with the leading slash stripped.
+
+    Returns:
+        ``PHASE_PLANNING`` or ``PHASE_IMPLEMENTATION`` for known
+        Spec-kit commands; ``None`` for any name not in the Spec-kit
+        table (including ``apm-*`` names and unknown ``speckit.*``
+        names such as ``speckit.taskstoissues``).
+    """
+    return SPECKIT_PHASE_BY_COMMAND.get(name)
+
+
+def is_known_command(name: str) -> bool:
+    """Return ``True`` when the command name is in either framework's known set."""
+    return name in APM_KNOWN_COMMANDS or name in SPECKIT_KNOWN_COMMANDS
+
+
+def phase_index(phase: str) -> int:
+    """Return the ratchet index of a phase within the Spec-kit forward order.
+
+    The index defines the comparison the ratchet uses: a command's
+    phase advances the ratchet only when its index is strictly greater
+    than the ratchet's current index. ``PHASE_OTHER`` is index 0,
+    ``PHASE_PLANNING`` is 1, ``PHASE_IMPLEMENTATION`` is 2.
+
+    Args:
+        phase: One of the three phase constants.
+
+    Returns:
+        The position of ``phase`` in ``SPECKIT_PHASE_ORDER``.
+
+    Raises:
+        ValueError: When ``phase`` is not a recognised phase constant.
+    """
+    return SPECKIT_PHASE_ORDER.index(phase)

@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+"""
+Command-line interface for the Claude Code chat parser.
+
+Slice 1 wires only the ``--inspect`` mode that walks a submission and
+prints a counts-and-events summary for verification against ground
+truth. Subsequent slices add the metric-extraction modes
+(``--metrics``), the sanitisation modes (``--sanitize``,
+``--unsanitize``), and the ``inspect`` subcommand that renders an
+emitted metrics artifact in a readable form.
+
+Usage:
+    python -m cc_chat_parser <path> --framework {apm,speckit} --inspect
+
+``<path>`` is either a single ``*.jsonl`` file or a directory of such
+files copied straight from ``~/.claude/projects/<dashed-cwd>/``.
+``--framework`` is required; auto-detection by content is not
+performed because in production the framework is known from the
+submission directory naming, and ad-hoc inspection callers must
+declare the framework explicitly so misclassification of a non-
+protocol opening prompt cannot happen silently.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections import Counter
+from pathlib import Path
+
+from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
+from .loader import STEER_FATE_DELIVERED
+from .schema import (
+    SchemaError,
+    is_compact_summary_user,
+    is_genuine_user_prompt,
+    is_synthetic_assistant,
+    queue_operation,
+)
+from .session import Session, load_session
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create the top-level argument parser for the CLI."""
+    parser = argparse.ArgumentParser(
+        prog="python -m cc_chat_parser",
+        description=(
+            "Read Claude Code CLI JSONL conversation files from a submission "
+            "and report the parser's view of their structure."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "path",
+        type=Path,
+        help=(
+            "Path to a single .jsonl file or a directory of .jsonl files "
+            "copied straight from ~/.claude/projects/<dashed-cwd>/."
+        ),
+    )
+    parser.add_argument(
+        "--framework",
+        choices=[FRAMEWORK_APM, FRAMEWORK_SPECKIT],
+        required=True,
+        help="Framework label for the submission. Strict; no default.",
+    )
+    parser.add_argument(
+        "--inspect",
+        action="store_true",
+        help=(
+            "Print a counts-and-events summary for the submission. Used "
+            "during foundation-layer verification before metric modes "
+            "are wired."
+        ),
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point.
+
+    Args:
+        argv: Optional list of argument strings; defaults to
+            ``sys.argv[1:]`` when ``None``.
+
+    Returns:
+        Process exit code: ``0`` on success, non-zero on error.
+    """
+    parser = create_parser()
+    args = parser.parse_args(argv)
+    if not args.inspect:
+        parser.print_help(sys.stderr)
+        return 2
+    try:
+        session = load_session(args.path, args.framework)
+    except SchemaError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print_inspection(session)
+    return 0
+
+
+def print_inspection(session: Session) -> None:
+    """Render a counts-and-events summary of a loaded session to stdout."""
+    print(f"framework: {session.framework}")
+    print(f"conversation files: {len(session.views)}")
+    record_counts: Counter[str] = Counter()
+    subtype_counts: Counter[tuple[str, str]] = Counter()
+    queue_op_counts: Counter[str] = Counter()
+    genuine_user_prompts = 0
+    compact_summary_records = 0
+    synthetic_assistant_records = 0
+    total_records = 0
+    total_unique_request_ids = 0
+    total_steer_events = 0
+    total_steers_delivered = 0
+    total_steers_abandoned = 0
+    total_compaction_events = 0
+    total_queue_warnings = 0
+    print()
+    print("per-conversation:")
+    for view in session.views:
+        conversation = view.conversation
+        records = conversation.records
+        total_records += len(records)
+        per_file_counts: Counter[str] = Counter()
+        per_file_subtypes: Counter[tuple[str, str]] = Counter()
+        per_file_queue: Counter[str] = Counter()
+        per_file_user_prompts = 0
+        per_file_compact_summary = 0
+        per_file_synthetic = 0
+        for record in records:
+            per_file_counts[record.record_type] += 1
+            record_counts[record.record_type] += 1
+            if record.subtype:
+                per_file_subtypes[(record.record_type, record.subtype)] += 1
+                subtype_counts[(record.record_type, record.subtype)] += 1
+            op = queue_operation(record)
+            if op:
+                per_file_queue[op] += 1
+                queue_op_counts[op] += 1
+            if is_genuine_user_prompt(record):
+                per_file_user_prompts += 1
+                genuine_user_prompts += 1
+            if is_compact_summary_user(record):
+                per_file_compact_summary += 1
+                compact_summary_records += 1
+            if is_synthetic_assistant(record):
+                per_file_synthetic += 1
+                synthetic_assistant_records += 1
+        unique_request_ids = len(conversation.usage_index.usage_by_request_id)
+        total_unique_request_ids += unique_request_ids
+        steer_count = len(conversation.steer_events)
+        total_steer_events += steer_count
+        delivered = sum(1 for ev in conversation.steer_events if ev.fate == STEER_FATE_DELIVERED)
+        abandoned = steer_count - delivered
+        total_steers_delivered += delivered
+        total_steers_abandoned += abandoned
+        compaction_count = len(conversation.compaction_events)
+        total_compaction_events += compaction_count
+        warnings_count = len(conversation.queue_lifecycle_warnings)
+        total_queue_warnings += warnings_count
+        turns = [t for t in session.turns if t.conversation_path == conversation.path]
+        print(f"  {conversation.path}")
+        print(f"    role:                       {view.role}")
+        print(f"    first_command:              {view.first_command!r}")
+        print(f"    first_record_timestamp:     {view.first_record_timestamp}")
+        print(f"    records:                    {len(records)}")
+        for record_type, count in sorted(per_file_counts.items()):
+            print(f"      {record_type:32} {count}")
+        if per_file_subtypes:
+            print(f"    subtypes:")
+            for (record_type, subtype), count in sorted(per_file_subtypes.items()):
+                print(f"      {record_type}/{subtype:24} {count}")
+        if per_file_queue:
+            print(f"    queue operations:")
+            for op, count in sorted(per_file_queue.items()):
+                print(f"      {op:32} {count}")
+        print(f"    genuine user prompts:       {per_file_user_prompts}")
+        print(f"    compact-summary records:    {per_file_compact_summary}")
+        print(f"    synthetic assistant records: {per_file_synthetic}")
+        print(f"    unique requestIds:          {unique_request_ids}")
+        print(f"    steers (delivered/abandoned): {delivered}/{abandoned}")
+        print(f"    compaction events:          {compaction_count}")
+        print(f"    derived turns:              {len(turns)}")
+        if warnings_count:
+            print(f"    queue lifecycle warnings:")
+            for warning in conversation.queue_lifecycle_warnings:
+                print(f"      - {warning}")
+    print()
+    print("session totals:")
+    print(f"  records:                       {total_records}")
+    print(f"  record types:")
+    for record_type, count in sorted(record_counts.items()):
+        print(f"    {record_type:32} {count}")
+    if subtype_counts:
+        print(f"  subtypes:")
+        for (record_type, subtype), count in sorted(subtype_counts.items()):
+            print(f"    {record_type}/{subtype:24} {count}")
+    if queue_op_counts:
+        print(f"  queue operations:")
+        for op, count in sorted(queue_op_counts.items()):
+            print(f"    {op:32} {count}")
+    print(f"  genuine user prompts:          {genuine_user_prompts}")
+    print(f"  compact-summary records:       {compact_summary_records}")
+    print(f"  synthetic assistant records:   {synthetic_assistant_records}")
+    print(f"  unique requestIds (deduped):   {total_unique_request_ids}")
+    print(f"  steers (delivered/abandoned):  {total_steers_delivered}/{total_steers_abandoned}")
+    print(f"  compaction events:             {total_compaction_events}")
+    print(f"  queue lifecycle warnings:      {total_queue_warnings}")
+    print(f"  derived turns:                 {len(session.turns)}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
