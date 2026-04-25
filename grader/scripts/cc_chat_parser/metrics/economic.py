@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+"""
+Economic-dimension metrics: per-category token sums and API-equivalent cost.
+
+Token usage on a Claude Code conversation comes from two disjoint
+populations and the parser sums both:
+
+* **Main usage** is the per-API-call usage of the conversation's main
+  agent. Claude Code emits one JSONL record per content block of a
+  streaming API response, with every record from the same call
+  carrying an identical ``message.usage``. Summing per record would
+  multiply the call's tokens by the block count (up to roughly 11x
+  on real data), so the loader's ``RequestUsageIndex`` provides one
+  ``usage`` dict per unique non-synthetic ``requestId``; this module
+  sums across that deduplicated population.
+
+* **Delegated usage** is the rolled-up usage of subagent dispatches.
+  When the main agent calls the ``Agent`` tool to dispatch a
+  subagent, the subagent's full token consumption is reported back
+  on the parent user record's ``toolUseResult.usage``. The two
+  populations do not overlap: the parent assistant record's
+  ``message.usage`` accounts for the Agent tool dispatch as a
+  regular tool call (one ``tool_use`` block in the parent's content,
+  cheap on its own), while the subagent's actual computation lives
+  entirely under ``toolUseResult.usage``. Some Agent dispatches lack
+  populated ``toolUseResult.usage`` (the dispatch was in flight or
+  did not return at session end); those contribute zero tokens and
+  are counted in diagnostics so the ratio of complete-to-incomplete
+  dispatches is visible.
+
+Cost is computed against the pinned per-model rate table at
+``rates.RATE_TABLE``. Each of the five token categories is billed at
+its own published rate; cache-read, 5-minute cache write, and 1-hour
+cache write each carry a different multiplier of the input rate. The
+cost figure reported is therefore the sum across categories at their
+distinct rates, not a single-rate approximation against a flat token
+total.
+
+A Claude Code autocompaction event mid-session is handled correctly
+without any special boundary logic. Each call's ``message.usage``
+reflects what that call actually consumed: pre-boundary calls were
+billed against the pre-compaction context (large prefix, cache hits
+likely), post-boundary calls against the new post-compaction context
+(smaller, no surviving cache initially, fresh cache prefix building
+up). Summing per-requestId-deduped usage across the whole file gives
+the correct total for visible API calls, with no double-counting at
+the boundary.
+
+The compaction synthesis call itself is a real billable event on the
+participant's account (the model is asked to summarise the
+pre-compaction context into the post-compaction summary), but Claude
+Code does not write that call as a regular ``assistant`` record. Its
+token usage is therefore not visible to this parser and not included
+in the cost figure. When a session contains one or more compaction
+events, the cost it reports is a *minimum* on the participant's
+actual API-equivalent bill; the diagnostics block surfaces the
+compaction event count so downstream analysis can flag affected
+sessions. When the session contains zero compaction events (the
+common case for case-study-sized sessions), the figure is exact for
+visible calls and the framing is moot.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+from typing import Any
+
+from ..loader import Conversation
+from ..rates import (
+    CATEGORIES,
+    CATEGORY_CACHE_1H,
+    CATEGORY_CACHE_5M,
+    CATEGORY_CACHE_READ,
+    CATEGORY_INPUT,
+    CATEGORY_OUTPUT,
+    RateTable,
+    cost_in_usd,
+)
+from ..schema import (
+    SYNTHETIC_MODEL_MARKER,
+    RECORD_TYPE_ASSISTANT,
+)
+from ..session import Session
+
+
+@dataclass(frozen=True)
+class TokenSums:
+    """Per-category token totals across one population.
+
+    Attributes:
+        input: Non-cached input tokens.
+        output: Output tokens.
+        cache_read: Cache-read input tokens.
+        cache_5m: Tokens written to the 5-minute ephemeral cache.
+        cache_1h: Tokens written to the 1-hour ephemeral cache.
+    """
+
+    input: int
+    output: int
+    cache_read: int
+    cache_5m: int
+    cache_1h: int
+
+    @classmethod
+    def zero(cls) -> "TokenSums":
+        """Return a ``TokenSums`` with all categories at zero."""
+        return cls(input=0, output=0, cache_read=0, cache_5m=0, cache_1h=0)
+
+    def add(self, other: "TokenSums") -> "TokenSums":
+        """Return the per-category sum of this and another ``TokenSums``."""
+        return TokenSums(
+            input=self.input + other.input,
+            output=self.output + other.output,
+            cache_read=self.cache_read + other.cache_read,
+            cache_5m=self.cache_5m + other.cache_5m,
+            cache_1h=self.cache_1h + other.cache_1h,
+        )
+
+    def as_dict(self) -> dict[str, int]:
+        """Return a plain dict keyed by the category constants in ``rates.CATEGORIES``."""
+        return {
+            CATEGORY_INPUT: self.input,
+            CATEGORY_OUTPUT: self.output,
+            CATEGORY_CACHE_READ: self.cache_read,
+            CATEGORY_CACHE_5M: self.cache_5m,
+            CATEGORY_CACHE_1H: self.cache_1h,
+        }
+
+
+@dataclass(frozen=True)
+class EconomicSession:
+    """Session-scope economic metric block.
+
+    Attributes:
+        main: Token totals from the main agents' deduplicated API
+            calls across every conversation in the session.
+        delegated: Token totals from subagent dispatches' rolled-up
+            ``toolUseResult.usage`` across every conversation.
+        total: Per-category sum of ``main`` and ``delegated``.
+        total_prompt_tokens: ``input + cache_read + cache_5m + cache_1h``
+            of ``total`` (the full input volume; output is disjoint).
+        cost_usd: API-equivalent cost in USD, computed against the
+            pinned rate table for the session's pinned model.
+        model: The Claude model identifier the cost was computed
+            against. The modal value of ``message.model`` across
+            non-synthetic assistant records is taken as the session's
+            pinned model.
+        agent_dispatches_total: Number of Agent tool_use blocks
+            observed across the session.
+        agent_dispatches_with_usage: Number of those dispatches whose
+            ``toolUseResult.usage`` was populated and contributed to
+            ``delegated``.
+    """
+
+    main: TokenSums
+    delegated: TokenSums
+    total: TokenSums
+    total_prompt_tokens: int
+    cost_usd: float
+    model: str
+    agent_dispatches_total: int
+    agent_dispatches_with_usage: int
+
+
+def compute_session_economic(session: Session, rate_table: RateTable) -> EconomicSession:
+    """Compute the session-scope economic metric block.
+
+    Args:
+        session: An assembled session.
+        rate_table: The rate table to compute cost against. Loaded
+            by the caller via ``rates.load_rate_table`` so the
+            choice of canonical or override file is explicit at the
+            call site.
+
+    Returns:
+        A populated ``EconomicSession``.
+
+    Raises:
+        rates.RateTableError: When the session's modal model is not
+            present in ``rate_table.models``. The caller is
+            responsible for either adding the model to the YAML or
+            surfacing the unpinned model as an actionable error.
+    """
+    main_total = TokenSums.zero()
+    delegated_total = TokenSums.zero()
+    agent_dispatches_total = 0
+    agent_dispatches_with_usage = 0
+    for view in session.views:
+        conversation = view.conversation
+        main_total = main_total.add(_sum_main_tokens(conversation))
+        delegated, dispatches, dispatches_with_usage = _sum_delegated_tokens(conversation)
+        delegated_total = delegated_total.add(delegated)
+        agent_dispatches_total += dispatches
+        agent_dispatches_with_usage += dispatches_with_usage
+    total = main_total.add(delegated_total)
+    total_prompt = total.input + total.cache_read + total.cache_5m + total.cache_1h
+    model = _resolve_pinned_model(session)
+    cost = cost_in_usd(rate_table, model, total.as_dict())
+    return EconomicSession(
+        main=main_total,
+        delegated=delegated_total,
+        total=total,
+        total_prompt_tokens=total_prompt,
+        cost_usd=cost,
+        model=model,
+        agent_dispatches_total=agent_dispatches_total,
+        agent_dispatches_with_usage=agent_dispatches_with_usage,
+    )
+
+
+def _sum_main_tokens(conversation: Conversation) -> TokenSums:
+    """Sum a conversation's main-call tokens from its deduplicated usage index."""
+    total = TokenSums.zero()
+    for usage in conversation.usage_index.usage_by_request_id.values():
+        total = total.add(_token_sums_from_usage(usage))
+    return total
+
+
+def _sum_delegated_tokens(
+    conversation: Conversation,
+) -> tuple[TokenSums, int, int]:
+    """Sum a conversation's subagent-dispatch tokens and report dispatch counts.
+
+    Returns ``(delegated_sums, dispatches_total, dispatches_with_usage)``
+    where ``dispatches_total`` counts every ``Agent`` tool_use block
+    in the conversation's assistant records and
+    ``dispatches_with_usage`` counts how many of those dispatches had
+    a fully-populated ``toolUseResult.usage`` on the matching user
+    record. The remaining gap reflects dispatches that were in
+    flight, did not return, or otherwise produced no usage at session
+    end; they contribute zero to the token totals.
+    """
+    tool_name_by_use_id = _build_agent_tool_use_id_index(conversation)
+    dispatches_total = len(tool_name_by_use_id)
+    delegated = TokenSums.zero()
+    dispatches_with_usage = 0
+    for record in conversation.records:
+        if record.record_type != "user":
+            continue
+        tool_use_result = record.payload.get("toolUseResult")
+        if not isinstance(tool_use_result, dict):
+            continue
+        usage = tool_use_result.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        if not _matches_agent_dispatch(record, tool_name_by_use_id):
+            continue
+        delegated = delegated.add(_token_sums_from_usage(usage))
+        dispatches_with_usage += 1
+    return delegated, dispatches_total, dispatches_with_usage
+
+
+def _build_agent_tool_use_id_index(conversation: Conversation) -> dict[str, str]:
+    """Return a map from Agent ``tool_use`` block id to the tool name."""
+    index: dict[str, str] = {}
+    for record in conversation.records:
+        if record.record_type != RECORD_TYPE_ASSISTANT:
+            continue
+        message = record.payload.get("message")
+        if not isinstance(message, dict):
+            continue
+        if message.get("model") == SYNTHETIC_MODEL_MARKER:
+            continue
+        for block in message.get("content", []):
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "tool_use":
+                continue
+            if block.get("name") != "Agent":
+                continue
+            tool_use_id = block.get("id")
+            if isinstance(tool_use_id, str):
+                index[tool_use_id] = "Agent"
+    return index
+
+
+def _matches_agent_dispatch(
+    user_record: Any,
+    agent_tool_use_ids: dict[str, str],
+) -> bool:
+    """Return ``True`` when a user record's tool_result references an Agent dispatch."""
+    message = user_record.payload.get("message")
+    if not isinstance(message, dict):
+        return False
+    content = message.get("content")
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "tool_result":
+            continue
+        tool_use_id = block.get("tool_use_id")
+        if isinstance(tool_use_id, str) and tool_use_id in agent_tool_use_ids:
+            return True
+    return False
+
+
+def _token_sums_from_usage(usage: dict[str, Any]) -> TokenSums:
+    """Extract the five-category ``TokenSums`` from one ``message.usage`` block."""
+    cache_creation = usage.get("cache_creation")
+    if isinstance(cache_creation, dict):
+        cache_5m = _int_or_zero(cache_creation.get("ephemeral_5m_input_tokens"))
+        cache_1h = _int_or_zero(cache_creation.get("ephemeral_1h_input_tokens"))
+    else:
+        cache_5m = 0
+        cache_1h = 0
+    return TokenSums(
+        input=_int_or_zero(usage.get("input_tokens")),
+        output=_int_or_zero(usage.get("output_tokens")),
+        cache_read=_int_or_zero(usage.get("cache_read_input_tokens")),
+        cache_5m=cache_5m,
+        cache_1h=cache_1h,
+    )
+
+
+def _int_or_zero(value: Any) -> int:
+    """Return ``value`` when it is an int, otherwise ``0``."""
+    return value if isinstance(value, int) else 0
+
+
+def _resolve_pinned_model(session: Session) -> str:
+    """Return the modal non-synthetic ``message.model`` across the session.
+
+    Sessions are expected to pin one model across both framework
+    sessions per participant; in the rare case where mid-session
+    drift produces multiple values, the modal value is taken and the
+    drift can be flagged separately by a downstream check that
+    inspects every distinct model observed.
+    """
+    counts: Counter[str] = Counter()
+    for view in session.views:
+        for record in view.conversation.records:
+            if record.record_type != RECORD_TYPE_ASSISTANT:
+                continue
+            message = record.payload.get("message")
+            if not isinstance(message, dict):
+                continue
+            model = message.get("model")
+            if not isinstance(model, str) or model == SYNTHETIC_MODEL_MARKER:
+                continue
+            counts[model] += 1
+    if not counts:
+        raise KeyError("session contains no non-synthetic assistant records; cannot resolve model")
+    return counts.most_common(1)[0][0]

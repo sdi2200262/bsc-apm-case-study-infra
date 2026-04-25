@@ -32,6 +32,18 @@ from pathlib import Path
 
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .loader import STEER_FATE_DELIVERED
+from .metrics.economic import EconomicSession, compute_session_economic
+from .rates import (
+    CATEGORY_CACHE_1H,
+    CATEGORY_CACHE_5M,
+    CATEGORY_CACHE_READ,
+    CATEGORY_INPUT,
+    CATEGORY_OUTPUT,
+    RateTable,
+    RateTableError,
+    load_rate_table,
+    rates_for_model,
+)
 from .schema import (
     SchemaError,
     is_compact_summary_user,
@@ -75,6 +87,15 @@ def create_parser() -> argparse.ArgumentParser:
             "are wired."
         ),
     )
+    parser.add_argument(
+        "--economic",
+        action="store_true",
+        help=(
+            "Print the economic-dimension metric block (per-category "
+            "token sums for main and delegated populations, totals, "
+            "and API-equivalent cost) at session scope."
+        ),
+    )
     return parser
 
 
@@ -90,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = create_parser()
     args = parser.parse_args(argv)
-    if not args.inspect:
+    if not (args.inspect or args.economic):
         parser.print_help(sys.stderr)
         return 2
     try:
@@ -98,7 +119,18 @@ def main(argv: list[str] | None = None) -> int:
     except SchemaError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    print_inspection(session)
+    if args.inspect:
+        print_inspection(session)
+    if args.economic:
+        if args.inspect:
+            print()
+        try:
+            rate_table = load_rate_table()
+            economic = compute_session_economic(session, rate_table)
+        except RateTableError as error:
+            print(f"error: cost computation failed: {error}", file=sys.stderr)
+            return 1
+        print_economic(economic, rate_table)
     return 0
 
 
@@ -211,6 +243,56 @@ def print_inspection(session: Session) -> None:
     print(f"  compaction events:             {total_compaction_events}")
     print(f"  queue lifecycle warnings:      {total_queue_warnings}")
     print(f"  derived turns:                 {len(session.turns)}")
+
+
+def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
+    """Render the session-scope economic metric block to stdout.
+
+    The output groups the three populations the parser distinguishes
+    (main API calls, delegated subagent dispatches, and their sum)
+    and shows the per-call cost contribution by category against the
+    pinned model's rates so the rate table's effect on the headline
+    figure is auditable.
+    """
+    rates = rates_for_model(rate_table, economic.model)
+    print(f"economic dimension (session scope):")
+    print(f"  pinned model:                 {economic.model}")
+    print(f"  rate table snapshot date:     {rate_table.snapshot_date}")
+    print(f"  rate table source path:       {rate_table.source_path}")
+    print(f"  pricing sources:")
+    for url in rate_table.sources:
+        print(f"    - {url}")
+    print()
+    print(f"  per-million USD rates:        input={rates.input:.2f} "
+          f"output={rates.output:.2f} cache_read={rates.cache_read:.2f} "
+          f"cache_5m={rates.cache_5m:.2f} cache_1h={rates.cache_1h:.2f}")
+    print()
+    print(f"  agent dispatches (total/with usage): "
+          f"{economic.agent_dispatches_total}/{economic.agent_dispatches_with_usage}")
+    print()
+    print(f"  {'category':12} {'main':>14} {'delegated':>14} {'total':>14}")
+    for category, main, delegated, total in (
+        (CATEGORY_INPUT,      economic.main.input,      economic.delegated.input,      economic.total.input),
+        (CATEGORY_OUTPUT,     economic.main.output,     economic.delegated.output,     economic.total.output),
+        (CATEGORY_CACHE_READ, economic.main.cache_read, economic.delegated.cache_read, economic.total.cache_read),
+        (CATEGORY_CACHE_5M,   economic.main.cache_5m,   economic.delegated.cache_5m,   economic.total.cache_5m),
+        (CATEGORY_CACHE_1H,   economic.main.cache_1h,   economic.delegated.cache_1h,   economic.total.cache_1h),
+    ):
+        print(f"  {category:12} {main:>14,} {delegated:>14,} {total:>14,}")
+    print()
+    print(f"  total prompt tokens:          {economic.total_prompt_tokens:>14,}")
+    print()
+    print(f"  cost breakdown (USD):")
+    breakdown = (
+        ("input",      economic.total.input      * rates.input),
+        ("output",     economic.total.output     * rates.output),
+        ("cache_read", economic.total.cache_read * rates.cache_read),
+        ("cache_5m",   economic.total.cache_5m   * rates.cache_5m),
+        ("cache_1h",   economic.total.cache_1h   * rates.cache_1h),
+    )
+    for label, amount in breakdown:
+        print(f"    {label:12} ${amount / 1_000_000.0:>10.4f}")
+    print(f"  cost_usd:                     ${economic.cost_usd:.4f}")
 
 
 if __name__ == "__main__":

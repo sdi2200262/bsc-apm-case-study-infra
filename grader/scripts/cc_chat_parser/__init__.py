@@ -33,16 +33,29 @@ from .loader import (
     load_conversation,
     load_conversations,
 )
+from .metrics.economic import EconomicSession, TokenSums, compute_session_economic
+from .rates import (
+    CATEGORIES,
+    ModelRates,
+    RateTable,
+    RateTableError,
+    cost_in_usd,
+    load_rate_table,
+    rates_for_model,
+)
 from .schema import Record, SchemaError
 from .session import ConversationView, Session, load_session
 from .turns import Turn, derive_turns
 
 __all__ = [
+    "CATEGORIES",
     "CompactionEvent",
     "Conversation",
     "ConversationView",
+    "EconomicSession",
     "FRAMEWORK_APM",
     "FRAMEWORK_SPECKIT",
+    "ModelRates",
     "PHASE_IMPLEMENTATION",
     "PHASE_OTHER",
     "PHASE_PLANNING",
@@ -50,15 +63,22 @@ __all__ = [
     "ROLE_PLANNER",
     "ROLE_UNASSIGNED",
     "ROLE_WORKER",
+    "RateTable",
+    "RateTableError",
     "Record",
     "RequestUsageIndex",
     "SchemaError",
     "Session",
     "SteerEvent",
+    "TokenSums",
     "Turn",
+    "compute_session_economic",
+    "cost_in_usd",
     "derive_turns",
     "discover_conversation_files",
     "load_conversation",
     "load_conversations",
+    "load_rate_table",
     "load_session",
+    "rates_for_model",
 ]

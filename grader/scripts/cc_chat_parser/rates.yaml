@@ -1,0 +1,48 @@
+# Per-model API rate table for cost computation.
+#
+# The parser loads this file at runtime. Edit the values in place to
+# refresh rates against Anthropic's published pricing; commit the
+# change so the snapshot date and the values stay in lockstep.
+#
+# An alternate rate file may be provided via the environment variable
+# CC_PARSER_RATE_TABLE (absolute path to a YAML file with the same
+# top-level shape as this one). Useful for running historical
+# computations against an older rate snapshot, or for ad-hoc
+# what-if comparisons, without modifying this file.
+#
+# All rates are in USD per million tokens. The five categories match
+# the Anthropic API's mutually-exclusive token populations:
+#   input        non-cached prompt tokens
+#   output       generated completion tokens
+#   cache_read   prompt tokens served from a previously-written cache
+#   cache_5m     prompt tokens written to the 5-minute ephemeral cache
+#   cache_1h     prompt tokens written to the 1-hour ephemeral cache
+# The cache multipliers (0.1x for read, 1.25x for 5-minute write, 2.0x
+# for 1-hour write, all relative to the model's input rate) are
+# Anthropic-documented and not estimated here.
+
+snapshot_date: 2026-04-25
+
+sources:
+  - https://claude.com/pricing
+  - https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
+
+models:
+  claude-opus-4-7:
+    input: 5.00
+    output: 25.00
+    cache_read: 0.50
+    cache_5m: 6.25
+    cache_1h: 10.00
+  claude-sonnet-4-6:
+    input: 3.00
+    output: 15.00
+    cache_read: 0.30
+    cache_5m: 3.75
+    cache_1h: 6.00
+  claude-haiku-4-5:
+    input: 1.00
+    output: 5.00
+    cache_read: 0.10
+    cache_5m: 1.25
+    cache_1h: 2.00
