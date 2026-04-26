@@ -24,10 +24,9 @@ import sys
 import argparse
 from pathlib import Path
 
-# Add grader directory to Python path for imports
+# Add grader directory to Python path for src module imports
 GRADER_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(GRADER_DIR))
-sys.path.insert(0, str(GRADER_DIR / "pipeline"))
 
 from src.patch_manager import PatchManager
 from src.build_tester import BuildTester
@@ -37,7 +36,6 @@ from src.eclass_manager import EclassManager
 from src.protocol_tester import ProtocolTester
 from src.scorer import Scorer
 from src.report import ReportWriter
-import workspace
 
 
 def main() -> None:
@@ -79,8 +77,8 @@ def main() -> None:
     parser.add_argument(
         "--eclass-dir",
         type=Path,
-        default=None,
-        help="Path to eclass-mcp-server directory (defaults to same level as grader directory)"
+        required=True,
+        help="Path to the eclass-mcp-server checkout the patch applies to."
     )
     
     args = parser.parse_args()
@@ -104,23 +102,14 @@ def main() -> None:
             sys.exit(2)
         patch_name = patch_path.stem
     
-    # Determine workspace paths
-    if args.eclass_dir:
-        eclass_dir = Path(args.eclass_dir).resolve()
-    else:
-        try:
-            paths = workspace.get_workspace_paths()
-            eclass_dir = paths["eclass_dir"]
-        except RuntimeError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(2)
-    
+    # Resolve eclass-mcp-server path; report output lands beside the
+    # checkout so a future cleanup can collect both the patched tree
+    # and its grading report from one parent directory.
+    eclass_dir = Path(args.eclass_dir).resolve()
     if not eclass_dir.exists():
         print(f"Error: eclass-mcp-server directory not found at {eclass_dir}", file=sys.stderr)
         sys.exit(2)
-    
-    # Determine workspace_root from eclass_dir for report generation
-    workspace_root = eclass_dir.parent
+    report_root = eclass_dir.parent
     
     print("=" * 50)
     print(f"Grading: {patch_name}")
@@ -128,7 +117,7 @@ def main() -> None:
     
     # Initialize components
     scorer = Scorer()
-    report = ReportWriter(workspace_root, patch_name)
+    report = ReportWriter(report_root, patch_name)
     patch_manager = PatchManager(eclass_dir)
     
     # Check prerequisites
