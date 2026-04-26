@@ -2,7 +2,7 @@
 
 Checkpoint scripts for processing participant submissions. Each script represents a discrete step in the workflow and logs operations to a manifest file for traceability.
 
-See [../PIPELINE.md](../PIPELINE.md) for the complete protocol and workflow.
+See [PIPELINE.md](PIPELINE.md) for the complete protocol and workflow.
 
 ## Overview
 
@@ -113,7 +113,7 @@ Example: `P001_S1_copilot_apm_submission.zip`
 
 ## Environment Variables
 
-- **CHAT_PARSER_SECRET** - Required for `parse_submission.py` when sanitization is enabled. Must be the same for both encrypt and decrypt operations. Can be set via environment variable or `.env` file. See [PIPELINE.md](../PIPELINE.md#quick-start) for setup.
+- **CHAT_PARSER_SECRET** - Required for `parse_submission.py` when sanitization is enabled. Must be the same for both encrypt and decrypt operations. Can be set via environment variable or `.env` file. See [PIPELINE.md](PIPELINE.md#quick-start) for setup.
 
 ## Manifest
 
@@ -128,4 +128,4 @@ See [manifest.py](manifest.py) for manifest operations and structure.
 For detailed usage, command-line options, and output formats, see:
 - Script help: `./<script_name> --help`
 - Source code docstrings: See function documentation in each script file
-- Full protocol: [PIPELINE.md](../PIPELINE.md)
+- Full protocol: [PIPELINE.md](PIPELINE.md)

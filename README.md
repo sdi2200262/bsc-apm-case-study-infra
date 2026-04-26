@@ -34,19 +34,20 @@ bsc-apm-case-study-task/
 ├── grader/                             # Grading infrastructure
 │   ├── README.md
 │   ├── SETUP.md
-│   ├── PIPELINE.md
 │   ├── grade
+│   ├── inspect.py                      # Grading results browser
 │   ├── docker-compose.eclass.yaml
 │   ├── src/                            # Core grading modules
-│   ├── pipeline/                       # Data processing pipeline
-│   │   ├── README.md
-│   │   └── *.py
-│   ├── scripts/                        # Utility scripts
-│   │   ├── README.md
-│   │   └── *.py
 │   └── fixtures/                       # SSO mock fixtures
 │       ├── README.md
 │       └── *.html
+├── parser/                             # Transcript parser
+│   ├── README.md
+│   └── cc_chat_parser/                 # Claude Code chat parser package
+├── pipeline/                           # Data processing pipeline
+│   ├── README.md
+│   ├── PIPELINE.md
+│   └── *.py
 └── participant-guides/                 # Study guides
     ├── README.md
     └── *.tex, *.pdf, assets/
@@ -57,9 +58,9 @@ bsc-apm-case-study-task/
 - **[task/README.md](task/README.md)** - Task specification overview
 - **[grader/README.md](grader/README.md)** - Grading system overview
 - **[grader/SETUP.md](grader/SETUP.md)** - Environment setup
-- **[grader/PIPELINE.md](grader/PIPELINE.md)** - Pipeline protocol
-- **[grader/pipeline/README.md](grader/pipeline/README.md)** - Pipeline scripts
-- **[grader/scripts/README.md](grader/scripts/README.md)** - Utility scripts
+- **[parser/README.md](parser/README.md)** - Transcript parser overview
+- **[pipeline/README.md](pipeline/README.md)** - Pipeline scripts
+- **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Pipeline protocol
 - **[grader/fixtures/README.md](grader/fixtures/README.md)** - SSO fixtures
 - **[participant-guides/README.md](participant-guides/README.md)** - Guide building
 

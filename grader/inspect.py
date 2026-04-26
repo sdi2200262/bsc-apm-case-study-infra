@@ -2,10 +2,24 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025 BSc Case Study Grader Contributors
 """
-Results Viewer - CLI utility for browsing grading results JSON files.
+Render an emitted grader results artifact in a human-readable form.
 
-Provides both command-line argument mode for scripted access and interactive
-menu mode for human exploration of detailed test results.
+The grader writes a results JSON document for each graded patch:
+per-test pass-or-fail status, points awarded against the rubric, and
+diagnostic messages. This module reads such an artifact and prints
+either a one-shot summary (with optional flags for category breakdown
+and per-test detail) or an interactive menu for browsing test
+results during development and grading review.
+
+Counterpart to ``cc_chat_parser/inspect.py``, which renders the
+parser's metrics artifact in the same style; the two utilities share
+no code but share a single mental model: an inspect tool that lives
+next to the producer of the artifact it inspects.
+
+Invocation:
+    ./inspect.py <results.json>                  # interactive
+    ./inspect.py <results.json> --summary        # one-shot summary
+    ./inspect.py --help                          # full options
 """
 
 import argparse
