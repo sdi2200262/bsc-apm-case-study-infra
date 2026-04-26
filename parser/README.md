@@ -68,6 +68,12 @@ silently mis-classify.
 ## Documentation
 
 For module-level details, anchor and constructed flag conventions,
-and the per-metric formulas and rationale, see the
-docstrings inside each module under `cc_chat_parser/` and its
-`metrics/` subpackage.
+and the per-metric formulas and rationale, see the docstrings
+inside each module under `cc_chat_parser/` and its `metrics/`
+subpackage.
+
+## Related
+
+- [../pipeline/README.md](../pipeline/README.md) — the pipeline's
+  parse stage subprocesses this package to build per-submission
+  metrics artifacts.

@@ -1,131 +1,98 @@
-# Pipeline Scripts
+# Pipeline
 
-Checkpoint scripts for processing participant submissions. Each script represents a discrete step in the workflow and logs operations to a manifest file for traceability.
+Five-stage data-processing pipeline for participant submissions.
+Turns one zipped submission into one row in the aggregated dataset,
+with per-submission durable artifacts and a manifest audit trail
+along the way.
 
-See [PIPELINE.md](PIPELINE.md) for the complete protocol and workflow.
+For the submission contract, processing sequence, output layout,
+manifest schema, and dataset CSV column schema, see
+[PIPELINE.md](PIPELINE.md). This README covers per-script CLI
+usage only.
 
-## Overview
+## Modules
 
-- **validate_submission.py** - Validates zip structure and naming format, extracts to workspace root
-- **grade_submission.py** - Runs grader, outputs results JSON to dataset repo and TXT to workspace root
-- **parse_submission.py** - Extracts interaction metrics, sanitizes chat logs
-- **combine_participant.py** - Merges grading results with interaction metrics
-- **add_to_dataset.py** - Appends row to platform-level dataset CSV
-- **validate_dataset.py** - Validates dataset integrity against manifest (submission-agnostic)
-- **inspect_submission.py** - Inspects processing history from manifest
+| Module | Role |
+|---|---|
+| `pipeline.validate` | Confirm a submission zip matches the contract; unpack to the staging area. |
+| `pipeline.grade` | Apply the patch and run the grader; promote the results JSON. |
+| `pipeline.parse` | Run the parser on the transcripts; promote the metrics JSON and sealed sidecars. |
+| `pipeline.combine` | Wrap grader and parser outputs into one combined artifact. |
+| `pipeline.add_to_dataset` | Append one flat row to the aggregated dataset CSV. |
+| `pipeline.run` | Chain the five stages on one zip; halt on first non-zero exit. |
+| `pipeline.validate_dataset` | Cross-check manifest entries against dataset rows for one output root. |
+| `pipeline.inspect` | Render one submission's manifest history (text or JSON). |
+| `pipeline.cleanup` | Remove a submission's staging copy after every stage has succeeded. |
 
-## Quick Start
+## Prerequisites
 
-### validate_submission.py
+- Python 3.10+ with `pyyaml`.
+- A clone of the parser at a known path
+  (`--parser-root`).
+- A clone of the grader and the `eclass-mcp-server` source at known
+  paths (`--grader-root`, `--eclass-root`); the openeclass Docker
+  stack must be running before the grade stage executes.
+- `CC_PARSER_SECRET` set in the environment for the parse stage's
+  sanitisation pass.
 
-```bash
-# Validate and extract submission
-./validate_submission.py P001_S1_copilot_apm_submission.zip
+## Common flags
 
-# View full usage
-./validate_submission.py --help
+Every stage takes:
+
+- `--output-root <path>` (required): the dataset output root.
+- `--config <path>` (optional): override the default
+  `<output-root>/pipeline.yaml`.
+
+`pipeline.yaml` lives at the dataset root and declares default
+external paths so they need not be repeated on every invocation:
+
+```yaml
+paths:
+  grader_root: /path/to/bsc-apm-case-study-task/grader
+  eclass_root: /path/to/eclass-mcp-server
+  parser_root: /path/to/bsc-apm-case-study-task/parser
 ```
 
-### grade_submission.py
+CLI flags always win over the YAML.
+
+## Quick start
 
 ```bash
-# Grade a validated submission
-./grade_submission.py P001_S1_copilot_apm_submission
+# One-shot orchestrated run on a single submission
+python -m pipeline.run P001_S1_apm.zip \
+    --output-root /path/to/dataset \
+    --grader-root /path/to/grader \
+    --eclass-root /path/to/eclass-mcp-server \
+    --parser-root /path/to/parser
 
-# View full usage
-./grade_submission.py --help
+# Or stage by stage (assuming pipeline.yaml supplies the paths)
+python -m pipeline.validate       P001_S1_apm.zip --output-root /path/to/dataset
+python -m pipeline.grade          P001_S1_apm     --output-root /path/to/dataset
+python -m pipeline.parse          P001_S1_apm     --output-root /path/to/dataset
+python -m pipeline.combine        P001_S1_apm     --output-root /path/to/dataset
+python -m pipeline.add_to_dataset P001_S1_apm     --output-root /path/to/dataset
+
+# Cross-check the dataset for one output root
+python -m pipeline.validate_dataset --output-root /path/to/dataset
+
+# Render one submission's manifest history (text or --json)
+python -m pipeline.inspect P001_S1_apm --output-root /path/to/dataset
+python -m pipeline.inspect P001_S1_apm --output-root /path/to/dataset --json
+
+# Remove a submission's staging copy (only when all 5 stages succeeded)
+python -m pipeline.cleanup P001_S1_apm --output-root /path/to/dataset
 ```
 
-### parse_submission.py
+Each script's `--help` lists its complete flag set. See
+[PIPELINE.md](PIPELINE.md) for the protocol and schemas the
+scripts implement.
 
-```bash
-# Extract metrics and sanitize chats
-./parse_submission.py P001_S1_copilot_apm_submission
+## Related
 
-# Extract metrics only (skip sanitization)
-./parse_submission.py P001_S1_copilot_apm_submission --no-sanitize
-
-# View full usage
-./parse_submission.py --help
-```
-
-### combine_participant.py
-
-```bash
-# Combine results and metrics
-./combine_participant.py P001_S1_copilot_apm_submission
-
-# View full usage
-./combine_participant.py --help
-```
-
-### add_to_dataset.py
-
-```bash
-# Add to dataset
-./add_to_dataset.py P001_S1_copilot_apm_submission
-
-# View full usage
-./add_to_dataset.py --help
-```
-
-### validate_dataset.py
-
-```bash
-# Validate dataset for a platform
-./validate_dataset.py --platform copilot
-
-# Verbose output
-./validate_dataset.py --platform copilot --verbose
-
-# View full usage
-./validate_dataset.py --help
-```
-
-### inspect_submission.py
-
-```bash
-# Inspect processing history
-./inspect_submission.py P001_S1_copilot_apm
-
-# JSON output
-./inspect_submission.py P001_S1_copilot_apm --json
-
-# View full usage
-./inspect_submission.py --help
-```
-
-## Workspace Auto-Detection
-
-All scripts automatically detect the workspace root by locating:
-- `bsc-apm-case-study-task/`
-- `bsc-apm-case-study-data/`
-- `eclass-mcp-server/`
-- `openeclass/`
-
-No path arguments are required.
-
-## Submission Format
-
-All scripts expect submission format: `{PID}_{S1|2}_{Platform}_{Tool}_submission.zip`
-
-Example: `P001_S1_copilot_apm_submission.zip`
-
-## Environment Variables
-
-- **CHAT_PARSER_SECRET** - Required for `parse_submission.py` when sanitization is enabled. Must be the same for both encrypt and decrypt operations. Can be set via environment variable or `.env` file. See [PIPELINE.md](PIPELINE.md#quick-start) for setup.
-
-## Manifest
-
-Each platform maintains a `pipeline_manifest.json` at `submissions_sanitized/{platform}/` tracking all operations with timestamps, checksums, status, and warnings.
-
-Manifest key format: `{PID}_{S1|2}_{Platform}_{Tool}` (e.g., `P001_S1_copilot_apm`)
-
-See [manifest.py](manifest.py) for manifest operations and structure.
-
-## Documentation
-
-For detailed usage, command-line options, and output formats, see:
-- Script help: `./<script_name> --help`
-- Source code docstrings: See function documentation in each script file
-- Full protocol: [PIPELINE.md](PIPELINE.md)
+- [PIPELINE.md](PIPELINE.md) — submission contract, processing
+  sequence, output layout, manifest schema, dataset CSV columns,
+  failure recovery.
+- [../parser/README.md](../parser/README.md) — the transcript
+  parser the parse stage subprocesses.
+- [../grader/README.md](../grader/README.md) — the grader the
+  grade stage subprocesses.

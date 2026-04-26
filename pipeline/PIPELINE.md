@@ -1,154 +1,309 @@
-# Data Processing Pipeline
+# Pipeline protocol
 
-Protocol for processing participant submissions from collection to aggregated datasets.
+End-to-end flow from a participant's submission zip to one row in
+the aggregated dataset CSV. This document covers the submission
+contract participants follow, the researcher-side processing
+sequence, the on-disk artifact layout under one output root, the
+manifest schema that audits every operation, and the dataset CSV
+column schema.
 
-## Overview
+For per-stage script usage and the configuration file shape, see
+[README.md](README.md).
 
-The pipeline transforms raw participant submissions into:
-- Grading scores per submission
-- Interaction metrics from AI assistant logs
-- Sanitized (encrypted) chat exports
-- Aggregated datasets for statistical analysis
+## Submission contract
 
-Processing is incremental and traceable. Each operation is logged in a manifest file with checksums and timestamps, enabling error recovery and audit trails.
+A participant produces one zip file at the end of each case-study
+session. The filename and inner layout are strict; the validate
+stage rejects anything that does not match.
 
-## Prerequisites
-
-- Python 3.10+
-- Docker with docker compose v2 (for grading)
-- `CHAT_PARSER_SECRET` environment variable (for sanitization)
-- Workspace directory structure with:
-  - `bsc-apm-case-study-task/` (this repository)
-  - `bsc-apm-case-study-data/` (data repository)
-  - `eclass-mcp-server/` (baseline repository)
-  - `openeclass/` (OpenEclass source)
-
-See [SETUP.md](SETUP.md) for complete setup instructions.
-
-## Submission Format
-
-Submissions follow format: `{PID}_{S1|2}_{Platform}_{Tool}_submission.zip`
-
-- `{PID}` - Participant ID (e.g., `P001`)
-- `{S1|2}` - Session number (`S1` = first tool, `S2` = second tool)
-- `{Platform}` - `copilot`
-- `{Tool}` - Tool identifier (`apm`, `spec-kit`, `copilot-plan`)
-
-Example: `P001_S1_copilot_apm_submission.zip`
-
-Contents:
-- `{PID}_{S1|2}_{Platform}_{Tool}_solution.patch`
-- `{PID}_{S1|2}_{Platform}_{Tool}_logs/chats/*.{json|md}`
-- (Cursor only) `{PID}_{S1|2}_{Platform}_{Tool}_logs/stats/*.csv`
-
-## Processing Steps
-
-The pipeline processes submissions through discrete stages:
-
-1. **Validate** - Zip structure and naming format validation, extraction to workspace root
-2. **Grade** - Automated grading with result tracking
-3. **Parse** - Interaction metric extraction and chat sanitization
-4. **Combine** - Merge grading results with metrics
-5. **Add to Dataset** - Append to platform-level CSV
-6. **Validate Dataset** - Integrity checks against manifest
-
-Each stage is checkpointed in the manifest for error recovery. See [pipeline/README.md](pipeline/README.md) for script usage.
-
-## Workspace Structure
-
-The pipeline uses workspace auto-detection to find required directories:
+### Filename
 
 ```
-workspace/
-├── bsc-apm-case-study-task/    # This repository
-│   └── grader/
-│       └── pipeline/
-├── bsc-apm-case-study-data/    # Data repository
-│   └── submissions_sanitized/
-│       └── copilot/
-│           ├── pipeline_manifest.json
-│           ├── dataset.csv
-│           └── {PID}/
-│               └── S{S1|2}_{tool}/
-├── eclass-mcp-server/           # eClass MCP Server repository
-└── openeclass/                  # Local openeclass repository
+{PID}_S{1|2}_{apm|speckit}.zip
 ```
 
-Scripts automatically detect the workspace root by searching for these directories. Run scripts from anywhere within the workspace.
+Three segments separated by underscores:
 
-## Quick Start
+- `PID` matches `P\d{3}` (the participant identifier; uppercase in
+  the canonical form).
+- `S1` or `S2` (the participant's first or second case-study
+  session).
+- `apm` or `speckit` (the framework the participant used in this
+  session; `speckit` is one word with no hyphen, matching the
+  parser's `--framework` flag).
 
-Set the encryption secret via environment variable or `.env` file:
+The same three-segment string without the `.zip` suffix is the
+**manifest key** for the submission, and it names the per-submission
+directories under both `_staging/` and the per-participant tree.
 
-```bash
-export CHAT_PARSER_SECRET='your-key'
-```
-
-Process a submission:
-
-```bash
-cd bsc-apm-case-study-task/grader/pipeline
-
-# Step 1: Validate and extract
-./validate_submission.py P001_S1_copilot_apm_submission.zip
-
-# Step 2: Grade
-./grade_submission.py P001_S1_copilot_apm_submission
-
-# Step 3: Parse metrics
-./parse_submission.py P001_S1_copilot_apm_submission
-
-# Step 4: Combine results
-./combine_participant.py P001_S1_copilot_apm_submission
-
-# Step 5: Add to dataset
-./add_to_dataset.py P001_S1_copilot_apm_submission
-
-# Step 6: Validate integrity
-./validate_dataset.py --platform copilot
-```
-
-All scripts accept unpacked submission directory path (except `validate_submission.py` which takes zip, and `validate_dataset.py`/`inspect_submission.py` which are submission-agnostic).
-
-See [pipeline/README.md](pipeline/README.md) for detailed usage and options.
-
-## Data Repository Structure
-
-Processed data is stored in `bsc-apm-case-study-data/submissions_sanitized/{platform}/`:
+### Inner layout
 
 ```
-submissions_sanitized/
-└── copilot/
-    ├── pipeline_manifest.json    # Audit trail for all operations
-    ├── dataset.csv                # Aggregated dataset
-    └── {PID}/
-        └── S{S1|2}_{tool}/
-            ├── {PID}_{S1|2}_{platform}_{tool}_solution.patch
-            ├── {PID}_{S1|2}_{platform}_{tool}_results.json
-            ├── {PID}_{S1|2}_{platform}_{tool}_metrics.json
-            ├── {PID}_{S1|2}_{platform}_{tool}_combined.json
-            └── chats/
-                └── sanitized_*.json
+P001_S1_apm/
+├── solution.patch
+└── transcripts/
+    ├── <sessionId>.jsonl
+    ├── <sessionId>.jsonl
+    └── ...
 ```
 
-The `pipeline_manifest.json` file tracks all operations with checksums and timestamps, enabling validation at each checkpoint and error recovery.
+Two top-level entries inside the zip's named directory:
 
-## Manifest
+- `solution.patch`: the patch the participant produced against the
+  pinned baseline. Consumed by the grader.
+- `transcripts/`: a flat directory of one or more
+  `<sessionId>.jsonl` files copied straight from
+  `~/.claude/projects/<dashed-cwd>/`. Filenames stay as the UUIDs
+  Claude Code wrote them with. Consumed by the parser.
 
-Each platform maintains a manifest at `submissions_sanitized/{platform}/pipeline_manifest.json`. Manifest entries use key format: `{PID}_{S1|2}_{Platform}_{Tool}` (e.g., `P001_S1_copilot_apm`).
+The participant guide instructs participants to omit the
+per-session `<sessionId>/subagents/` and `<sessionId>/tool-results/`
+subdirectories Claude Code writes alongside the JSONL files; the
+validate stage rejects nested files or directories under
+`transcripts/` to keep the dataset clean of artifacts the parser
+does not consume.
 
-Use `inspect_submission.py` to view processing history for any submission. See [pipeline/README.md](pipeline/README.md) for manifest inspection.
+## Processing sequence
 
-## OpenEclass Background Process
+The researcher receives a submission zip and runs the five stages
+in order. Each stage records its outcome in the manifest under
+`<output-root>/pipeline_manifest.json`; a stage that fails leaves
+no manifest entry and the chain stops.
 
-OpenEclass must be running in the background for grading to function. Start services per [SETUP.md](SETUP.md):
-
-```bash
-docker start grader_db_1 grader_eclass_1
 ```
+zip ──► validate ──► grade ──► parse ──► combine ──► add_to_dataset
+                                                          │
+                                                          ▼
+                                                    dataset.csv row
+```
+
+1. **validate** unpacks the zip into the staging area and confirms
+   the layout.
+2. **grade** subprocesses `<grader-root>/grade` against the staged
+   patch and the configured eclass checkout; the grader's
+   results JSON is promoted to the per-participant directory.
+3. **parse** subprocesses `cc_chat_parser` against the staged
+   transcripts directory; the canonical metrics artifact is
+   promoted alongside sealed sidecar copies of the raw transcripts.
+4. **combine** wraps the grader and parser outputs into one
+   per-submission combined artifact.
+5. **add_to_dataset** appends one flat row to the aggregated
+   dataset CSV.
+
+After a successful run, the operator can invoke `pipeline.cleanup
+<manifest_key> --output-root <root>` to remove the staging copy.
+The manifest entry survives the cleanup so the audit trail is
+preserved.
+
+## Output layout under one output root
+
+The output root carries everything the pipeline produces for one
+study population: the manifest, the aggregated dataset CSV, an
+ephemeral staging area, and one directory per submission with
+promoted artifacts.
+
+```
+<output-root>/
+├── pipeline_manifest.json
+├── dataset.csv
+├── pipeline.yaml                 # optional default-paths config
+├── _staging/
+│   ├── P001_S1_apm/
+│   │   ├── solution.patch
+│   │   └── transcripts/
+│   │       └── <sessionId>.jsonl
+│   └── P001_S2_speckit/
+│       └── ...
+└── P001/
+    ├── S1_apm/
+    │   ├── results.json
+    │   ├── metrics.json
+    │   ├── combined.json
+    │   └── sanitized_transcripts/
+    │       └── sanitized_<sessionId>.json
+    └── S2_speckit/
+        └── ...
+```
+
+The dataset directory has no opinion on where it lives; it can be
+a clone of `bsc-apm-case-study-data/`, a working directory, or a
+tmpfs for testing. Every pipeline stage takes `--output-root` as
+the only required path; the configurable parser, grader, and
+eclass roots are referenced only by the stages that need them.
+
+## Manifest schema
+
+The manifest at `<output-root>/pipeline_manifest.json` is the audit
+trail. One top-level entry per submission keyed by manifest key;
+each entry carries one block per stage with the stage's status,
+timestamp, input and output paths, checksums, and stage-specific
+fields.
+
+```json
+{
+  "created_at": "...",
+  "updated_at": "...",
+  "entries": {
+    "P001_S1_apm": {
+      "validate": {
+        "timestamp": "...",
+        "status": "success",
+        "input_zip": "P001_S1_apm.zip",
+        "input_checksum": "sha256:...",
+        "staging_path": "_staging/P001_S1_apm",
+        "transcripts_count": 3,
+        "warnings": []
+      },
+      "grade": {
+        "timestamp": "...",
+        "status": "success",
+        "input_patch": "solution.patch",
+        "input_checksum": "sha256:...",
+        "output_results": "P001/S1_apm/results.json",
+        "output_checksum": "sha256:...",
+        "score": "87/100",
+        "score_breakdown": {
+          "python_baseline": "12/12",
+          "python_feature": "31/36",
+          "c_replica": "44/52"
+        }
+      },
+      "parse": {
+        "timestamp": "...",
+        "status": "success",
+        "framework": "apm",
+        "input_transcripts_count": 3,
+        "output_metrics": "P001/S1_apm/metrics.json",
+        "output_checksum": "sha256:...",
+        "sanitized_files": ["sanitized_<id>.json", "..."]
+      },
+      "combine": {
+        "timestamp": "...",
+        "status": "success",
+        "input_files": ["results.json", "metrics.json"],
+        "output_combined": "P001/S1_apm/combined.json",
+        "output_checksum": "sha256:..."
+      },
+      "add_to_dataset": {
+        "timestamp": "...",
+        "status": "success",
+        "input_combined": "combined.json",
+        "input_checksum": "sha256:...",
+        "output_file": "dataset.csv",
+        "dataset_row_number": 12,
+        "dataset_checksum_before": "sha256:...",
+        "dataset_checksum_after": "sha256:..."
+      }
+    }
+  }
+}
+```
+
+Stage names: `validate`, `grade`, `parse`, `combine`,
+`add_to_dataset`. Status values: `success`, `warning`, `error`. The
+manifest uses fcntl-based locking and atomic-write semantics so
+concurrent operators serialise on writes and concurrent readers
+never see a partial write.
+
+## Combined artifact schema
+
+The per-submission `combined.json` wraps grader and parser outputs
+with submission identifiers:
+
+```json
+{
+  "participant_id": "P001",
+  "session": "S1",
+  "framework": "apm",
+  "processing_timestamp": "...",
+  "grading": {
+    "total":           {"score": 87, "max": 100},
+    "python_baseline": {"score": 12, "max": 12},
+    "python_feature":  {"score": 31, "max": 36},
+    "c_replica":       {"score": 44, "max": 52}
+  },
+  "metrics": "<the entire cc_chat_parser metrics artifact, unmodified>"
+}
+```
+
+The `metrics` block is the parser's scope-nested artifact verbatim;
+downstream analyses reach into `metrics.session.economic.cost_usd.value`
+and similar without the pipeline re-deriving anything.
+
+## Dataset CSV schema
+
+`dataset.csv` carries one row per submission with session-scope
+measurements only. Phase-scope and role-scope decompositions stay in
+`combined.json` for analyses that want them. Bucket-share dicts are
+flattened into per-bucket columns so downstream statistics software
+does not have to parse JSON inside a CSV cell.
+
+Column families, in order:
+
+- **Identifiers** (4): `participant_id`, `session`, `framework`,
+  `processing_timestamp`.
+- **Session metadata** (8): `cc_version`, `model`, `model_drift`,
+  `entrypoint`, `auth_mode_indicator`, `service_tier`,
+  `session_start_timestamp`, `session_end_timestamp`.
+- **Grading** (5): `total_score`, `max_score`,
+  `python_baseline_score`, `python_feature_score`,
+  `c_replica_score`.
+- **Economic, session scope** (11): `cost_usd`,
+  `total_input_tokens`, `total_output_tokens`,
+  `total_cache_read_tokens`, `total_cache_5m_tokens`,
+  `total_cache_1h_tokens`, `total_prompt_tokens`,
+  `main_input_tokens`, `main_output_tokens`,
+  `delegated_input_tokens`, `delegated_output_tokens`.
+- **Time, session scope** (10): `duration`, `turn_time`,
+  `turn_time_solo`, `turn_time_concurrent`, `inter_turn_time`,
+  `turn_count`, `mean_turn_duration`, `turn_duration_p50`,
+  `turn_duration_p95`, `turn_duration_stdev`.
+- **User input, session scope** (10): `turn_prompt_count`,
+  `steer_delivered_count`, `steer_abandoned_count`,
+  `steer_attempted_count`, `turn_prompts_share_protocol`,
+  `turn_prompts_share_short`, `turn_prompts_share_standard`,
+  `all_inputs_share_protocol`, `all_inputs_share_short`,
+  `all_inputs_share_standard`.
+- **Reliability** (1): `tool_success_rate`.
+- **Supplementary** (3): `subagent_count`, `subagent_tool_count`,
+  `reasoning_token_share`.
+- **Diagnostics** (7): `compaction_events_total`,
+  `cost_excludes_compaction_synthesis`,
+  `synthetic_assistant_records_excluded`,
+  `agent_dispatches_without_usage`, `entrypoint_valid`,
+  `auth_mode_valid`, `invariant_failures`.
+
+Total: 59 columns. The canonical column list and order is defined
+in `pipeline/add_to_dataset.py`.
+
+`invariant_failures` is the count of failed invariant checks in
+the parser's diagnostics block; the names of the failed checks
+live in `combined.json.metrics.diagnostics.invariant_checks`.
+
+## Failure recovery
+
+Each stage is idempotent against its inputs: re-running a stage
+overwrites its prior output and re-records its manifest entry. The
+chain stops on the first stage that fails; the operator fixes the
+underlying issue and re-runs from that stage. The orchestrator
+(`pipeline.run`) does not retry; manual re-runs are the recovery
+path.
+
+Common recovery scenarios:
+
+- **Grader Docker stack down**: start `docker start grader_db_1
+  grader_eclass_1` and re-run `pipeline.grade`.
+- **Parser version bump**: re-run `pipeline.parse` to refresh
+  `metrics.json`, then re-run `combine` and `add_to_dataset`.
+- **Edited combined artifact**: `validate_dataset` warns about
+  the checksum mismatch; the operator either accepts the edit
+  (the dataset row is what was added at the time it was added)
+  or restores the previous content from a backup.
 
 ## Related
 
-- [pipeline/README.md](pipeline/README.md) - Pipeline script usage and options
-- [scripts/README.md](scripts/README.md) - Parser and viewer utilities
-- [SETUP.md](SETUP.md) - Grader environment setup
+- [README.md](README.md) — per-stage script usage and CLI flags.
+- [../parser/README.md](../parser/README.md) — the parser package
+  the parse stage subprocesses.
+- [../grader/README.md](../grader/README.md) — the grader the
+  grade stage subprocesses.
