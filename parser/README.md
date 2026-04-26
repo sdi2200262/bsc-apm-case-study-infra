@@ -6,7 +6,7 @@ scope-nested metrics artifact used by the analysis pipeline.
 
 ## Package
 
-- **[cc_chat_parser/](cc_chat_parser/)** — Python package implementing
+- **[cc_chat_parser/](cc_chat_parser/)**: Python package implementing
   the metric set defined for the case study. Reads one or more
   `<sessionId>.jsonl` files copied from
   `~/.claude/projects/<dashed-cwd>/`, computes per-scope metrics
@@ -57,10 +57,10 @@ silently mis-classify.
 
 ## Environment variables
 
-- **CC_PARSER_SECRET** — required for `--sanitize` and `--unsanitize`.
+- **CC_PARSER_SECRET**: required for `--sanitize` and `--unsanitize`.
   Must match across encrypt and decrypt. Read from the environment or
   a `.env` entry of the same name.
-- **CC_PARSER_RATE_TABLE** — optional override path to an alternate
+- **CC_PARSER_RATE_TABLE**: optional override path to an alternate
   rate-table YAML file. Useful for re-running an older session
   against historical rates without modifying the canonical
   `cc_chat_parser/rates.yaml`.
@@ -74,6 +74,6 @@ subpackage.
 
 ## Related
 
-- [../pipeline/README.md](../pipeline/README.md) — the pipeline's
+- [../pipeline/README.md](../pipeline/README.md): the pipeline's
   parse stage subprocesses this package to build per-submission
   metrics artifacts.

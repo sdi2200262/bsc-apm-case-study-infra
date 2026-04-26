@@ -302,8 +302,8 @@ Common recovery scenarios:
 
 ## Related
 
-- [README.md](README.md) — per-stage script usage and CLI flags.
-- [../parser/README.md](../parser/README.md) — the parser package
+- [README.md](README.md): per-stage script usage and CLI flags.
+- [../parser/README.md](../parser/README.md): the parser package
   the parse stage subprocesses.
-- [../grader/README.md](../grader/README.md) — the grader the
+- [../grader/README.md](../grader/README.md): the grader the
   grade stage subprocesses.

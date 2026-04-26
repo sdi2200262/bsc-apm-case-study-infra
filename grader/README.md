@@ -69,15 +69,15 @@ grader/
 
 ## Documentation
 
-- **[SETUP.md](SETUP.md)** — Environment setup and prerequisites.
-- **Source code docstrings** — Detailed API documentation in `src/`
+- **[SETUP.md](SETUP.md)**: environment setup and prerequisites.
+- **Source code docstrings**: detailed API documentation in `src/`
   modules.
 
 ## Related
 
-- **[../parser/](../parser/)** — Transcript parser; metric extraction
+- **[../parser/](../parser/)**: transcript parser; metric extraction
   from participant Claude Code session logs.
-- **[../pipeline/](../pipeline/)** — Submission processing pipeline;
+- **[../pipeline/](../pipeline/)**: submission processing pipeline;
   orchestrates validation, grading, parsing, and dataset aggregation.
-- **[Task Specification](../task/)** — Submission requirements and
+- **[Task Specification](../task/)**: submission requirements and
   scoring rubric.

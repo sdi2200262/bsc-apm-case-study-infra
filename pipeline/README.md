@@ -89,10 +89,10 @@ scripts implement.
 
 ## Related
 
-- [PIPELINE.md](PIPELINE.md) — submission contract, processing
+- [PIPELINE.md](PIPELINE.md): submission contract, processing
   sequence, output layout, manifest schema, dataset CSV columns,
   failure recovery.
-- [../parser/README.md](../parser/README.md) — the transcript
+- [../parser/README.md](../parser/README.md): the transcript
   parser the parse stage subprocesses.
-- [../grader/README.md](../grader/README.md) — the grader the
+- [../grader/README.md](../grader/README.md): the grader the
   grade stage subprocesses.
