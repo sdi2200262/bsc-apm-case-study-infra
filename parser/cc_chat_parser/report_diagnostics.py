@@ -269,9 +269,17 @@ def _tool_result_counts(session: Session) -> tuple[int, int]:
 
 
 def _agent_dispatch_counts(session: Session) -> tuple[int, int]:
-    """Count Agent dispatches and how many had populated usage at session level."""
-    total = 0
-    with_usage = 0
+    """Count Agent dispatches and how many had populated usage at session level.
+
+    The dispatch total is the number of distinct Agent tool_use ids
+    observed across non-synthetic assistant records. The
+    with-usage count is the number of user records whose
+    ``tool_result`` references one of those ids and whose
+    ``toolUseResult.usage`` is populated. Matching by tool_use id
+    prevents non-Agent tools that may carry their own usage from
+    inflating the with-usage count.
+    """
+    agent_tool_use_ids: set[str] = set()
     for view in session.views:
         for record in view.conversation.records:
             if record.record_type != "assistant":
@@ -282,14 +290,39 @@ def _agent_dispatch_counts(session: Session) -> tuple[int, int]:
             if message.get("model") == SYNTHETIC_MODEL_MARKER:
                 continue
             for block in message.get("content", []):
-                if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Agent":
-                    total += 1
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "tool_use" or block.get("name") != "Agent":
+                    continue
+                tool_use_id = block.get("id")
+                if isinstance(tool_use_id, str):
+                    agent_tool_use_ids.add(tool_use_id)
+    total = len(agent_tool_use_ids)
+    with_usage = 0
+    for view in session.views:
         for record in view.conversation.records:
             if record.record_type != "user":
                 continue
             tool_use_result = record.payload.get("toolUseResult")
-            if isinstance(tool_use_result, dict) and isinstance(tool_use_result.get("usage"), dict):
-                with_usage += 1
+            if not isinstance(tool_use_result, dict):
+                continue
+            if not isinstance(tool_use_result.get("usage"), dict):
+                continue
+            message = record.payload.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "tool_result":
+                    continue
+                tool_use_id = block.get("tool_use_id")
+                if isinstance(tool_use_id, str) and tool_use_id in agent_tool_use_ids:
+                    with_usage += 1
+                    break
     return total, with_usage
 
 
