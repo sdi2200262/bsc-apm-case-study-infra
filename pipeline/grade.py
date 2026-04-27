@@ -49,7 +49,6 @@ from .errors import (
 from .io import compute_checksum
 from .manifest import (
     STAGE_GRADE,
-    STAGE_VALIDATE,
     STATUS_SUCCESS,
     add_stage,
     load_manifest,
