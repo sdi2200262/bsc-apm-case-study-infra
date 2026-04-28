@@ -28,7 +28,6 @@ import json
 import os
 import select
 import subprocess
-import sys
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -98,10 +97,10 @@ class ServerProcess:
             startup grace period; ``False`` when it failed to spawn
             or exited immediately.
         """
-        env = _extended_env()
+        env = os.environ.copy()
         env.update(self.ctx.env_vars)
         if self.ctx.impl == "python":
-            cmd = _python_command()
+            cmd = ["uv", "run", "python", "-m", "src.eclass_mcp_server.server"]
             cwd = self.ctx.eclass_dir
         else:
             cmd = [str(self.ctx.eclass_dir / "c-replica" / "server")]
@@ -313,41 +312,11 @@ def tool_exists(server: ServerProcess, tool_name: str) -> bool:
     return any(tool.get("name") == tool_name for tool in tools)
 
 
-def _extended_env() -> dict[str, str]:
-    """Return a copy of the OS env with ``~/.local/bin`` and ``~/.cargo/bin`` on ``PATH``."""
-    env = os.environ.copy()
-    home = Path.home()
-    extras = [str(home / ".local" / "bin"), str(home / ".cargo" / "bin")]
-    env["PATH"] = ":".join(extras + [env.get("PATH", "")])
-    return env
-
-
-def _python_command() -> list[str]:
-    """Return the command for spawning the Python implementation.
-
-    Prefers ``uv run`` when ``uv`` is on ``PATH``; falls back to
-    bare ``python``. The fallback exists so a participant who does
-    not use ``uv`` can still be graded.
-    """
-    try:
-        subprocess.run(
-            ["uv", "--version"],
-            capture_output=True,
-            check=True,
-            env=_extended_env(),
-        )
-        return ["uv", "run", "python", "-m", "src.eclass_mcp_server.server"]
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return ["python", "-m", "src.eclass_mcp_server.server"]
-
-
 def _read_with_timeout(stream, timeout: float, debug: bool) -> str:
-    """Read a single line from ``stream`` with an OS-portable timeout."""
-    if sys.platform != "win32":
-        ready, _, _ = select.select([stream], [], [], timeout)
-        if not ready:
-            if debug:
-                print(f"[debug] timeout: no response after {timeout}s")
-            return ""
-        return stream.readline()
+    """Read a single line from ``stream`` with a ``select``-based timeout."""
+    ready, _, _ = select.select([stream], [], [], timeout)
+    if not ready:
+        if debug:
+            print(f"[debug] timeout: no response after {timeout}s")
+        return ""
     return stream.readline()

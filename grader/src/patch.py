@@ -6,9 +6,7 @@ Git operations for the patch-grading flow.
 
 The grader applies a participant's patch on a fresh test branch
 inside the eclass-mcp-server checkout, runs the phase tests, then
-cleans up the branch and resets the working tree. The functions
-here cover the apply and cleanup halves; ``--3way`` merge is the
-fallback when context mismatches block straight ``git apply``.
+cleans up the branch and resets the working tree.
 
 Build artefacts (object files, shared libraries, the C-replica
 binary) are excluded from the apply so a participant who packaged
@@ -56,9 +54,7 @@ def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
 
     ok, message = _git(repo_path, "checkout", "main")
     if not ok:
-        ok, message = _git(repo_path, "checkout", "master")
-        if not ok:
-            return False, f"could not checkout main branch: {message}", message
+        return False, f"could not checkout main branch: {message}", message
 
     _git(repo_path, "branch", "-D", test_branch)
 
@@ -72,21 +68,13 @@ def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
 
     ok, message = _git(repo_path, "apply", "--check", *exclude_args, str(patch_path))
     if not ok:
-        ok, message = _git(
-            repo_path, "apply", "--3way", "--check", *exclude_args, str(patch_path)
-        )
-        if not ok:
-            cleanup(repo_path)
-            return False, f"patch cannot be applied: {message}", message
+        cleanup(repo_path)
+        return False, f"patch cannot be applied: {message}", message
 
     ok, message = _git(repo_path, "apply", *exclude_args, str(patch_path))
     if not ok:
-        ok, message = _git(
-            repo_path, "apply", "--3way", *exclude_args, str(patch_path)
-        )
-        if not ok:
-            cleanup(repo_path)
-            return False, f"patch application failed: {message}", message
+        cleanup(repo_path)
+        return False, f"patch application failed: {message}", message
 
     return True, f"patch applied on branch {test_branch}", message
 
@@ -94,8 +82,7 @@ def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
 def cleanup(repo_path: Path) -> tuple[bool, str]:
     """Restore the main branch and delete any leftover test branches.
 
-    Idempotent: safe to call when no patch was applied. Tries
-    ``main`` then ``master`` as the destination branch; deletes
+    Idempotent: safe to call when no patch was applied. Deletes
     every branch with the test prefix.
 
     Args:
@@ -110,8 +97,6 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
     actions: list[str] = []
 
     ok, _ = _git(repo_path, "checkout", "main")
-    if not ok:
-        ok, _ = _git(repo_path, "checkout", "master")
     if ok:
         actions.append("switched to main")
 

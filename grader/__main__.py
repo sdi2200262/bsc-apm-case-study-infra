@@ -6,14 +6,11 @@ Grader CLI entry point.
 
 Parses arguments, resolves configuration, runs the
 testing-environment pre-flight, runs the reset script, then
-sequences the per-phase test modules. Exits 0 on a clean run,
-non-zero on configuration errors, pre-flight failures, reset
-failures, or phase test failures.
-
-Invoke as ``python -m grader`` from a working directory that has
-the ``grader`` package on ``sys.path``. The script accepts either
-a patch file (patch mode) or ``--no-patch`` (baseline mode);
-other phase-related flags pass through to the phase modules.
+exits without running phase tests. Invoke as ``python -m grader``
+from a working directory that has the ``grader`` package on
+``sys.path``. The script accepts either a patch file (patch mode)
+or ``--no-patch`` (baseline mode); other phase-related flags are
+parsed for forward compatibility.
 """
 
 from __future__ import annotations

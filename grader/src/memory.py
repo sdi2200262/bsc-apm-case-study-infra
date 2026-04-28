@@ -61,11 +61,9 @@ def valgrind(eclass_root: Path, mock_root: Path) -> tuple[bool, str, str]:
         return False, "server binary not found", "server binary not found at c-replica/server"
 
     try:
-        subprocess.run(
-            ["valgrind", "--version"], capture_output=True, check=True
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False, "valgrind not available", "valgrind not installed or not in PATH"
+        subprocess.run(["valgrind", "--version"], capture_output=True, check=True)
+    except FileNotFoundError:
+        return False, "valgrind not on PATH", "valgrind not on PATH"
 
     env = os.environ.copy()
     env.update(mcp_server_env(mock_root))
