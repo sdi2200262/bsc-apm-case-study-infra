@@ -51,6 +51,7 @@ paths:
   grader_root: /path/to/bsc-apm-case-study-task/grader
   eclass_root: /path/to/eclass-mcp-server
   parser_root: /path/to/bsc-apm-case-study-task/parser
+  mock_root: /path/to/bsc-apm-case-study-env
 ```
 
 CLI flags always win over the YAML.
@@ -63,7 +64,8 @@ python -m pipeline.run P001_S1_apm.zip \
     --output-root /path/to/dataset \
     --grader-root /path/to/grader \
     --eclass-root /path/to/eclass-mcp-server \
-    --parser-root /path/to/parser
+    --parser-root /path/to/parser \
+    --mock-root /path/to/bsc-apm-case-study-env
 
 # Or stage by stage (assuming pipeline.yaml supplies the paths)
 python -m pipeline.validate       P001_S1_apm.zip --output-root /path/to/dataset

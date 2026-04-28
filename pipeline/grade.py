@@ -6,28 +6,25 @@ Run the grader on a validated submission and promote the results JSON.
 
 This stage takes the unpacked submission from
 ``<output-root>/_staging/<manifest_key>/`` (produced by the
-validate stage), invokes ``<grader-root>/grade`` against the
-submission's ``solution.patch`` and the participant's
-``eclass-mcp-server`` checkout, and copies the resulting
-``results_<patch_stem>.json`` into the per-participant directory
-at ``<output-root>/<PID>/<S{n}>_<framework>/results.json``. The
+validate stage), invokes ``python -m grader`` against the
+submission's ``solution.patch``, the participant's
+``eclass-mcp-server`` checkout, and the testing-environment
+install, and copies the resulting ``results_<patch_stem>.json``
+into the per-participant directory at
+``<output-root>/<PID>/<S{n}>_<framework>/results.json``. The
 grade-stage entry in the manifest carries the patch checksum, the
 output checksum, the score breakdown, and the timestamps.
 
 The grader writes its own ``results_*.json`` and ``results_*.txt``
-to the parent directory of the eclass checkout (a grader-internal
-choice; the report writer's home is set there because it lets a
-researcher inspect raw grader output side-by-side with the patched
-tree). The pipeline picks up the JSON from that location and
-promotes it; the TXT is left in place for ad-hoc grader review and
-is not part of the dataset.
+to the parent directory of the eclass checkout. The pipeline
+picks up the JSON from that location and promotes it; the TXT is
+left in place for ad-hoc grader review and is not part of the
+dataset.
 
-The eclass and openeclass containers must be running before this
-stage executes; the grader checks accessibility but does not
-manage container lifecycle. The pipeline does not require an
-``--openeclass-root`` flag because the grader interacts with
-openeclass via Docker only; if a future grader rework needs the
-openeclass source on disk, the flag can be added then.
+The testing environment must be up (its endpoints reachable and
+its reset script available) before this stage executes; the
+grader's pre-flight catches the absence and reports a clear
+error.
 """
 
 from __future__ import annotations
@@ -63,7 +60,7 @@ from .submissions import (
 PATCH_FILENAME = "solution.patch"
 RESULTS_FILENAME = "results.json"
 STAGING_DIRNAME = "_staging"
-GRADER_ENTRY_NAME = "grade"
+GRADER_PACKAGE_NAME = "grader"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -85,20 +82,22 @@ def main(argv: list[str] | None = None) -> int:
             config_override=args.config,
             grader_root_flag=args.grader_root,
             eclass_root_flag=args.eclass_root,
+            mock_root_flag=args.mock_root,
         )
         grader_root = require_path(config.grader_root, "grader root", "grade")
         eclass_root = require_path(config.eclass_root, "eclass root", "grade")
+        mock_root = require_path(config.mock_root, "mock root", "grade")
         submission = parse_submission_name(args.submission_name)
         patch_path = _require_validated_patch(config.output_root, submission)
-        grader_entry = grader_root / GRADER_ENTRY_NAME
-        if not grader_entry.exists():
+        grader_package_dir = grader_root / "__init__.py"
+        if not grader_package_dir.exists():
             raise StageInputError(
-                f"grade: grader entry not found at {grader_entry}"
+                f"grade: grader package not found at {grader_root}"
             )
         target_dir = config.output_root / participant_subdir(submission)
         target_dir.mkdir(parents=True, exist_ok=True)
         results_target = target_dir / RESULTS_FILENAME
-        _invoke_grader(grader_entry, patch_path, eclass_root)
+        _invoke_grader(grader_root, patch_path, eclass_root, mock_root)
         results_source = _locate_results(eclass_root, patch_path)
         shutil.copyfile(results_source, results_target)
         breakdown = _read_score_breakdown(results_target)
@@ -175,6 +174,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=None,
         help="Path to the eclass-mcp-server checkout (overrides pipeline.yaml).",
     )
+    parser.add_argument(
+        "--mock-root",
+        type=Path,
+        default=None,
+        help="Path to the testing-environment install (overrides pipeline.yaml).",
+    )
     return parser.parse_args(argv)
 
 
@@ -193,27 +198,44 @@ def _require_validated_patch(
 
 
 def _invoke_grader(
-    grader_entry: Path,
+    grader_root: Path,
     patch_path: Path,
     eclass_root: Path,
+    mock_root: Path,
 ) -> None:
     """Run the grader subprocess on the patch.
 
     The grader writes ``results_<patch_stem>.json`` and a sibling
-    ``.txt`` to ``eclass_root.parent``; this helper does not relocate
-    those files. ``stdin`` is closed to prevent the grader from
-    hanging on prompts when invoked non-interactively.
+    ``.txt`` to ``eclass_root.parent``; this helper does not
+    relocate those files. ``stdin`` is closed to prevent the
+    grader from hanging on prompts when invoked
+    non-interactively.
+
+    Args:
+        grader_root: Path to the ``grader`` package directory.
+            The grader is invoked as ``python -m grader`` with the
+            package's parent on the working directory.
+        patch_path: Path to the participant's solution patch.
+        eclass_root: Path to the eclass-mcp-server checkout the
+            patch applies to.
+        mock_root: Path to the testing-environment install whose
+            endpoints the grader probes and whose reset script
+            runs between phases.
     """
     cmd = [
-        str(grader_entry),
+        sys.executable,
+        "-m",
+        GRADER_PACKAGE_NAME,
         str(patch_path),
         "--eclass-dir",
         str(eclass_root),
+        "--mock-root",
+        str(mock_root),
     ]
     try:
         completed = subprocess.run(
             cmd,
-            cwd=grader_entry.parent,
+            cwd=grader_root.parent,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -221,7 +243,7 @@ def _invoke_grader(
         )
     except OSError as error:
         raise StageExecutionError(
-            f"grade: cannot invoke grader at {grader_entry}: {error}"
+            f"grade: cannot invoke grader package at {grader_root}: {error}"
         ) from error
     if completed.returncode != 0:
         stderr_tail = (completed.stderr or "").strip().splitlines()[-1:] or [""]

@@ -5,12 +5,12 @@
 Pipeline configuration: paths and the ``pipeline.yaml`` loader.
 
 Each pipeline stage requires zero or more external paths to function:
-the grade stage needs the grader and ``eclass-mcp-server`` source
-trees; the parse stage needs the parser source tree; every other
-stage needs only the dataset output root. To keep CLI invocations
-short, the pipeline supports a per-output-root ``pipeline.yaml`` file
-that declares default paths the operator does not have to repeat on
-every invocation.
+the grade stage needs the grader, the ``eclass-mcp-server`` source
+tree, and the testing-environment install; the parse stage needs the
+parser source tree; every other stage needs only the dataset output
+root. To keep CLI invocations short, the pipeline supports a
+per-output-root ``pipeline.yaml`` file that declares default paths
+the operator does not have to repeat on every invocation.
 
 Resolution order for each path: CLI flag wins over ``pipeline.yaml``
 value, which wins over absent. A stage that needs an absent path
@@ -24,6 +24,7 @@ The YAML's top-level shape:
       grader_root: /path/to/bsc-apm-case-study-task/grader
       eclass_root: /path/to/eclass-mcp-server
       parser_root: /path/to/bsc-apm-case-study-task/parser
+      mock_root: /path/to/bsc-apm-case-study-env
 
 A missing ``paths`` section is treated as an empty mapping; absent
 keys are treated as no default. The schema is extensible: unknown
@@ -46,6 +47,7 @@ KEY_PATHS = "paths"
 KEY_GRADER_ROOT = "grader_root"
 KEY_ECLASS_ROOT = "eclass_root"
 KEY_PARSER_ROOT = "parser_root"
+KEY_MOCK_ROOT = "mock_root"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,10 @@ class PipelineConfig:
             tree, required by the parse stage so the parser
             subprocess can resolve ``cc_chat_parser`` on
             ``PYTHONPATH``. ``None`` when not configured.
+        mock_root: Path to the ``bsc-apm-case-study-env`` install
+            whose endpoints the grader probes and whose reset
+            script the grader invokes between grading runs.
+            ``None`` when not configured.
         config_path: Absolute path of the ``pipeline.yaml`` file
             the non-CLI defaults came from, or ``None`` when no
             config file was loaded.
@@ -75,6 +81,7 @@ class PipelineConfig:
     grader_root: Path | None
     eclass_root: Path | None
     parser_root: Path | None
+    mock_root: Path | None
     config_path: Path | None
 
 
@@ -84,6 +91,7 @@ def resolve_config(
     grader_root_flag: Path | None = None,
     eclass_root_flag: Path | None = None,
     parser_root_flag: Path | None = None,
+    mock_root_flag: Path | None = None,
 ) -> PipelineConfig:
     """Resolve a ``PipelineConfig`` from CLI flags and an optional YAML file.
 
@@ -95,6 +103,8 @@ def resolve_config(
         grader_root_flag: CLI override for the grader path.
         eclass_root_flag: CLI override for the eclass path.
         parser_root_flag: CLI override for the parser path.
+        mock_root_flag: CLI override for the testing environment
+            install path.
 
     Returns:
         A populated ``PipelineConfig``.
@@ -108,11 +118,13 @@ def resolve_config(
     grader_root = _resolve_path(grader_root_flag, yaml_paths.get(KEY_GRADER_ROOT))
     eclass_root = _resolve_path(eclass_root_flag, yaml_paths.get(KEY_ECLASS_ROOT))
     parser_root = _resolve_path(parser_root_flag, yaml_paths.get(KEY_PARSER_ROOT))
+    mock_root = _resolve_path(mock_root_flag, yaml_paths.get(KEY_MOCK_ROOT))
     return PipelineConfig(
         output_root=output_root.resolve(),
         grader_root=grader_root,
         eclass_root=eclass_root,
         parser_root=parser_root,
+        mock_root=mock_root,
         config_path=config_path,
     )
 

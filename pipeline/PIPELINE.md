@@ -79,9 +79,10 @@ zip ──► validate ──► grade ──► parse ──► combine ──�
 
 1. **validate** unpacks the zip into the staging area and confirms
    the layout.
-2. **grade** subprocesses `<grader-root>/grade` against the staged
-   patch and the configured eclass checkout; the grader's
-   results JSON is promoted to the per-participant directory.
+2. **grade** subprocesses `python -m grader` against the staged
+   patch, the configured eclass checkout, and the testing-
+   environment install; the grader's results JSON is promoted to
+   the per-participant directory.
 3. **parse** subprocesses `cc_chat_parser` against the staged
    transcripts directory; the canonical metrics artifact is
    promoted alongside sealed sidecar copies of the raw transcripts.
@@ -128,8 +129,8 @@ promoted artifacts.
 The dataset directory has no opinion on where it lives; it can be
 a clone of `bsc-apm-case-study-data/`, a working directory, or a
 tmpfs for testing. Every pipeline stage takes `--output-root` as
-the only required path; the configurable parser, grader, and
-eclass roots are referenced only by the stages that need them.
+the only required path; the configurable grader, eclass, parser,
+and mock roots are referenced only by the stages that need them.
 
 ## Manifest schema
 
@@ -291,8 +292,8 @@ path.
 
 Common recovery scenarios:
 
-- **Grader Docker stack down**: start `docker start grader_db_1
-  grader_eclass_1` and re-run `pipeline.grade`.
+- **Testing environment down**: run `<mock-root>/scripts/up`
+  and re-run `pipeline.grade`.
 - **Parser version bump**: re-run `pipeline.parse` to refresh
   `metrics.json`, then re-run `combine` and `add_to_dataset`.
 - **Edited combined artifact**: `validate_dataset` warns about

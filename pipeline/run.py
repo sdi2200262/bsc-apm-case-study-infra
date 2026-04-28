@@ -126,6 +126,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Path to the parser directory (passed through to the parse stage).",
     )
     parser.add_argument(
+        "--mock-root",
+        type=Path,
+        default=None,
+        help="Path to the testing-environment install (passed through to the grade stage).",
+    )
+    parser.add_argument(
         "--no-sanitize",
         action="store_true",
         help="Skip sanitisation in the parse stage.",
@@ -161,6 +167,7 @@ def _build_chain(
     ]
     grade_argv += _path_flag("--grader-root", args.grader_root)
     grade_argv += _path_flag("--eclass-root", args.eclass_root)
+    grade_argv += _path_flag("--mock-root", args.mock_root)
     chain.append(("pipeline.grade", grade_argv))
     parse_argv = [
         sys.executable, "-m", "pipeline.parse",
