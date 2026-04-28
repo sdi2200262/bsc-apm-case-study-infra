@@ -308,3 +308,6 @@ Common recovery scenarios:
   the parse stage subprocesses.
 - [../grader/README.md](../grader/README.md): the grader the
   grade stage subprocesses.
+- [bsc-apm-case-study-env](https://github.com/sdi2200262/bsc-apm-case-study-env):
+  the testing environment the grader probes and resets between
+  grading runs.

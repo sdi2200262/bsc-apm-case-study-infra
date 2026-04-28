@@ -6,7 +6,7 @@ The task specification, grading suite and participant guides for the BSc Thesis 
 
 *Announcements Functionality and C Replica*
 
-Participants implement new announcement tools (`get_course_announcements` and `get_general_announcements`) in a Python MCP server and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that replicates the participant's working environment.
+Participants implement new announcement tools (`get_course_announcements` and `get_general_announcements`) in a Python MCP server and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that runs against a separately-installed testing environment (the [`bsc-apm-case-study-env`](https://github.com/sdi2200262/bsc-apm-case-study-env) package).
 
 ## Scoring
 
@@ -31,16 +31,12 @@ bsc-apm-case-study-task/
 │   ├── SCORING.md
 │   ├── PRD.md
 │   └── Prompt.md
-├── grader/                             # Grading infrastructure
+├── grader/                             # Grading suite
 │   ├── README.md
 │   ├── SETUP.md
-│   ├── grade
-│   ├── inspect.py                      # Grading results browser
-│   ├── docker-compose.eclass.yaml
-│   ├── src/                            # Core grading modules
-│   └── fixtures/                       # SSO mock fixtures
-│       ├── README.md
-│       └── *.html
+│   ├── __main__.py                     # CLI entry: python -m grader
+│   ├── inspect.py                      # results browser
+│   └── src/                            # phase modules + protocol subpackage
 ├── parser/                             # Transcript parser
 │   ├── README.md
 │   └── cc_chat_parser/                 # Claude Code chat parser package
@@ -61,12 +57,12 @@ bsc-apm-case-study-task/
 - **[parser/README.md](parser/README.md)** - Transcript parser overview
 - **[pipeline/README.md](pipeline/README.md)** - Pipeline scripts
 - **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Pipeline protocol
-- **[grader/fixtures/README.md](grader/fixtures/README.md)** - SSO fixtures
 - **[participant-guides/README.md](participant-guides/README.md)** - Guide building
 
 ## Related Repositories
 
 - [bsc-apm-thesis](https://github.com/sdi2200262/bsc-apm-thesis) - Thesis LaTeX source
+- [bsc-apm-case-study-env](https://github.com/sdi2200262/bsc-apm-case-study-env) - Participant testing environment the grader runs against
 - [bsc-apm-case-study-data](https://github.com/sdi2200262/bsc-apm-case-study-data) - Participant submissions (private)
 
 ## License
