@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025-2026 BSc Case Study Grader Contributors
 """
-C baseline phase aggregator: P1_c, P2_c, L1_c-L3_c, O1_c-O2_c, C1_c-C2_c, A1_c.
+C baseline phase aggregator: C.2.1 through C.2.10.
 """
 
 from __future__ import annotations
@@ -12,19 +12,18 @@ from pathlib import Path
 from . import baseline_tests
 
 IMPL = "c"
-SUFFIX = "_c"
 
 TESTS = (
-    ("P1", baseline_tests.test_initialize),
-    ("P2", baseline_tests.test_tools_list),
-    ("L1", baseline_tests.test_login_success),
-    ("L2", baseline_tests.test_login_already_logged_in),
-    ("L3", baseline_tests.test_login_missing_credentials),
-    ("O1", baseline_tests.test_logout_success),
-    ("O2", baseline_tests.test_logout_not_logged_in),
-    ("C1", baseline_tests.test_courses_logged_in),
-    ("C2", baseline_tests.test_courses_not_logged_in),
-    ("A1", baseline_tests.test_authstatus_not_logged_in),
+    ("C.2.1", baseline_tests.test_initialize_and_tools_list),
+    ("C.2.2", baseline_tests.test_login_success),
+    ("C.2.3", baseline_tests.test_login_already_logged_in),
+    ("C.2.4", baseline_tests.test_login_missing_credentials),
+    ("C.2.5", baseline_tests.test_logout_success),
+    ("C.2.6", baseline_tests.test_logout_no_op),
+    ("C.2.7", baseline_tests.test_get_courses_logged_in),
+    ("C.2.8", baseline_tests.test_get_courses_not_logged_in),
+    ("C.2.9", baseline_tests.test_authstatus_logged_in),
+    ("C.2.10", baseline_tests.test_authstatus_not_logged_in),
 )
 
 
@@ -39,10 +38,9 @@ def run(
         debug: When ``True``, server stdio is echoed to stdout.
 
     Returns:
-        Mapping of rubric identifier (with ``_c`` suffix) to
-        ``(passed, summary, detail)``.
+        Mapping of rubric identifier to ``(passed, summary, detail)``.
     """
     return {
-        f"{test_id}{SUFFIX}": assertion(IMPL, eclass_dir, mock_root, debug)
+        test_id: assertion(IMPL, eclass_dir, mock_root, debug)
         for test_id, assertion in TESTS
     }

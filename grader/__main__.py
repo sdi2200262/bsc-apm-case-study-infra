@@ -4,11 +4,23 @@
 """
 Grader CLI entry point.
 
-Parses arguments, resolves configuration, runs the
-testing-environment pre-flight and reset, applies the participant's
-patch (or skips for baseline mode), then sequences the phase
-modules and writes JSON and text reports beside the eclass-mcp-
-server checkout.
+Parses arguments, resolves configuration, runs the testing-
+environment pre-flight and reset, applies the participant's patch
+(or skips for baseline mode), then sequences the phase modules
+and writes JSON and text reports beside the eclass-mcp-server
+checkout.
+
+Phase order, per implementation:
+
+- Python: dependency install (prerequisite, not scored), then
+  P.1 baseline, P.2 course announcements, P.3 general
+  announcements.
+- C: C.1.1 compile, C.1.2 tech stack, then C.2 baseline, C.3
+  course announcements, C.4 general announcements, C.5 memory
+  scenarios.
+
+Build prerequisite failures cause the dependent phases to be
+recorded as skipped against the rubric.
 
 Exit codes:
 
@@ -32,7 +44,6 @@ from pathlib import Path
 from .src import (
     build_c,
     build_python,
-    memory,
     patch,
     preflight,
     reporting,
@@ -43,9 +54,12 @@ from .src.config import resolve_config, require_path
 from .src.errors import GraderError
 from .src.protocol import (
     c_baseline,
-    c_feature,
+    c_course_announcements,
+    c_general_announcements,
+    c_memory,
     python_baseline,
-    python_feature,
+    python_course_announcements,
+    python_general_announcements,
 )
 
 
@@ -144,20 +158,20 @@ def _run_python_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run the Python build, baseline tests, and feature tests in order."""
+    """Run Python build (prerequisite), then the three Python phases."""
     print("python build: uv sync")
-    ok, summary, detail = build_python.build(eclass_root)
-    scorer.record("B1", ok, summary, detail)
+    ok, summary, _detail = build_python.build(eclass_root)
     print(f"python build: {summary}")
     if not ok:
-        _skip_remaining(scorer, scoring.PYTHON_TESTS, "skipped: python build failed")
+        _skip_remaining(
+            scorer,
+            scoring.PYTHON_TESTS,
+            f"skipped: python build failed ({summary})",
+        )
         return
-    print("python baseline phase")
-    for test_id, result in python_baseline.run(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2])
-    print("python feature phase")
-    for test_id, result in python_feature.run(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2])
+    _record_phase(scorer, "python baseline", python_baseline.run, eclass_root, mock_root, debug)
+    _record_phase(scorer, "python course", python_course_announcements.run, eclass_root, mock_root, debug)
+    _record_phase(scorer, "python general", python_general_announcements.run, eclass_root, mock_root, debug)
 
 
 def _run_c_phases(
@@ -166,23 +180,41 @@ def _run_c_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run the C build, memory test, baseline tests, and feature tests in order."""
-    print("c build: make c-server")
-    ok, summary, detail = build_c.build(eclass_root)
-    scorer.record("B2", ok, summary, detail)
-    print(f"c build: {summary}")
-    if not ok:
-        _skip_remaining(scorer, scoring.C_TESTS, "skipped: c build failed")
+    """Run C compile, tech-stack, then the four C protocol phases."""
+    print("c compile: make c-server")
+    compile_ok, compile_summary, compile_detail = build_c.compile_c_replica(eclass_root)
+    scorer.record("C.1.1", compile_ok, compile_summary, compile_detail)
+    print(f"c compile: {compile_summary}")
+    if not compile_ok:
+        _skip_remaining(
+            scorer,
+            scoring.C_TESTS,
+            f"skipped: c compile failed ({compile_summary})",
+        )
         return
-    print("c memory phase: valgrind")
-    mem_ok, mem_summary, mem_detail = memory.valgrind(eclass_root, mock_root)
-    scorer.record("M1", mem_ok, mem_summary, mem_detail)
-    print(f"c memory: {mem_summary}")
-    print("c baseline phase")
-    for test_id, result in c_baseline.run(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2])
-    print("c feature phase")
-    for test_id, result in c_feature.run(eclass_root, mock_root, debug).items():
+
+    print("c stack: ldd verification")
+    stack_ok, stack_summary, stack_detail = build_c.verify_stack(eclass_root)
+    scorer.record("C.1.2", stack_ok, stack_summary, stack_detail)
+    print(f"c stack: {stack_summary}")
+
+    _record_phase(scorer, "c baseline", c_baseline.run, eclass_root, mock_root, debug)
+    _record_phase(scorer, "c course", c_course_announcements.run, eclass_root, mock_root, debug)
+    _record_phase(scorer, "c general", c_general_announcements.run, eclass_root, mock_root, debug)
+    _record_phase(scorer, "c memory", c_memory.run, eclass_root, mock_root, debug)
+
+
+def _record_phase(
+    scorer: scoring.Scorer,
+    label: str,
+    run_func,
+    eclass_root: Path,
+    mock_root: Path,
+    debug: bool,
+) -> None:
+    """Drive one phase aggregator and record its results into the scorer."""
+    print(f"{label} phase")
+    for test_id, result in run_func(eclass_root, mock_root, debug).items():
         scorer.record(test_id, result[0], result[1], result[2])
 
 

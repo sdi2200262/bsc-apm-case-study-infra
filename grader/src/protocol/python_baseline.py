@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025-2026 BSc Case Study Grader Contributors
 """
-Python baseline phase aggregator: P1, P2, L1-L3, O1-O2, C1-C2, A1.
+Python baseline phase aggregator: P.1.1 through P.1.10.
 """
 
 from __future__ import annotations
@@ -14,16 +14,16 @@ from . import baseline_tests
 IMPL = "python"
 
 TESTS = (
-    ("P1", baseline_tests.test_initialize),
-    ("P2", baseline_tests.test_tools_list),
-    ("L1", baseline_tests.test_login_success),
-    ("L2", baseline_tests.test_login_already_logged_in),
-    ("L3", baseline_tests.test_login_missing_credentials),
-    ("O1", baseline_tests.test_logout_success),
-    ("O2", baseline_tests.test_logout_not_logged_in),
-    ("C1", baseline_tests.test_courses_logged_in),
-    ("C2", baseline_tests.test_courses_not_logged_in),
-    ("A1", baseline_tests.test_authstatus_not_logged_in),
+    ("P.1.1", baseline_tests.test_initialize_and_tools_list),
+    ("P.1.2", baseline_tests.test_login_success),
+    ("P.1.3", baseline_tests.test_login_already_logged_in),
+    ("P.1.4", baseline_tests.test_login_missing_credentials),
+    ("P.1.5", baseline_tests.test_logout_success),
+    ("P.1.6", baseline_tests.test_logout_no_op),
+    ("P.1.7", baseline_tests.test_get_courses_logged_in),
+    ("P.1.8", baseline_tests.test_get_courses_not_logged_in),
+    ("P.1.9", baseline_tests.test_authstatus_logged_in),
+    ("P.1.10", baseline_tests.test_authstatus_not_logged_in),
 )
 
 
