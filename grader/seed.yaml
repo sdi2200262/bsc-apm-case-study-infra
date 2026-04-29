@@ -1,0 +1,91 @@
+# Pinned snapshot of the testing environment's seed data.
+#
+# The canonical file lives in the bsc-apm-case-study-env package at
+# seed/seed.yaml; that file is the editable source of truth for the
+# environment's data state, and the env's release pipeline turns it
+# into seed.json and the mock CAS config. This copy is the grader-
+# side mirror: the grader's assertions read these values directly,
+# so the file moves in lock-step with the env release the grader
+# is run against.
+#
+# Refresh procedure when the env's seed changes: copy the env's
+# seed/seed.yaml verbatim over this file (preserving this header),
+# then run the grader against the new release end-to-end to confirm
+# the assertions still pass.
+
+user:
+  username: student1
+  cas_password: mockpass123
+  display_name: Demo Student
+  email: student1@example.edu
+  givenname: Demo
+  surname: Student
+  studentid: STU0001
+  status: 5
+  lang: el
+
+cas:
+  host: 172.17.0.1
+  port: 8082
+  context: ""
+  title: Είσοδος με λογαριασμό ΕΚΠΑ
+
+courses:
+  - code: CS101
+    title: Introduction to Computer Science
+    visible: 2
+    public_code: CS101
+    lang: el
+    enrolled: true
+    announcements:
+      - days_ago: 0
+        title: Algorithm review session today
+        body: An algorithm review session is scheduled for this afternoon at 14:00 in the main lecture hall.
+      - days_ago: 15
+        title: Tutorial relocated to building B
+        body: The Thursday tutorial moves to building B from this week onwards.
+      - days_ago: 30
+        title: Welcome to CS101
+        body: Welcome to the course. Topics include complexity theory and basic data structures.
+      - days_ago: 60
+        title: Pre-term reading list posted
+        body: The recommended reading list for the upcoming semester is now available on the portal.
+
+  - code: PHYS150
+    title: Classical Mechanics
+    visible: 2
+    public_code: PHYS150
+    lang: el
+    enrolled: true
+    announcements:
+      - days_ago: 0
+        title: Office hours today
+        body: Office hours run from 14:00 to 16:00 today in room A-12.
+      - days_ago: 15
+        title: Problem set 3 deadline reminder
+        body: Problem set 3 is due this Friday; the deadline cannot be extended further.
+      - days_ago: 30
+        title: Lab schedule confirmed
+        body: Laboratory sessions begin in week 3 and run weekly through the term.
+
+  - code: MATH201
+    title: Linear Algebra
+    visible: 2
+    public_code: MATH201
+    lang: el
+    enrolled: true
+    announcements: []
+
+admin_announcements:
+  - days_ago: 0
+    title: System maintenance window today
+    body: The platform may be unavailable from 02:00 to 04:00 today for routine maintenance.
+    lang: el
+  - days_ago: 15
+    title: Acceptable use policy update
+    body: The acceptable use policy has been updated; the changes apply immediately.
+    lang: el
+  - days_ago: 30
+    title: Library subscriptions renewed
+    body: Online library subscriptions have been renewed for the semester.
+    lang: el
