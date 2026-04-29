@@ -265,12 +265,12 @@ def _locate_results(eclass_root: Path, patch_path: Path) -> Path:
 def _read_score_breakdown(results_path: Path) -> dict[str, Any]:
     """Return ``{"score": "<n>/<m>", "breakdown": {...}}`` from a results JSON.
 
-    The grader's results structure groups Python and C scores under
-    nested categories; this helper flattens the breakdown into the
-    three rubric categories the dataset row reports
-    (``python_baseline``, ``python_feature``, ``c_replica``) and
-    computes the overall score string. A malformed results file
-    raises ``StageExecutionError``.
+    The grader's results structure groups Python and C scores
+    under nested keys; this helper reads ``grand_total`` for the
+    overall figure and flattens the breakdown into the three
+    rubric buckets the dataset row reports (``python_baseline``,
+    ``python_feature``, ``c_replica``). A malformed results file
+    or missing required keys raises ``StageExecutionError``.
     """
     try:
         with results_path.open("r", encoding="utf-8") as source:
@@ -279,40 +279,23 @@ def _read_score_breakdown(results_path: Path) -> dict[str, Any]:
         raise StageExecutionError(
             f"grade: results JSON at {results_path} is malformed: {error}"
         ) from error
-    scores = data.get("scores", {})
-    python = scores.get("python", {})
-    python_baseline = python.get("baseline", {})
-    python_feature = python.get("feature", {})
-    c_total = scores.get("c", {}).get("total", {})
-    grand_total = scores.get("grand_total", {})
-    if grand_total:
-        score = grand_total.get("score", 0)
-        max_score = grand_total.get("max", 100)
-    else:
-        score = (
-            python_baseline.get("score", 0)
-            + python_feature.get("score", 0)
-            + c_total.get("score", 0)
-        )
-        max_score = (
-            python_baseline.get("max", 12)
-            + python_feature.get("max", 36)
-            + c_total.get("max", 52)
-        )
+    try:
+        scores = data["scores"]
+        python = scores["python"]
+        python_baseline = python["baseline"]
+        python_feature = python["feature"]
+        c_total = scores["c"]["total"]
+        grand_total = scores["grand_total"]
+    except KeyError as error:
+        raise StageExecutionError(
+            f"grade: results JSON at {results_path} missing key: {error}"
+        ) from error
     return {
-        "score": f"{score}/{max_score}",
+        "score": f"{grand_total['score']}/{grand_total['max']}",
         "breakdown": {
-            "python_baseline": (
-                f"{python_baseline.get('score', 0)}/"
-                f"{python_baseline.get('max', 12)}"
-            ),
-            "python_feature": (
-                f"{python_feature.get('score', 0)}/"
-                f"{python_feature.get('max', 36)}"
-            ),
-            "c_replica": (
-                f"{c_total.get('score', 0)}/{c_total.get('max', 52)}"
-            ),
+            "python_baseline": f"{python_baseline['score']}/{python_baseline['max']}",
+            "python_feature": f"{python_feature['score']}/{python_feature['max']}",
+            "c_replica": f"{c_total['score']}/{c_total['max']}",
         },
     }
 
