@@ -1,220 +1,291 @@
-# Product Requirements Document: eClass MCP Server Enhancement & Native C Replica
+# Product Requirements Document: eClass MCP Server Enhancement and Native C Replica
 
-This document specifies the goals, functional requirements, and acceptance criteria for expanding the capabilities of the `eclass-mcp-server` and creating a high-performance native C replica of the service.
+This document specifies the goals, functional requirements, and
+acceptance criteria for expanding the capabilities of the
+`eclass-mcp-server` and producing a native C replica of the
+service.
 
-## 1. Background & Objective
+## 1. Overview
 
-### Background
+**Background.** The `eclass-mcp-server` is a Python service that
+integrates with the `openeclass` platform (a PHP codebase) over
+the Model Context Protocol. The current Python server exposes
+four tools: `login`, `logout`, `get_courses`, and `authstatus`.
+Two announcement tools must be added on top of this baseline:
+`get_course_announcements` and `get_general_announcements`.
 
-The `eclass-mcp-server` is a Python-based web crawling service that interfaces with the `openeclass` platform (a legacy PHP codebase) via the Model Context Protocol (MCP). While the current Python implementation handles basic authentication and course retrieval, we require extended functionality for announcements.
+**Environment.** The `eclass-mcp-server` and `openeclass`
+checkouts in the workspace are intentionally pinned to a specific
+commit and release respectively.
 
-### Objective
+**Objective.** Two deliverables:
 
-To support low-resource deployment environments, we require a dual-deliverable:
-1.  **Feature Expansion:** Implement new **announcements functionality** in the existing Python codebase.
-2.  **Native Replication:** Create a standalone **C Microservice** (`server_c`) that replicates the **entire functionality** of the enhanced Python server (Auth, Course Listing, and Announcements). This native server must serve as a functional drop-in replacement, adhering strictly to the same wire protocol.
+1. **Feature expansion.** Implement the two new announcement
+   tools in the existing Python codebase.
+2. **Native replication.** Produce a standalone C microservice at
+   `eclass-mcp-server/c-replica/` that exposes all six tools (the
+   four pre-existing baseline tools plus the two new announcement
+   tools) and acts as a functional drop-in replacement for the
+   Python server: under identical inputs, its JSON-RPC text
+   content matches the Python server's.
 
-## 2. Feature Specification (New Tools)
+The deliverable scope is the runtime feature surface (the Python
+modules added to `eclass-mcp-server/` and the C binary at
+`eclass-mcp-server/c-replica/server`). Updates to the existing
+reference documentation under `eclass-mcp-server/docs/` are not
+required, and no unit-test or testing-logic artefacts are part of
+the deliverable.
 
-The following tools must be implemented in the Python server and subsequently included in the C Replica.
+## 2. Announcement Tools Implementation
 
 ### Tool: `get_course_announcements`
 
-* **Description:** Fetches announcements for a specific course.
-* **Input Schema:**
-  ```json
-  {
-    "type": "object",
-    "properties": {
-      "course_url": {
-        "type": "string",
-        "description": "The exact course URL from get_courses output [[https://eclass.example.com/courses/ABC101/](https://eclass.example.com/courses/ABC101/)]"
-      },
-      "days_back": {
-        "type": "integer",
-        "description": "Number of days to look back announcements. Must be a positive integer. Default is 30."
-      }
+Fetches announcements for a single course, optionally filtered by
+recency.
+
+**Input schema.**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "course_url": {
+      "type": "string",
+      "description": "The course URL as exposed by get_courses."
     },
-    "required": ["course_url"]
-  }
-  ```
+    "days_back": {
+      "type": "integer",
+      "description": "Number of days back to include. Zero is valid and returns today's announcements only. Default is 30."
+    }
+  },
+  "required": ["course_url"]
+}
+```
 
-* **Output:** A list of announcements in a standard format. If `days_back` is provided, we return all the announcements until -`days_back` days ago. The tool must return a single `types.TextContent` object.
-  * **On Success:** Returns a formatted text block.
-    ```text
-    Found [N] announcement(s):
+**Output.** A single `types.TextContent` object whose text is one
+of the strings defined in §5.
 
-    1. [Announcement Title]
-        Date: [Date String]
-        Content: [Full Announcement Content...]
+On success with one or more announcements inside the requested
+window, the format is:
 
-    2. ...
-    ```
-  * **Validation:**
-    * If `days_back` <= 0: Return `Error: days_back must be a positive integer.`
-  * **On Failure:** Returns a clear error message (e.g., `Error: Not logged in.`).
-  * **No Announcements:** If none match the criteria, return: `No announcements found.`.
+```
+Found <N> announcement(s):
+
+1. <Announcement Title>
+    Date: <Date String>
+    Content: <Full Announcement Body>
+
+2. ...
+```
+
+`<N>` is the count of announcements that fall inside the window.
+The body string is the announcement's text content, rendered as
+plain text after stripping HTML tags and normalising whitespace.
+
+**Date filter semantics.** `days_back=N` includes every
+announcement whose timestamp is no older than `N` days from the
+current calendar day. An announcement timestamped exactly `N`
+days ago is in the window; one timestamped `N+1` days ago is not.
+
+**Validation.** `days_back` must be a non-negative integer.
+Negative values error per §5. The tool itself imposes no upper
+bound on `days_back`.
 
 ### Tool: `get_general_announcements`
 
-* **Description:** Fetches system-wide announcements (admin announcements) combined with announcements from all registered courses.
-* **Input Schema:**
-  ```json
-  {
-    "type": "object",
-    "properties": {
-      "days_back": {
-        "type": "integer",
-        "description": "Number of days to look back. Must be between 1 and 30. Default is 30."
-      }
+Returns a unified view of the platform's system-wide
+announcements together with announcements from the authenticated
+user's enrolled courses, with source attribution on each entry.
+
+**Input schema.**
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "days_back": {
+      "type": "integer",
+      "description": "Number of days back to include. Zero is valid and returns today's announcements only. Default is 30."
     }
   }
-  ```
+}
+```
 
-* **Output:** A list of system and course announcements. If `days_back` is provided, we return all the announcements until -`days_back` days ago. The tool must return a single `types.TextContent` object.
-  * **On Success:** Returns a formatted text block with source attribution.
-    ```text
-    Found [N] announcement(s):
+**Output.** A single `types.TextContent` object whose text is one
+of the strings defined in §5. On success the format is:
 
-    1. [Announcement Title]
-        Source: [System OR Course Name]
-        Date: [Date String]
-        Content: [Full Announcement Content...]
+```
+Found <N> announcement(s):
 
-    2. ...
-    ```
-  * **Validation:**
-    * If `days_back` <= 0: Return `Error: days_back must be a positive integer.`
-    * If `days_back` > 30: Return `Error: Cannot retrieve announcements older than 30 days.`
-  * **On Failure:** Returns a clear error message (e.g., `Error: Not logged in.`).
-  * **No Announcements:** If none match the criteria, return: `No announcements found.`.
+1. <Announcement Title>
+    Source: <attribution>
+    Date: <Date String>
+    Content: <Full Announcement Body>
 
-## 3. C Replica Specifications
+2. ...
+```
 
-The C implementation serves as a high-performance native alternative. It must replicate the **exact behavior** of the final Python server (including existing tools: `login`, `logout`, `get_courses`, `authstatus` AND the new `get_course_announcements` and `get_general_announcements`).
+**Source attribution.** Each entry carries a `Source:` line. An
+announcement that originates from the platform itself (a
+system-wide announcement) is attributed as `Source: System`. An
+announcement that originates from a course is attributed using
+that course's code (the same identifier `get_courses` exposes),
+formatted as `Source: <code>`.
 
-### Configuration & Target
+**Date filter semantics.** Same calendar-day-based inclusion rule
+as the per-course tool.
 
-The C microservice must be fully configurable via environment variables to support different deployment targets without recompilation. This behavior must strictly mirror the configuration logic of the Python reference implementation.
+**Validation.** `days_back` must be in the range `[0, 30]`.
+Values outside this range error per §5.
 
-* **Requirement:** You must implement logic to read the following configuration values from the environment:
-  * `ECLASS_URL`: The base URL of the target eClass instance.
-  * `ECLASS_USERNAME`: The authentication username.
-  * `ECLASS_PASSWORD`: The authentication password.
+## 3. Native C Replica Implementation
 
-### Architectural Constraints
+The C implementation lives at `eclass-mcp-server/c-replica/` and
+exposes the same six tools, with the same input schemas, the same
+output formats, and the same error strings as the Python server.
 
-To ensure the binary remains lightweight but functional, you must adhere to the following **strict technical stack**:
+### Configuration
 
-* **Language:** C (Standard C99 or C11).
-* **Compiler:** GCC 9.0+ or compatible compiler with full C11 support.
-* **Networking:** **`libcurl`** (minimum version 7.81.0) is required.
-  * You must use the `libcurl` cookie engine (`CURLOPT_COOKIEFILE`) to handle SSO redirects and session persistence.
-  * The authentication flow (Login Form -> SSO -> CAS -> Redirect) must match the logic found in the Python `authentication.py`.
-  * **Note:** Ubuntu 22.04 LTS provides libcurl 7.81.0; Ubuntu 24.04 provides 8.5.0. Both are acceptable as they meet the minimum requirement.
-* **HTML Parsing:** **`libxml2`** (minimum version 2.9.13) is required.
-  * You must use this parser to strip tags and normalize whitespace exactly as `BeautifulSoup` does in the Python reference.
-  * To pass validation, your C output must textually match the Python output.
-  * **Note:** Ubuntu 22.04 LTS provides libxml2 2.9.13; Ubuntu 24.04 provides 2.9.14. Both are acceptable as they meet the minimum requirement.
-* **JSON & Protocol:**
-  * **Strictly Forbidden:** `cJSON`, `Jansson`, or *any* external JSON library.
-  * **Requirement:** You must implement the JSON-RPC 2.0 protocol (parsing and serialization) **manually** using standard C string manipulation (`<string.h>`, `<stdio.h>`, `snprintf`, etc.).
+The C server reads its configuration from the same environment
+variables the Python server already reads. One `.env` file at the
+`eclass-mcp-server/` package root serves both implementations; no
+C-only configuration surface is introduced.
 
-### Memory Safety & Stability
+### Architectural constraints
 
-To demonstrate native performance without instability, the C Replica must be memory-safe.
+The C binary adheres to a strict technical stack:
 
-* **Zero Leaks:** The application must run cleanly under `valgrind` (Memcheck).
-  * **Requirement:** A full session (Login -> List Courses -> Get Announcements -> Exit) must result in **"definitely lost: 0 bytes, indirectly lost: 0 bytes"**.
-* **Resource Management:** All `libcurl` handles and `libxml2` contexts objects must be explicitly freed.
-* **Verification:** The provided `Makefile` should ideally include a `test-memory` target that runs the server binary with: 
-  `valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./server`
+- **Language.** C99 or C11.
+- **Compiler.** GCC 9.0 or newer (or a compatible C11-supporting
+  compiler).
+- **Networking.** `libcurl` (minimum 7.81.0); the cookie engine
+  carries the SSO session across redirects.
+- **HTML and XML parsing.** `libxml2` (minimum 2.9.13); used to
+  strip tags and normalise whitespace so body strings match the
+  Python implementation's textually.
+- **JSON and protocol.** JSON-RPC 2.0 framing, parsing, and
+  serialisation are implemented manually using standard C string
+  facilities. No external JSON-parsing library is permitted; the
+  C binary's dynamically-linked dependency list must not include
+  any JSON-parsing library.
 
-### Runtime Behavior
+### Memory safety
 
-The C microservice acts as a standard CLI application implementing the **Model Context Protocol stdio transport**.
+The binary is leak-free under `valgrind --leak-check=full` across
+the supported tool-session surface. All `libcurl` handles and
+`libxml2` contexts are explicitly freed.
 
-* **Execution:** The binary will be executed directly (e.g., `./server`) without command-line arguments. Configuration is handled solely via Environment Variables.
-* **I/O Channels:**
-  * **Stdin:** The server must listen for incoming newline-delimited JSON-RPC messages.
-  * **Stdout:** The server must emit valid, newline-delimited JSON-RPC responses.
-    * **Constraint (Parity):** The JSON-RPC success and error responses (including error codes and message strings) must be **identical** to the Python implementation's output for the same inputs.
-  * **Stderr:** All application logs and internal debug information must be printed to `stderr`.
-    * **Constraint (Cleanliness):** `stdout` must remain pure JSON-RPC. Any "print debugging" leaked to `stdout` will corrupt the protocol and fail.
-* **Lifecycle:** The server must run continuously in a loop, processing requests one by one until the input stream is closed (EOF).
-* **Responsiveness:** All JSON-RPC requests must complete and emit responses. Implementations that hang, deadlock, or fail to respond are considered non-functional (see Section 4 for detailed requirements).
+### Runtime behavior
 
-### Protocol Compliance
+The C microservice is a CLI application implementing the Model
+Context Protocol's stdio transport.
 
-The C server must operate as a strict drop-in replacement. Your JSON-RPC output (keys, structure, capabilities) must match exactly the specifications defined in **`docs/reference/wire_protocol.md`**. This document is the single source of truth for this microservice.
+- **Execution.** The binary runs without command-line arguments
+  (`./server`). All configuration comes from environment
+  variables.
+- **stdin.** Newline-delimited JSON-RPC requests.
+- **stdout.** Newline-delimited JSON-RPC responses. stdout
+  carries protocol traffic only; any other output on stdout
+  corrupts the protocol.
+- **Lifecycle.** The server processes requests in a loop until
+  the input stream closes (EOF).
+- **Responsiveness.** Every JSON-RPC request emits a response.
+  Implementations that hang, deadlock, or fail to respond are
+  considered non-functional.
 
-## 4. Functional & Technical Requirements
+### Protocol compliance
+
+The JSON-RPC handshake (`initialize`, `tools/list`, `tools/call`
+framing) and the wire-level shape of the four pre-existing tools
+are documented in
+`eclass-mcp-server/docs/reference/wire-protocol.md`; per-tool
+contracts for those four tools (input schemas, response
+behaviour, error handling) are documented in
+`eclass-mcp-server/docs/reference/tools-reference.md`. The two
+new announcement tools follow the same framing convention; their
+per-tool contracts are defined in §2 and §5 of this document.
+
+## 4. Cross-cutting Requirements
 
 ### Authentication
 
-All tools must function only for an authenticated session.
+All six tools require an authenticated session.
 
-  * **Python:** Must leverage the existing `session_state` and fail gracefully if `session_state.logged_in` is `False`.
-  * **C Replica:** Must implement a persistent session state equivalent to the Python version, maintaining valid `PHPSESSID` cookies across tool calls.
+- **Python.** Reuses the existing session model; tool entry
+  points return the not-logged-in error string from §5 when no
+  session is active.
+- **C replica.** Maintains a persistent session state equivalent
+  to the Python version, including session cookies across tool
+  calls.
 
-### Data Source
+### Data source
 
-The logic for retrieving data (announcements, documents) does not currently exist in the `eclass-mcp-server`. The implementation **must be based on research of the `openeclass` legacy codebase** (`./openeclass`) to determine the correct data-fetching procedures.
+The retrieval logic for the announcement tools is not present in
+the existing `eclass-mcp-server`. The implementation derives the
+data path through research of the `openeclass` codebase shipped
+in the workspace.
 
-### Date Filtering Logic
+### Date filtering
 
-The `days_back` parameter is a strict functional requirement.
-
-  * **Research Requirement:** You must analyze the `openeclass` legacy codebase to determine if the backend supports date filtering. If not, you must implement robust **Client-Side Filtering** to parse the locale-specific date formats and filter entries accurately.
-
-### Responsiveness
-
-Both Python and C implementations must be functional and responsive. All JSON-RPC requests must complete and emit valid responses. Implementations that hang indefinitely, deadlock, or fail to respond will be considered non-functional and will fail validation.
+Tool implementations parse the locale-specific date strings the
+underlying platform renders and apply the inclusive calendar-day
+filter defined in §2.
 
 ## 5. Acceptance Criteria
 
-All responses from the announcement tools must match the exact formats specified below. Deviations in string content, punctuation, or output structure will result in non-conforming behavior.
+All subsequent evaluation of the deliverables runs against a
+containerized instance of the same pinned `openeclass` release.
 
-### Tool: `get_course_announcements` (Both Implementations)
+The textual contracts below are checked verbatim. Deviations in
+punctuation, wording, or whitespace fail validation.
 
-| WHEN... | THEN... |
-| :--- | :--- |
-| **User is not logged in** | Must return exact error string: `"Error: Not logged in."` |
-| **Invalid `course_url`** | Must return exact error string: `"Error: Could not extract course code."` |
-| **`days_back` <= 0** | Must return exact error string: `"Error: days_back must be a positive integer."` |
-| **No announcements found** | Must return exact success string: `"No announcements found."` |
-| **Valid URL + `days_back=X`** | Returns list containing *only* announcements from the last `X` days. Output must follow the format defined in Section 2 (Feature Specification). |
-| **Valid URL + No `days_back`** | Returns list containing announcements from the last 30 days (default). Output must follow the format defined in Section 2 (Feature Specification). |
+### Tool: `get_course_announcements`
 
-### Tool: `get_general_announcements` (Both Implementations)
+| Condition | Response text |
+|---|---|
+| Not logged in | `Error: Not logged in. Please log in first using the login tool.` |
+| Unparseable `course_url` | `Error: Could not extract course code.` |
+| `days_back` is negative | `Error: days_back must be a positive integer.` |
+| Window is empty | `No announcements found.` |
+| Window is non-empty | The §2 success format with `<N>` equal to the count of announcements in the window. |
 
-| WHEN... | THEN... |
-| :--- | :--- |
-| **User is not logged in** | Must return exact error string: `"Error: Not logged in."` |
-| **`days_back` <= 0** | Must return exact error string: `"Error: days_back must be a positive integer."` |
-| **`days_back` > 30** | Must return exact error string: `"Error: Cannot retrieve announcements older than 30 days."` |
-| **No announcements found** | Must return exact success string: `"No announcements found."` |
-| **Valid Request** | Returns list containing system and course announcements with source attribution. Output must follow the format defined in Section 2. |
+### Tool: `get_general_announcements`
 
-### C Replica System Behavior
+| Condition | Response text |
+|---|---|
+| Not logged in | `Error: Not logged in. Please log in first using the login tool.` |
+| `days_back` is negative | `Error: days_back must be a positive integer.` |
+| `days_back` is greater than 30 | `Error: Cannot retrieve announcements older than 30 days.` |
+| Window is empty | `No announcements found.` |
+| Window is non-empty | The §2 success format. The response renders `Source: System` for each system-wide entry and `Source: <code>` (where `<code>` is the course code from `get_courses`) for each course entry. |
 
-| Feature | Criteria |
-| :--- | :--- |
-| **Compilation** | Execution of `make c-server` inside the `c-replica/` directory completes without errors and produces a binary named `server`. |
-| **Protocol** | `initialize`, `tools/list`, and `tools/call` responses match the JSON structure in `wire_protocol.md`. |
-| **Authentication** | Successfully performs the full SSO login flow against the configured target environment. |
-| **Cookie State** | `authstatus` correctly reflects the login state after a `login` call. |
-| **Responsiveness** | Must meet responsiveness requirements defined in Section 4. |
+### C replica system behavior
+
+| Aspect | Criterion |
+|---|---|
+| Compilation | `make c-server` from `c-replica/` exits 0 and produces `c-replica/server`. |
+| Tech stack | The dynamically-linked dependencies of `c-replica/server` include `libcurl` and `libxml2` and exclude any JSON-parsing library. |
+| Protocol | `initialize`, `tools/list`, and `tools/call` responses match the framing convention referenced in §3. |
+| Authentication | Performs the full SSO login flow against the configured target; subsequent tool calls reuse the session. |
+| Cookie state | `authstatus` reflects the login state set by the most recent `login` call. |
+| Memory | Cleanly under `valgrind --leak-check=full` with zero definitely-lost and zero indirectly-lost bytes across the supported tool-session surface. |
+| Responsiveness | Every JSON-RPC request emits a response; no hangs or deadlocks. |
 
 ## 6. Deliverables
 
-### 1. Python Implementation
-* **Location:** `eclass-mcp-server/`
-* **Artifacts:** The complete updated Python project directory, including any modified or new modules required for the announcement tools.
+### Python implementation
 
-### 2. C Replica Implementation
-* **Location:** A new directory named `c-replica/` inside the `eclass-mcp-server/` codebase.
-* **Artifacts:**
-  * **Implementation:** Source code files (`.c`) and headers (`.h`).
-  * **Makefile:** A valid Makefile with a `c-server` target.
-    * **Constraint:** Running `make c-server` must compile the source and produce a binary named `server` in the same directory. It must strictly link against the system libraries (`libcurl`, `libxml2`).
+- **Location.** `eclass-mcp-server/`
+- **Artefacts.** The complete updated Python project, including
+  any modified or new modules required for the two announcement
+  tools.
+
+### C replica implementation
+
+- **Location.** `eclass-mcp-server/c-replica/`
+- **Artefacts.**
+  - Source files (`.c`) and headers (`.h`).
+  - A `Makefile` whose `c-server` target compiles the source and
+    produces a binary named `server` in the same directory. The
+    target links against the libraries the technical-stack
+    section names and against no JSON-parsing library.

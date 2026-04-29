@@ -19,16 +19,16 @@ Participants are tasked with:
 
 ## Key Challenges
 
-- **Dynamic Data Source**: Requires research of a legacy codebase (`openeclass/`) to discover unique AJAX endpoints
-- **Client-Side Filtering**: The legacy codebase does not support date filtering - participants must implement robust client-side logic
-- **C Implementation**: 
-    - Manual MCP (JSON-RPC 2.0) protocol implementation (no external JSON libraries)
-    - Specific library requirements for HTTPS protocol management and HTML parsing
-- **Memory Safety**: C implementation must pass Valgrind checks with 0 direct and indirect memory leaks
+- **Legacy-codebase research**: The retrieval logic for the new tools is not present in the existing `eclass-mcp-server`; participants research `openeclass/` to derive the data path their implementations follow.
+- **Date filtering**: The new tools accept a `days_back` parameter; participants design and implement the filtering logic and validation rules per the PRD.
+- **C implementation**:
+    - Manual JSON-RPC 2.0 framing, parsing, and serialisation; no JSON-parsing library is permitted.
+    - Networking and HTML/XML parsing through the libraries the PRD names.
+- **Memory safety**: The C replica must be free of detectable leaks under `valgrind` across its supported tool-session surface.
 
 ## Usage
 
-Participants receive these files alongside their [participant guide](../participant-guides/) and use them to drive their AI-assisted implementation sessions.
+Participants receive these files alongside their [participant guide](../participant/guide/) and use them to drive their AI-assisted implementation sessions.
 
 ## Related
 

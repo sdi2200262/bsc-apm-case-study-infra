@@ -1,20 +1,24 @@
-My task is to expand the functionality of the `./eclass-mcp-server` and create a high-performance native C replica.
+My task is to expand the functionality of `./eclass-mcp-server`
+and add a native C replica of the service at
+`./eclass-mcp-server/c-replica/`. The PRD at `./PRD.md` is the
+single source of truth; my implementation must satisfy every
+requirement and acceptance criterion it defines.
 
-The single source of truth for all requirements is the `PRD.md` file. I must strictly ensure the final implementation adheres to all functional requirements and acceptance criteria defined within it.
+The workspace contains:
 
-You have the following codebases in your workspace:
-1.  `./eclass-mcp-server` (The main Python codebase to be modified)
-2.  `./openeclass` (The legacy codebase for research)
+1. `./eclass-mcp-server`: the Python MCP server I am extending,
+   pinned to a specific commit.
+2. `./openeclass`: the legacy PHP platform the MCP server
+   integrates against, pinned to a specific release.
 
-**Deliverables:**
-The final implementation must include two distinct artifact sets, as specified in the PRD (Section 6):
-1.  **Python Implementation:** The updated `eclass-mcp-server` containing the new announcement tools logic and necessary support modules.
-2.  **C Replica:** A directory `c-replica/` containing the source code (`.c`, `.h`) and Makefile for the native C microservice inside the `eclass-mcp-server` codebase. This must compile via the specified command and strictly adhere to the technical stack defined in the Spec.
+A local mock of that same `openeclass` release is running on
+this machine, paired with a mock single sign-on endpoint at
+`https://localhost:8082/` whose flow matches what the existing
+`eclass-mcp-server` is configured to integrate with. This is the
+instance my MCP server connects to during development. The
+credentials and TLS material the server needs at startup are
+already in place inside `./eclass-mcp-server/`: a `.env` file at
+the package root and a `certs/sso_cert.pem` cert it references.
 
-**Crucial Constraints:**
-* **Protocol Compliance:** The C Replica must be a drop-in replacement. Its JSON-RPC output must byte-match the definitions in `docs/reference/wire_protocol.md`.
-* **Technical Stack:** The C Replica has strict library requirements (`libcurl`, `libxml2`) and any JSON library is strictly forbidden.
-
-**Developer Hint (Research):** After research of the `openeclass/` is completed, you may consolidate all technical findings into a `research-notes.md` file before beginning implementation to use as a primary reference.
-
-Please proceed accordingly.
+I want all the requirements of the PRD validated against the data
+this running mock exposes.
