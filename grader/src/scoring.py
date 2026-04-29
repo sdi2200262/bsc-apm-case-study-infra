@@ -4,18 +4,22 @@
 """
 Test definitions and score aggregation for the grading rubric.
 
-The rubric assigns 100 points across two implementations: 48 to
-the Python implementation (baseline plus feature tools) and 52 to
-the C replica (infrastructure plus baseline plus feature tools).
-The test-definition tuples encode the per-test point values, the
-category each test falls under, and a short human-readable
-description; the ``Scorer`` class accumulates per-test results
-and computes the aggregate scores the report writer consumes.
+The rubric assigns 100 points across two implementations: 41 to
+the Python implementation (baseline plus per-tool announcement
+features) and 59 to the C replica (build and tech-stack
+verification, baseline mirror, the same announcement features,
+and four memory scenarios). The test-definition tuples encode
+the per-test point values, the category each test falls under,
+and a short human-readable description; the ``Scorer`` class
+accumulates per-test results and computes the aggregate scores
+the report writer consumes.
 
 The JSON shape returned by ``Scorer.to_dict`` is consumed by
 ``pipeline.grade``, ``pipeline.combine``, and the ``inspect``
-results browser; changing the shape cascades into those modules
-and is out of scope for routine rubric edits.
+results browser; preserve the top-level keys
+``scores.python.baseline``, ``scores.python.feature``,
+``scores.python.total``, ``scores.c.total``, and
+``scores.grand_total`` when editing.
 """
 
 from __future__ import annotations
@@ -29,17 +33,17 @@ class TestDefinition:
 
     Attributes:
         id: Test identifier used as the key in the result mapping
-            (``"P1"``, ``"AN1_c"``, etc.).
+            (``"P.1.1"``, ``"C.5.4"``, etc.).
         points: Points awarded when the test passes.
         category: Category label for breakdown reports
-            (``"build"``, ``"protocol"``, ``"announcements"``,
-            etc.).
+            (``"protocol"``, ``"course"``, ``"general"``,
+            ``"build"``, ``"stack"``, ``"memory"``).
         target: Implementation under test, ``"python"`` or ``"c"``.
         description: Short human-readable description for the
             report writer.
-        group: Either ``"baseline"`` or ``"feature"``; used to
-            partition the Python score into baseline and feature
-            buckets.
+        group: Either ``"baseline"`` or ``"feature"``; partitions
+            the per-implementation totals into the rubric's
+            baseline-vs-feature buckets.
     """
 
     id: str
@@ -51,77 +55,94 @@ class TestDefinition:
 
 
 PYTHON_BASELINE_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("B1", 2, "build", "python", "Python dependency installation", "baseline"),
-    TestDefinition("P1", 1, "protocol", "python", "initialize response structure", "baseline"),
-    TestDefinition("P2", 1, "protocol", "python", "tools/list response structure", "baseline"),
-    TestDefinition("L1", 1, "login", "python", "Successful login", "baseline"),
-    TestDefinition("L2", 1, "login", "python", "Already logged in handling", "baseline"),
-    TestDefinition("L3", 1, "login", "python", "Missing credentials error", "baseline"),
-    TestDefinition("O1", 1, "logout", "python", "Successful logout", "baseline"),
-    TestDefinition("O2", 1, "logout", "python", "Logout when not logged in", "baseline"),
-    TestDefinition("C1", 1, "courses", "python", "Get courses when logged in", "baseline"),
-    TestDefinition("C2", 1, "courses", "python", "Get courses when not logged in", "baseline"),
-    TestDefinition("A1", 1, "authstatus", "python", "Authstatus when not logged in", "baseline"),
+    TestDefinition("P.1.1", 1, "protocol", "python", "initialize and tools/list expose all six tools", "baseline"),
+    TestDefinition("P.1.2", 1, "protocol", "python", "login with valid credentials succeeds", "baseline"),
+    TestDefinition("P.1.3", 1, "protocol", "python", "second login reports already-logged-in", "baseline"),
+    TestDefinition("P.1.4", 1, "protocol", "python", "login with empty credentials reports missing-credentials", "baseline"),
+    TestDefinition("P.1.5", 1, "protocol", "python", "logout while authenticated succeeds", "baseline"),
+    TestDefinition("P.1.6", 1, "protocol", "python", "logout without prior login is a no-op", "baseline"),
+    TestDefinition("P.1.7", 1, "protocol", "python", "get_courses returns the enrolled courses", "baseline"),
+    TestDefinition("P.1.8", 1, "protocol", "python", "get_courses without authentication reports not-logged-in", "baseline"),
+    TestDefinition("P.1.9", 1, "protocol", "python", "authstatus while authenticated reports logged-in", "baseline"),
+    TestDefinition("P.1.10", 1, "protocol", "python", "authstatus without authentication reports not-logged-in", "baseline"),
 )
 
 PYTHON_COURSE_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("AN1", 3, "announcements", "python", "Not logged in error (exact string)", "feature"),
-    TestDefinition("AN2", 3, "announcements", "python", "Invalid course URL error (exact string)", "feature"),
-    TestDefinition("AN3", 3, "announcements", "python", "No announcements found (exact string)", "feature"),
-    TestDefinition("AN4", 3, "announcements", "python", "Valid announcements with default days_back", "feature"),
-    TestDefinition("AN5", 3, "announcements", "python", "Valid announcements with custom days_back", "feature"),
-    TestDefinition("AN6", 3, "announcements", "python", "Invalid days_back (<=0) error", "feature"),
+    TestDefinition("P.2.1", 1, "course", "python", "course tool without login returns not-logged-in", "feature"),
+    TestDefinition("P.2.2", 1, "course", "python", "unparseable course_url returns extract-code error", "feature"),
+    TestDefinition("P.2.3", 1, "course", "python", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("P.2.4", 1, "course", "python", "empty course returns no-announcements message", "feature"),
+    TestDefinition("P.2.5", 3, "course", "python", "days_back=0 returns the day-zero announcement", "feature"),
+    TestDefinition("P.2.6", 3, "course", "python", "days_back=15 returns the two in-scope announcements", "feature"),
+    TestDefinition("P.2.7", 4, "course", "python", "default days_back returns the three in-scope announcements", "feature"),
+    TestDefinition("P.2.8", 3, "course", "python", "days_back=60 returns all four announcements", "feature"),
 )
 
 PYTHON_GENERAL_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("GAN1", 3, "general_announcements", "python", "Not logged in error", "feature"),
-    TestDefinition("GAN2", 3, "general_announcements", "python", "Invalid days_back (<=0) error", "feature"),
-    TestDefinition("GAN3", 3, "general_announcements", "python", "Invalid days_back (>30) error", "feature"),
-    TestDefinition("GAN4", 3, "general_announcements", "python", "No announcements found", "feature"),
-    TestDefinition("GAN5", 3, "general_announcements", "python", "Valid Aggregation (System + Course)", "feature"),
-    TestDefinition("GAN6", 3, "general_announcements", "python", "Valid Filtering (Respects days_back)", "feature"),
+    TestDefinition("P.3.1", 1, "general", "python", "general tool without login returns not-logged-in", "feature"),
+    TestDefinition("P.3.2", 1, "general", "python", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("P.3.3", 1, "general", "python", "days_back=31 returns older-than-30-days error", "feature"),
+    TestDefinition("P.3.4", 3, "general", "python", "days_back=0 returns the three day-zero announcements", "feature"),
+    TestDefinition("P.3.5", 3, "general", "python", "days_back=15 returns the six in-scope announcements", "feature"),
+    TestDefinition("P.3.6", 5, "general", "python", "default returns nine announcements with multi-source attribution", "feature"),
 )
 
 C_INFRA_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("B2", 3, "build", "c", "C compilation (make c-server)", "baseline"),
-    TestDefinition("M1", 3, "memory", "c", "Valgrind memory clean", "baseline"),
+    TestDefinition("C.1.1", 3, "build", "c", "make c-server compiles the server binary", "baseline"),
+    TestDefinition("C.1.2", 2, "stack", "c", "ldd reports libcurl, libxml2, and no JSON-parser library", "baseline"),
 )
 
 C_BASELINE_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("P1_c", 1, "protocol", "c", "initialize response structure", "baseline"),
-    TestDefinition("P2_c", 1, "protocol", "c", "tools/list response structure", "baseline"),
-    TestDefinition("L1_c", 1, "login", "c", "Successful login", "baseline"),
-    TestDefinition("L2_c", 1, "login", "c", "Already logged in handling", "baseline"),
-    TestDefinition("L3_c", 1, "login", "c", "Missing credentials error", "baseline"),
-    TestDefinition("O1_c", 1, "logout", "c", "Successful logout", "baseline"),
-    TestDefinition("O2_c", 1, "logout", "c", "Logout when not logged in", "baseline"),
-    TestDefinition("C1_c", 1, "courses", "c", "Get courses when logged in", "baseline"),
-    TestDefinition("C2_c", 1, "courses", "c", "Get courses when not logged in", "baseline"),
-    TestDefinition("A1_c", 1, "authstatus", "c", "Authstatus when not logged in", "baseline"),
+    TestDefinition("C.2.1", 1, "protocol", "c", "initialize and tools/list expose all six tools", "baseline"),
+    TestDefinition("C.2.2", 1, "protocol", "c", "login with valid credentials succeeds", "baseline"),
+    TestDefinition("C.2.3", 1, "protocol", "c", "second login reports already-logged-in", "baseline"),
+    TestDefinition("C.2.4", 1, "protocol", "c", "login with empty credentials reports missing-credentials", "baseline"),
+    TestDefinition("C.2.5", 1, "protocol", "c", "logout while authenticated succeeds", "baseline"),
+    TestDefinition("C.2.6", 1, "protocol", "c", "logout without prior login is a no-op", "baseline"),
+    TestDefinition("C.2.7", 1, "protocol", "c", "get_courses returns the enrolled courses", "baseline"),
+    TestDefinition("C.2.8", 1, "protocol", "c", "get_courses without authentication reports not-logged-in", "baseline"),
+    TestDefinition("C.2.9", 1, "protocol", "c", "authstatus while authenticated reports logged-in", "baseline"),
+    TestDefinition("C.2.10", 1, "protocol", "c", "authstatus without authentication reports not-logged-in", "baseline"),
 )
 
 C_COURSE_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("AN1_c", 3, "announcements", "c", "Not logged in error", "feature"),
-    TestDefinition("AN2_c", 3, "announcements", "c", "Invalid course URL error", "feature"),
-    TestDefinition("AN3_c", 3, "announcements", "c", "No announcements found", "feature"),
-    TestDefinition("AN4_c", 3, "announcements", "c", "Valid announcements with default days_back", "feature"),
-    TestDefinition("AN5_c", 3, "announcements", "c", "Valid announcements with custom days_back", "feature"),
-    TestDefinition("AN6_c", 3, "announcements", "c", "Invalid days_back (<=0) error", "feature"),
+    TestDefinition("C.3.1", 1, "course", "c", "course tool without login returns not-logged-in", "feature"),
+    TestDefinition("C.3.2", 1, "course", "c", "unparseable course_url returns extract-code error", "feature"),
+    TestDefinition("C.3.3", 1, "course", "c", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("C.3.4", 1, "course", "c", "empty course returns no-announcements message", "feature"),
+    TestDefinition("C.3.5", 3, "course", "c", "days_back=0 returns the day-zero announcement", "feature"),
+    TestDefinition("C.3.6", 3, "course", "c", "days_back=15 returns the two in-scope announcements", "feature"),
+    TestDefinition("C.3.7", 4, "course", "c", "default days_back returns the three in-scope announcements", "feature"),
+    TestDefinition("C.3.8", 3, "course", "c", "days_back=60 returns all four announcements", "feature"),
 )
 
 C_GENERAL_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("GAN1_c", 3, "general_announcements", "c", "Not logged in error", "feature"),
-    TestDefinition("GAN2_c", 3, "general_announcements", "c", "Invalid days_back (<=0) error", "feature"),
-    TestDefinition("GAN3_c", 3, "general_announcements", "c", "Invalid days_back (>30) error", "feature"),
-    TestDefinition("GAN4_c", 3, "general_announcements", "c", "No announcements found", "feature"),
-    TestDefinition("GAN5_c", 3, "general_announcements", "c", "Valid Aggregation (System + Course)", "feature"),
-    TestDefinition("GAN6_c", 3, "general_announcements", "c", "Valid Filtering (Respects days_back)", "feature"),
+    TestDefinition("C.4.1", 1, "general", "c", "general tool without login returns not-logged-in", "feature"),
+    TestDefinition("C.4.2", 1, "general", "c", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("C.4.3", 1, "general", "c", "days_back=31 returns older-than-30-days error", "feature"),
+    TestDefinition("C.4.4", 3, "general", "c", "days_back=0 returns the three day-zero announcements", "feature"),
+    TestDefinition("C.4.5", 3, "general", "c", "days_back=15 returns the six in-scope announcements", "feature"),
+    TestDefinition("C.4.6", 5, "general", "c", "default returns nine announcements with multi-source attribution", "feature"),
 )
 
-PYTHON_FEATURE_TESTS: tuple[TestDefinition, ...] = PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS
-PYTHON_TESTS: tuple[TestDefinition, ...] = PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS
+C_MEMORY_TESTS: tuple[TestDefinition, ...] = (
+    TestDefinition("C.5.1", 3, "memory", "c", "login lifecycle leaves no leaked memory", "feature"),
+    TestDefinition("C.5.2", 3, "memory", "c", "course-announcement variations leave no leaked memory", "feature"),
+    TestDefinition("C.5.3", 3, "memory", "c", "general-announcement variations leave no leaked memory", "feature"),
+    TestDefinition("C.5.4", 4, "memory", "c", "full lifecycle integration leaves no leaked memory", "feature"),
+)
+
+PYTHON_FEATURE_TESTS: tuple[TestDefinition, ...] = (
+    PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS
+)
+PYTHON_TESTS: tuple[TestDefinition, ...] = (
+    PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS
+)
+C_FEATURE_TESTS: tuple[TestDefinition, ...] = (
+    C_COURSE_TESTS + C_GENERAL_TESTS + C_MEMORY_TESTS
+)
 C_TESTS: tuple[TestDefinition, ...] = (
-    C_INFRA_TESTS + C_BASELINE_TESTS + C_COURSE_TESTS + C_GENERAL_TESTS
+    C_INFRA_TESTS + C_BASELINE_TESTS + C_FEATURE_TESTS
 )
 ALL_TESTS: tuple[TestDefinition, ...] = PYTHON_TESTS + C_TESTS
 
@@ -176,7 +197,7 @@ class Scorer:
         """Record one test result.
 
         Args:
-            test_id: Rubric identifier (``"P1"``, ``"AN1_c"``, etc.).
+            test_id: Rubric identifier (``"P.1.1"``, ``"C.5.4"``, etc.).
             passed: Whether the test passed.
             message: Short summary for the console output.
             full_output: Complete output for the JSON report;

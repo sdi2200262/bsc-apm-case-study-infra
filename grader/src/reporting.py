@@ -8,8 +8,10 @@ The JSON report at ``<workspace>/results_<patch>.json`` is the
 machine-readable artefact the pipeline's grade stage promotes; its
 shape is fixed so downstream consumers continue to read it. The
 text report at ``<workspace>/results_<patch>.txt`` and the console
-summary share a layout that lists each rubric row with its status,
-description, and short message.
+summary share a layout that lists each rubric section with its
+status, description, and short message; the eight sections (Python
+baseline, Python course, Python general, C infra, C baseline, C
+course, C general, C memory) mirror the rubric structure.
 """
 
 from __future__ import annotations
@@ -20,15 +22,31 @@ from datetime import datetime
 from pathlib import Path
 
 from .scoring import (
-    C_TESTS,
+    C_BASELINE_TESTS,
+    C_COURSE_TESTS,
+    C_GENERAL_TESTS,
+    C_INFRA_TESTS,
+    C_MEMORY_TESTS,
     PYTHON_BASELINE_TESTS,
-    PYTHON_FEATURE_TESTS,
+    PYTHON_COURSE_TESTS,
+    PYTHON_GENERAL_TESTS,
     Scorer,
     TestDefinition,
 )
 
 CONSOLE_MESSAGE_LIMIT = 200
 VERBOSE_MESSAGE_LIMIT = 60
+
+SECTION_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
+    ("PYTHON BASELINE", PYTHON_BASELINE_TESTS),
+    ("PYTHON COURSE", PYTHON_COURSE_TESTS),
+    ("PYTHON GENERAL", PYTHON_GENERAL_TESTS),
+    ("C INFRA", C_INFRA_TESTS),
+    ("C BASELINE", C_BASELINE_TESTS),
+    ("C COURSE", C_COURSE_TESTS),
+    ("C GENERAL", C_GENERAL_TESTS),
+    ("C MEMORY", C_MEMORY_TESTS),
+)
 
 
 @dataclass(frozen=True)
@@ -93,9 +111,9 @@ def write_json(
 def write_text(paths: ReportPaths, scorer: Scorer) -> Path:
     """Write the plain-text report.
 
-    The layout matches the prior shape so existing comparison
-    harnesses keep parsing successfully: a header, a section per
-    rubric bucket with per-test rows, and a summary block.
+    The layout has a header, one section per rubric bucket with
+    per-test rows, and a summary block totalling each Python
+    bucket and each C bucket plus the grand total.
 
     Args:
         paths: Report path resolution from :func:`report_paths`.
@@ -106,12 +124,6 @@ def write_text(paths: ReportPaths, scorer: Scorer) -> Path:
         The text path that was written.
     """
     timestamp = datetime.now().isoformat()
-    py_baseline = scorer.python_baseline_score()
-    py_feature = scorer.python_feature_score()
-    py_total = scorer.python_total_score()
-    c_total = scorer.c_score()
-    grand = scorer.total_score()
-
     lines: list[str] = []
     lines.append("=" * 70)
     lines.append(f"GRADING REPORT: {paths.patch_name}")
@@ -119,43 +131,18 @@ def write_text(paths: ReportPaths, scorer: Scorer) -> Path:
     lines.append(f"Generated: {timestamp}")
     lines.append("")
 
-    lines.extend(
-        _section_lines(
-            f"PYTHON BASELINE ({py_baseline[0]}/{py_baseline[1]})",
-            PYTHON_BASELINE_TESTS,
-            scorer,
-            CONSOLE_MESSAGE_LIMIT,
+    for header, tests in SECTION_LAYOUT:
+        section_score, section_max = _section_totals(scorer, tests)
+        lines.extend(
+            _section_lines(
+                f"{header} ({section_score}/{section_max})",
+                tests,
+                scorer,
+                CONSOLE_MESSAGE_LIMIT,
+            )
         )
-    )
-    lines.extend(
-        _section_lines(
-            f"PYTHON FEATURE ({py_feature[0]}/{py_feature[1]})",
-            PYTHON_FEATURE_TESTS,
-            scorer,
-            CONSOLE_MESSAGE_LIMIT,
-        )
-    )
-    lines.extend(
-        _section_lines(
-            f"C REPLICA ({c_total[0]}/{c_total[1]})",
-            C_TESTS,
-            scorer,
-            CONSOLE_MESSAGE_LIMIT,
-        )
-    )
 
-    lines.append("=" * 70)
-    lines.append("SUMMARY")
-    lines.append("=" * 70)
-    lines.append(f"  Python Baseline:  {py_baseline[0]:2d}/{py_baseline[1]:2d}")
-    lines.append(f"  Python Feature:   {py_feature[0]:2d}/{py_feature[1]:2d}")
-    lines.append(f"  Python Total:     {py_total[0]:2d}/{py_total[1]:2d}")
-    lines.append(f"  C Replica:        {c_total[0]:2d}/{c_total[1]:2d}")
-    lines.append("  ----------------------------------------")
-    lines.append(f"  TOTAL:            {grand[0]:2d}/{grand[1]:2d}")
-    lines.append("")
-    lines.append("=" * 70)
-
+    lines.extend(_summary_lines(scorer))
     paths.txt_path.write_text("\n".join(lines), encoding="utf-8")
     return paths.txt_path
 
@@ -169,14 +156,8 @@ def print_console_summary(
         paths: Report path resolution from :func:`report_paths`.
         scorer: Populated scorer for the totals.
         verbose: When ``True``, prints each rubric row's status
-            and short message under the matching bucket header.
+            and short message under the matching section header.
     """
-    py_baseline = scorer.python_baseline_score()
-    py_feature = scorer.python_feature_score()
-    py_total = scorer.python_total_score()
-    c_total = scorer.c_score()
-    grand = scorer.total_score()
-
     print("")
     print("=" * 50)
     print("GRADING SUMMARY")
@@ -185,16 +166,49 @@ def print_console_summary(
     if verbose:
         _print_verbose(scorer)
 
-    print(f"  Python Baseline:  {py_baseline[0]:2d}/{py_baseline[1]:2d}")
-    print(f"  Python Feature:   {py_feature[0]:2d}/{py_feature[1]:2d}")
-    print(f"  Python Total:     {py_total[0]:2d}/{py_total[1]:2d}")
-    print(f"  C Replica:        {c_total[0]:2d}/{c_total[1]:2d}")
-    print("  ----------------------------------------")
-    print(f"  TOTAL:            {grand[0]:2d}/{grand[1]:2d}")
+    for line in _summary_lines(scorer):
+        print(line)
     print("")
     print(f"  JSON report: {paths.json_path}")
     print(f"  Text report: {paths.txt_path}")
     print("=" * 50)
+
+
+def _summary_lines(scorer: Scorer) -> list[str]:
+    """Build the lines for the summary block at the foot of the report."""
+    py_total = scorer.python_total_score()
+    c_total = scorer.c_score()
+    grand = scorer.total_score()
+
+    lines: list[str] = []
+    lines.append("=" * 70)
+    lines.append("SUMMARY")
+    lines.append("=" * 70)
+    for header, tests in SECTION_LAYOUT:
+        section_score, section_max = _section_totals(scorer, tests)
+        label = header.title()
+        lines.append(f"  {label:18s} {section_score:3d}/{section_max:<3d}")
+    lines.append("  ----------------------------------------")
+    lines.append(f"  Python Total:      {py_total[0]:3d}/{py_total[1]:<3d}")
+    lines.append(f"  C Total:           {c_total[0]:3d}/{c_total[1]:<3d}")
+    lines.append(f"  TOTAL:             {grand[0]:3d}/{grand[1]:<3d}")
+    lines.append("")
+    lines.append("=" * 70)
+    return lines
+
+
+def _section_totals(
+    scorer: Scorer, tests: tuple[TestDefinition, ...]
+) -> tuple[int, int]:
+    """Return ``(score, max)`` for one rubric section's tests."""
+    score = 0
+    section_max = 0
+    for test in tests:
+        section_max += test.points
+        result = scorer.results.get(test.id)
+        if result is not None and result.passed:
+            score += test.points
+    return score, section_max
 
 
 def _section_lines(
@@ -219,19 +233,18 @@ def _section_lines(
 
 
 def _print_verbose(scorer: Scorer) -> None:
-    """Print per-test status under each rubric bucket header."""
-    for header, tests in (
-        ("Python Baseline", PYTHON_BASELINE_TESTS),
-        ("Python Feature", PYTHON_FEATURE_TESTS),
-        ("C Replica", C_TESTS),
-    ):
+    """Print per-test status under each rubric section header."""
+    for header, tests in SECTION_LAYOUT:
         print(f"\n  {header}:")
         for test in tests:
             result = scorer.results.get(test.id)
             if result is None:
                 continue
             status = "PASS" if result.passed else "FAIL"
-            print(f"    [{status}] {test.id}: {_truncate(result.message, VERBOSE_MESSAGE_LIMIT)}")
+            print(
+                f"    [{status}] {test.id}: "
+                f"{_truncate(result.message, VERBOSE_MESSAGE_LIMIT)}"
+            )
     print("")
 
 
