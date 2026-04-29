@@ -44,9 +44,9 @@ bsc-apm-case-study-task/
 │   ├── README.md
 │   ├── PIPELINE.md
 │   └── *.py
-└── participant-guides/                 # Study guides
-    ├── README.md
-    └── *.tex, *.pdf, assets/
+└── participant/                        # Participant-facing materials
+    ├── guide/                          # Study guide (LaTeX source, PDF, assets)
+    └── scripts/                        # Helper scripts shipped to participants
 ```
 
 ## Documentation
@@ -56,7 +56,7 @@ bsc-apm-case-study-task/
 - **[parser/README.md](parser/README.md)** - Transcript parser overview
 - **[pipeline/README.md](pipeline/README.md)** - Pipeline scripts
 - **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Pipeline protocol
-- **[participant-guides/README.md](participant-guides/README.md)** - Guide building
+- **[participant/guide/README.md](participant/guide/README.md)** - Guide building
 
 ## Related Repositories
 
