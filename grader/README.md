@@ -14,9 +14,11 @@ rubric covering the Python implementation (41 points: 10 baseline,
 17 course announcements, 14 general announcements) and the C
 replica (59 points: 5 build and tech-stack, 10 baseline, 17 course
 announcements, 14 general announcements, 13 memory scenarios). The
-baseline score with no patch applied is 10/100, awarded for the
-Python baseline rows the upstream `eclass-mcp-server` reference
-already passes. The participant testing environment is shipped
+baseline score with no patch applied is 9/100, awarded for the
+nine Python baseline rows the upstream `eclass-mcp-server`
+reference already passes; P.1.1 (the `tools/list` registration
+check for all six tools) is the one baseline row that requires
+the patch's tool additions to pass. The participant testing environment is shipped
 separately by the
 [`bsc-apm-case-study-env`](https://github.com/sdi2200262/bsc-apm-case-study-env)
 package; the grader probes its endpoints, invokes its reset script,
@@ -128,7 +130,7 @@ failures terminate the run early.
 | Testing environment (arm64) | `bsc-apm-case-study-env` release tag `bsc-apm-case-study-env-arm64` |
 
 A grading machine that produces a baseline score other than
-10/100 against these pinned references is misconfigured.
+9/100 against these pinned references is misconfigured.
 
 ## Directory structure
 

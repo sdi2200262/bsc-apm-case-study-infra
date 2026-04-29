@@ -19,9 +19,13 @@ that cutoff is in scope.
 
 The four tools `login`, `logout`, `get_courses`, `authstatus` already
 exist in the upstream `eclass-mcp-server` reference. The participant
-inherits working implementations and must not break them. Each row below
-confirms one tool behaviour against the seeded user (`student1`) and the
-three enrolled courses (`CS101`, `PHYS150`, `MATH201`).
+inherits working implementations and must not break them while adding
+`get_course_announcements` and `get_general_announcements` to the
+server. P.1.1 confirms the protocol handshake and the registration
+of every tool the rubric grades; the remaining nine rows confirm the
+four pre-existing tools' behaviour against the seeded user
+(`student1`) and the three enrolled courses (`CS101`, `PHYS150`,
+`MATH201`).
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -172,6 +176,11 @@ largest cross-tool surface.
 
 | Submission Type | Python Baseline | Python Features | C Replica | Total |
 |-----------------|-----------------|-----------------|-----------|-------|
-| No patch (baseline only) | 10/10 | 0/31 | 0/59 | 10/100 |
+| No patch (baseline only) | 9/10 | 0/31 | 0/59 | 9/100 |
 | Python implementation only | 10/10 | 31/31 | 0/59 | 41/100 |
 | Complete implementation | 10/10 | 31/31 | 59/59 | 100/100 |
+
+The no-patch row earns nine of ten on Python baseline because
+P.1.1 (which confirms `tools/list` registers all six tools) requires
+the patch's tool additions; the other nine baseline rows already
+pass against the upstream reference.
