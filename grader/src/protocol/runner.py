@@ -4,7 +4,7 @@
 """
 Protocol-test runner: server spawning, JSON-RPC framing, fixtures.
 
-The protocol-test phase modules drive a freshly-spawned MCP server
+The protocol-test modules drive a freshly-spawned MCP server
 subprocess (Python or C implementation) over JSON-RPC stdio and
 assert against the responses. This module owns the infrastructure
 the assertion modules depend on:
@@ -14,12 +14,14 @@ the assertion modules depend on:
 - ``spawn_server``: context manager that allocates a server, runs
   the assertion's body, and tears the server down.
 - ``mcp_server_env``: environment variables a participant's MCP
-  server expects, derived from the testing environment install.
+  server expects, derived from the testing environment install
+  and the loaded seed credentials.
 - ``initialize_server``, ``call_tool``, ``extract_text``,
   ``tool_exists``: small helpers the assertion bodies share.
-- ``SEED_*``: constants identifying the seed values the testing
-  environment ships with so assertion bodies stay seed-aware
-  through one place if the seed is revised.
+
+Seed values (username, password, enrolled course codes,
+announcement bodies) live in ``grader.src.seed`` and are read from
+there rather than redeclared here.
 """
 
 from __future__ import annotations
@@ -34,6 +36,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from ..seed import SEED
+
 REQUEST_TIMEOUT_SECONDS = 10.0
 SERVER_STARTUP_WAIT_SECONDS = 0.5
 SERVER_SHUTDOWN_WAIT_SECONDS = 2.0
@@ -44,13 +48,6 @@ CLIENT_NAME = "grader"
 CLIENT_VERSION = "1.0.0"
 
 BASELINE_TOOL_NAMES = frozenset({"login", "logout", "get_courses", "authstatus"})
-
-SEED_USERNAME = "student1"
-SEED_PASSWORD = "mockpass123"
-SEED_COURSE_WITH_ANNOUNCEMENTS = "CS101"
-SEED_COURSE_WITHOUT_ANNOUNCEMENTS = "MATH201"
-SEED_OLDEST_ADMIN_FRAGMENT = "Spring term opens"
-SEED_RECENT_ADMIN_FRAGMENT = "System maintenance"
 
 ECLASS_BASE_URL = "http://localhost"
 SSO_DOMAIN = "172.17.0.1:8082"
@@ -198,14 +195,13 @@ def mcp_server_env(mock_root: Path) -> dict[str, str]:
 
     Returns:
         Mapping suitable for ``env_vars`` on a ``TestContext``. The
-        username and password match the seed's ``user.username`` and
-        ``user.cas_password``.
+        username and password are read from the loaded seed.
     """
     cert_path = str(mock_root / "certs" / "sso_cert.pem")
     return {
         "ECLASS_URL": ECLASS_BASE_URL,
-        "ECLASS_USERNAME": SEED_USERNAME,
-        "ECLASS_PASSWORD": SEED_PASSWORD,
+        "ECLASS_USERNAME": SEED.username,
+        "ECLASS_PASSWORD": SEED.password,
         "ECLASS_SSO_DOMAIN": SSO_DOMAIN,
         "ECLASS_SSO_PROTOCOL": SSO_PROTOCOL,
         "SSL_CERT_FILE": cert_path,
