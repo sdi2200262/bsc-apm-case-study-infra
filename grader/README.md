@@ -10,19 +10,64 @@ dataset.
 ## Overview
 
 The grader scores a participant's submission against a 100-point
-rubric covering Python baseline preservation (12 points), Python
-features (36 points), and the C replica (52 points). The baseline
-score with no patch applied is 12/100. The participant testing
-environment is shipped separately by the
+rubric covering the Python implementation (41 points: 10 baseline,
+17 course announcements, 14 general announcements) and the C
+replica (59 points: 5 build and tech-stack, 10 baseline, 17 course
+announcements, 14 general announcements, 13 memory scenarios). The
+baseline score with no patch applied is 10/100, awarded for the
+Python baseline rows the upstream `eclass-mcp-server` reference
+already passes. The participant testing environment is shipped
+separately by the
 [`bsc-apm-case-study-env`](https://github.com/sdi2200262/bsc-apm-case-study-env)
 package; the grader probes its endpoints, invokes its reset script,
 and spawns participant MCP servers under environment variables
 derived from its install prefix.
 
+## Prerequisites
+
+**Operating system.** Linux (native, WSL2, or a Linux VM on macOS).
+
+**Required software.**
+
+- Python 3.10 or newer with `uv` on `PATH`.
+- Docker Engine plus Compose v2 (consumed by the testing environment).
+- Git.
+
+**Required for the C tests.**
+
+- `gcc` (>= 9.0 for C11 support).
+- `libcurl4-openssl-dev` (libcurl >= 7.81.0).
+- `libxml2-dev` (libxml2 >= 2.9.13).
+- `valgrind`.
+- `make`.
+
+Ubuntu install line:
+
+```bash
+sudo apt-get install -y python3 git docker.io docker-compose-plugin \
+    build-essential libcurl4-openssl-dev libxml2-dev valgrind
+```
+
+Install `uv` if not already present:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+## Testing environment
+
+The `bsc-apm-case-study-env` package ships per-architecture release
+tarballs (amd64 and arm64); install instructions, lifecycle scripts,
+and seed documentation live in that package's
+[INSTALL.md](https://github.com/sdi2200262/bsc-apm-case-study-env/blob/main/docs/INSTALL.md).
+The grader expects the env to be installed and running before it is
+invoked.
+
 ## Quick start
 
 ```bash
-# Bring the testing environment up (one-time install plus scripts/up)
+# Bring the testing environment up (one-time install plus scripts/up;
+# see the env package's INSTALL.md for the per-arch download).
 ~/.bsc-apm/install
 ~/.bsc-apm/scripts/up
 
@@ -43,69 +88,85 @@ python -m grader /path/to/solution.patch \
 python -m grader --help
 ```
 
-See [SETUP.md](SETUP.md) for the full grading-machine prerequisites
-and testing-environment install instructions.
-
 ## Architecture
 
-The grader interacts with a separately-installed testing
-environment. On every grading run the grader probes the
-environment's HTTP endpoints (`http://localhost/` for openeclass,
-`https://localhost:8082/health` for the mock CAS), invokes
-`<mock-root>/scripts/reset` to flush state between runs, then
-sequences the phase modules:
+The grader is a black-box sequencer. On every grading run the
+grader probes the environment's HTTP endpoints
+(`http://localhost/` for openeclass, `https://localhost:8082/health`
+for the mock CAS), invokes `<mock-root>/scripts/reset` to flush the
+seed back to its baseline, then sequences the phase modules:
 
 1. Apply the patch on a fresh test branch (or skip in `--no-patch` baseline mode).
-2. Python build (`uv sync` against the participant's checkout).
-3. Python baseline phase (P1, P2, L1-L3, O1-O2, C1-C2, A1).
-4. Python feature phase (AN1-AN6, GAN1-GAN6).
-5. C build (`make c-server`).
-6. Memory phase (Valgrind against the C replica).
-7. C baseline phase and C feature phase (the same rubric items
-   under the C implementation).
+2. Python dependency install (`uv sync` against the participant's checkout) as a non-scored prerequisite. Failure skips every Python rubric row.
+3. Python baseline phase (P.1.1 through P.1.10).
+4. Python course-announcements phase (P.2.1 through P.2.8).
+5. Python general-announcements phase (P.3.1 through P.3.6).
+6. C compile (`make c-server`, scored as C.1.1).
+7. C tech-stack verification (`ldd` whitelist, scored as C.1.2).
+8. C baseline phase (C.2.1 through C.2.10).
+9. C course-announcements phase (C.3.1 through C.3.8).
+10. C general-announcements phase (C.4.1 through C.4.6).
+11. C memory phase (four valgrind scenarios, C.5.1 through C.5.4).
+
+Each protocol test spawns the participant's MCP server as a
+subprocess (Python: `uv run python -m src.eclass_mcp_server.server`;
+C: `c-replica/server` directly), sends JSON-RPC requests on stdin,
+and asserts against the response's `text` content. Each memory
+scenario wraps the C-replica spawn in `valgrind` and verifies a
+clean exit with zero leaked bytes.
 
 Phase failures are recorded in the results JSON without halting
 the run. Patch-apply failures, pre-flight failures, and reset
 failures terminate the run early.
+
+## Pinned references
+
+| Component | Pinned at |
+|---|---|
+| `eclass-mcp-server` | commit `dbd2d16` on the `main` branch |
+| Testing environment (amd64) | `bsc-apm-case-study-env` release tag `bsc-apm-case-study-env` |
+| Testing environment (arm64) | `bsc-apm-case-study-env` release tag `bsc-apm-case-study-env-arm64` |
+
+A grading machine that produces a baseline score other than
+10/100 against these pinned references is misconfigured.
 
 ## Directory structure
 
 ```
 grader/
 ├── __init__.py
-├── __main__.py                 # CLI entry: python -m grader
-├── inspect.py                  # results browser
+├── __main__.py                       # CLI entry: python -m grader
+├── inspect.py                        # results browser
 ├── README.md
-├── SETUP.md
+├── seed.yaml                         # pinned mirror of the env package's seed
 └── src/
     ├── __init__.py
-    ├── config.py               # path resolution from CLI flags or grader.yaml
-    ├── errors.py               # GraderError hierarchy
-    ├── preflight.py            # HTTP probes against the testing environment
-    ├── reset.py                # subprocess invocation of scripts/reset
-    ├── patch.py                # git apply / cleanup
-    ├── build_python.py         # uv sync for the Python implementation
-    ├── build_c.py              # make c-server for the C replica
-    ├── memory.py               # Valgrind run against the C binary
-    ├── scoring.py              # rubric definitions and the Scorer
-    ├── reporting.py            # JSON, text, and console writers
+    ├── config.py                     # path resolution from CLI flags or grader.yaml
+    ├── errors.py                     # GraderError hierarchy
+    ├── preflight.py                  # HTTP probes against the testing environment
+    ├── reset.py                      # subprocess invocation of scripts/reset
+    ├── patch.py                      # git apply / cleanup
+    ├── build_python.py               # uv sync for the Python implementation
+    ├── build_c.py                    # C.1.1 compile and C.1.2 stack verification
+    ├── seed.py                       # seed.yaml loader and per-window helpers
+    ├── scoring.py                    # rubric definitions and the Scorer
+    ├── reporting.py                  # JSON, text, and console writers
     └── protocol/
         ├── __init__.py
-        ├── runner.py           # server spawn, JSON-RPC framing, fixtures
-        ├── baseline_tests.py   # baseline assertions (P*, L*, O*, C*, A*)
-        ├── feature_tests.py    # feature assertions (AN*, GAN*)
-        ├── python_baseline.py  # phase aggregator (impl=python)
-        ├── python_feature.py   # phase aggregator (impl=python)
-        ├── c_baseline.py       # phase aggregator (impl=c)
-        └── c_feature.py        # phase aggregator (impl=c)
+        ├── runner.py                       # server spawn, JSON-RPC framing
+        ├── _announcements_assertions.py    # shared count/body helpers
+        ├── baseline_tests.py               # P.1 / C.2 assertions
+        ├── course_announcements_tests.py   # P.2 / C.3 assertions
+        ├── general_announcements_tests.py  # P.3 / C.4 assertions
+        ├── memory_tests.py                 # C.5 scenarios under valgrind
+        ├── python_baseline.py               # phase aggregator (impl=python)
+        ├── python_course_announcements.py   # phase aggregator (impl=python)
+        ├── python_general_announcements.py  # phase aggregator (impl=python)
+        ├── c_baseline.py                    # phase aggregator (impl=c)
+        ├── c_course_announcements.py        # phase aggregator (impl=c)
+        ├── c_general_announcements.py       # phase aggregator (impl=c)
+        └── c_memory.py                      # phase aggregator (impl=c)
 ```
-
-## Documentation
-
-- [SETUP.md](SETUP.md): grading-machine prerequisites and the
-  testing-environment install procedure.
-- Source-code docstrings: detailed per-module documentation in
-  `src/` and `src/protocol/`.
 
 ## Related
 

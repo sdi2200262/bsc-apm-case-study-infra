@@ -138,8 +138,7 @@ def print_summary(data: Dict[str, Any]) -> None:
     
     print_header(f"RESULTS: {meta.get('patch_name', 'Unknown')}")
     print(f"  Timestamp: {meta.get('timestamp', 'N/A')}")
-    print(f"  Grader Version: {meta.get('grader_version', 'N/A')}")
-    
+
     print_header("SCORES", "-")
     
     py = scores.get("python", {})
@@ -336,32 +335,33 @@ def create_parser() -> argparse.ArgumentParser:
         Configured ArgumentParser instance.
     """
     parser = argparse.ArgumentParser(
-        prog="results_viewer.py",
+        prog="inspect.py",
         description="CLI utility for browsing grading results JSON files.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Usage Examples:
   Interactive mode (default):
-    ./results_viewer.py results.json
+    ./inspect.py results.json
 
   Non-interactive commands:
-    ./results_viewer.py results.json --summary
-    ./results_viewer.py results.json --test AN1
-    ./results_viewer.py results.json --failed
-    ./results_viewer.py results.json --passed
-    ./results_viewer.py results.json --category login
-    ./results_viewer.py results.json --full-output L1
-    ./results_viewer.py results.json --list-categories
+    ./inspect.py results.json --summary
+    ./inspect.py results.json --test P.2.5
+    ./inspect.py results.json --failed
+    ./inspect.py results.json --passed
+    ./inspect.py results.json --category course
+    ./inspect.py results.json --full-output P.1.4
+    ./inspect.py results.json --list-categories
 
   Pipe full output for processing:
-    ./results_viewer.py results.json -o P2 | python3 -m json.tool
+    ./inspect.py results.json -o C.5.4 | python3 -m json.tool
 
 Test IDs:
-  Python: B1, P1, P2, L1-L3, O1-O2, C1-C2, A1, AN1-AN5
-  C:      B2, M1, P1_c, P2_c, L1_c-L3_c, O1_c-O2_c, C1_c-C2_c, A1_c, AN1_c-AN5_c
+  Python: P.1.1 to P.1.10, P.2.1 to P.2.8, P.3.1 to P.3.6
+  C:      C.1.1, C.1.2, C.2.1 to C.2.10, C.3.1 to C.3.8,
+          C.4.1 to C.4.6, C.5.1 to C.5.4
 
 Categories:
-  build, protocol, login, logout, courses, authstatus, announcements, memory
+  protocol, course, general, build, stack, memory
         """
     )
     
@@ -378,7 +378,7 @@ Categories:
     parser.add_argument(
         "--test", "-t",
         metavar="ID",
-        help="Show details for a specific test ID (e.g., L1, AN2, P1_c)"
+        help="Show details for a specific test ID (e.g., P.1.4, P.2.5, C.5.4)"
     )
     parser.add_argument(
         "--failed", "-f",

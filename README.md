@@ -33,7 +33,7 @@ bsc-apm-case-study-task/
 │   └── Prompt.md
 ├── grader/                             # Grading suite
 │   ├── README.md
-│   ├── SETUP.md
+│   ├── seed.yaml                       # pinned mirror of the env package's seed
 │   ├── __main__.py                     # CLI entry: python -m grader
 │   ├── inspect.py                      # results browser
 │   └── src/                            # phase modules + protocol subpackage
@@ -52,8 +52,7 @@ bsc-apm-case-study-task/
 ## Documentation
 
 - **[task/README.md](task/README.md)** - Task specification overview
-- **[grader/README.md](grader/README.md)** - Grading system overview
-- **[grader/SETUP.md](grader/SETUP.md)** - Environment setup
+- **[grader/README.md](grader/README.md)** - Grading system overview, prerequisites, runtime workflow, and pinned references
 - **[parser/README.md](parser/README.md)** - Transcript parser overview
 - **[pipeline/README.md](pipeline/README.md)** - Pipeline scripts
 - **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Pipeline protocol
