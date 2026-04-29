@@ -179,5 +179,6 @@ grader/
 - [../pipeline/](../pipeline/): submission processing pipeline
   that orchestrates validation, grading, parsing, and dataset
   aggregation.
-- [Task specification](../task/): submission requirements and the
-  scoring rubric.
+- [Task specification](../participant/task/): the PRD and prompt
+  participants implement against.
+- [SCORING.md](SCORING.md): rubric the grader implements against.

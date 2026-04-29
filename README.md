@@ -18,7 +18,7 @@ Total: **100 points**
 | Python Features | 36 | `get_course_announcements` and `get_general_announcements` |
 | C Replica | 52 | Full C implementation with memory safety |
 
-See [task/SCORING.md](task/SCORING.md) for the detailed rubric.
+See [grader/SCORING.md](grader/SCORING.md) for the detailed rubric.
 
 ## Repository Structure
 
@@ -26,13 +26,9 @@ See [task/SCORING.md](task/SCORING.md) for the detailed rubric.
 bsc-apm-case-study-task/
 ├── README.md
 ├── LICENSE
-├── task/                               # Task specification
-│   ├── README.md
-│   ├── SCORING.md
-│   ├── PRD.md
-│   └── Prompt.md
 ├── grader/                             # Grading suite
 │   ├── README.md
+│   ├── SCORING.md                      # rubric
 │   ├── seed.yaml                       # pinned mirror of the env package's seed
 │   ├── __main__.py                     # CLI entry: python -m grader
 │   ├── inspect.py                      # results browser
@@ -45,14 +41,19 @@ bsc-apm-case-study-task/
 │   ├── PIPELINE.md
 │   └── *.py
 └── participant/                        # Participant-facing materials
+    ├── README.md
     ├── guide/                          # Study guide (LaTeX source, PDF, assets)
-    └── scripts/                        # Helper scripts shipped to participants
+    ├── scripts/                        # Helper scripts shipped to participants
+    └── task/                           # Task specification
+        ├── PRD.md
+        └── PROMPT.md
 ```
 
 ## Documentation
 
-- **[task/README.md](task/README.md)** - Task specification overview
+- **[participant/README.md](participant/README.md)** - Participant materials overview, including the task specification
 - **[grader/README.md](grader/README.md)** - Grading system overview, prerequisites, runtime workflow, and pinned references
+- **[grader/SCORING.md](grader/SCORING.md)** - Rubric the grader implements against
 - **[parser/README.md](parser/README.md)** - Transcript parser overview
 - **[pipeline/README.md](pipeline/README.md)** - Pipeline scripts
 - **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Pipeline protocol
