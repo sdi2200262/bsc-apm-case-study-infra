@@ -179,17 +179,35 @@ participant-package/
 |   |-- PRD.md                     # Product Requirements Document
 |   |-- PROMPT.md                  # default opening prompt for the AI
 |   `-- README.txt                 # one-shot setup notes; delete after use
-`-- scripts/
-    |-- list-chats.py              # transcript listing helper
-    |-- collect-chats.py           # transcript collection helper
-    `-- reset-chats.py             # transcript wipe helper
+|-- scripts/
+|   |-- list-chats.py              # transcript listing helper
+|   |-- collect-chats.py           # transcript collection helper
+|   `-- reset-chats.py             # transcript wipe helper
+`-- .claude/
+    `-- skills/
+        `-- bsc-apm-study-helper/  # optional Claude Code skill (see Section 3.1)
+            |-- SKILL.md
+            `-- references/...
 \end{verbatim}
 
-\texttt{PRD.md} is the sole source of truth for what to implement. The three Python scripts under \texttt{scripts/} manage the AI's transcript files; you run them yourself, between or after sessions, and they accept your workspace path as an argument so they can sit anywhere on disk.
+\texttt{PRD.md} is the sole source of truth for what to implement. The three Python scripts under \texttt{scripts/} manage the AI's transcript files; you run them yourself between or after sessions, or you have a Claude Code session with the optional helper skill below loaded run them on your behalf with confirmation. They accept your workspace path as an argument so they can sit anywhere on disk.
 
-\note{Keep the \texttt{scripts/} directory \emph{outside} the workspace where you do the task. The AI agent must not see these scripts during a session.}
+\subsection{Optional helper skill}
+\label{sec:helperskill}
 
-\newpage
+The package ships an optional Claude Code skill, pre-extracted at \texttt{.claude/skills/bsc-apm-study-helper/}, that can answer logistics questions about this guide: setup, the helper scripts, packaging, the between-sessions reset, cleanup. The skill is project-scoped: Claude Code auto-discovers it only when you open Claude Code from the participant-package directory itself. To use it, open a Claude Code session in the participant-package directory:
+
+\begin{verbatim}
+cd path/to/participant-package
+claude
+\end{verbatim}
+
+You then ask logistics questions in that session. To stop using the skill, simply close that session.
+
+\note{The skill is intentionally project-scoped to the participant-package directory, not user-level. It is therefore not loaded in your task's workspace, only in a Claude Code session opened from the participant-package directory. Do not copy it to \texttt{\textasciitilde/.claude/skills/} or to your workspace's \texttt{.claude/skills/}; doing so would defeat that isolation.}
+
+\warn{The skill is for logistics only. The agent loading it is instructed to refuse questions about the implementation task (\texttt{eclass-mcp-server} code, openeclass internals, the C replica) and about framework concepts (APM, Spec-kit), and to redirect you to the appropriate documentation. The agent may still slip and answer such questions anyway; if it does, the responsibility lies with you. Do not act on, paraphrase, or carry into a session any task or framework content the helper produced. The study compares frameworks as documented; assistance from this helper outside its logistics scope contaminates your data.}
+
 \section{System requirements}
 \label{sec:requirements}
 
@@ -265,7 +283,6 @@ valgrind --version
 
 Install the Claude Code CLI by following the official instructions at \url{https://docs.claude.com/en/docs/claude-code}. Sign in with the credentials you were provided.
 
-\newpage
 \section{Workspace}
 \label{sec:workspace}
 
@@ -305,7 +322,6 @@ git checkout e8b3329
 cd ..
 \end{verbatim}
 
-\newpage
 \section{Mock environment}
 \label{sec:env}
 
@@ -454,12 +470,17 @@ zip -r P001_S1_apm.zip solution.patch transcripts/
 
 The zip must contain exactly two entries at its root: \texttt{solution.patch} and \texttt{transcripts/}. Files under \texttt{transcripts/} are flat \texttt{.jsonl} files; do not nest them under any subdirectory.
 
-\textbf{4. Move the zip out of the workspace.} The between-sessions reset wipes everything in the workspace, including the zip; store it somewhere safe before you run the reset.
+\textbf{4. Move the zip out of the workspace.} The between-sessions reset wipes everything in the workspace, including the zip. Store it in a directory outside the workspace and outside the participant package; \texttt{\textasciitilde/Documents/bsc-apm-submissions/} is a reasonable default. Both session zips end up there, and the cleanup steps later leave that directory untouched.
+
+\begin{verbatim}
+mkdir -p ~/Documents/bsc-apm-submissions
+mv <workspace>/P001_S1_apm.zip ~/Documents/bsc-apm-submissions/
+\end{verbatim}
 
 \subsection{Resetting between sessions}
 \label{sec:between}
 
-Run this after the first session has wrapped up and before the second session starts. The reset returns the workspace and the transcript store to the same state the setup steps above produced for session 1, so session 2 begins from an identical baseline. The mock environment is left alone unless you have a reason to believe it has drifted from its initial state.
+Run this after the first session has wrapped up and before the second session starts. Before running any of the steps below, confirm that session 1's submission zip is in your safe-storage directory (e.g., \texttt{ls -la \textasciitilde/Documents/bsc-apm-submissions/} should list \texttt{P001\_S1\_*.zip}); the reset is destructive and only zips outside the workspace survive. The reset then returns the workspace and the transcript store to the same state the setup steps above produced for session 1, so session 2 begins from an identical baseline. The mock environment is left alone unless you have a reason to believe it has drifted from its initial state.
 
 \textbf{1. Reset the implementation codebase.} From inside \texttt{eclass-mcp-server}, hard-reset to the pinned commit, wipe untracked and ignored files, and rebuild the virtual environment from scratch:
 
@@ -528,6 +549,7 @@ Optional. Once both session zips have been submitted (Section~\ref{sec:submissio
 
 The participant package itself can be deleted at this point as well; it has no further role.
 
+\newpage
 \section{Submission}
 \label{sec:submission}
 
@@ -554,5 +576,8 @@ sdi2200262@di.uoa.gr      Email
 cobuter_man               Discord
 \end{verbatim}
 
+\vspace{1cm}
+
+Thank you for your time and contribution to this research.
 
 \end{document}

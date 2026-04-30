@@ -16,6 +16,7 @@ GUIDE_PDF = $(GUIDE_DIR)/participant-guide-cc.pdf
 
 TASK_DIR = participant/task
 SCRIPTS_DIR = participant/scripts
+SKILLS_DIR = participant/skills
 
 LATEXMK ?= latexmk
 
@@ -41,6 +42,8 @@ participant-package: participant-guide
 	cp $(SCRIPTS_DIR)/list-chats.py $(STAGING_DIR)/participant-package/scripts/
 	cp $(SCRIPTS_DIR)/collect-chats.py $(STAGING_DIR)/participant-package/scripts/
 	cp $(SCRIPTS_DIR)/reset-chats.py $(STAGING_DIR)/participant-package/scripts/
+	mkdir -p $(STAGING_DIR)/participant-package/.claude
+	cp -r $(SKILLS_DIR) $(STAGING_DIR)/participant-package/.claude/skills
 	rm -f $(RELEASE_ZIP)
 	cd $(STAGING_DIR) && zip -r ../$(notdir $(RELEASE_ZIP)) participant-package
 	rm -rf $(STAGING_DIR)

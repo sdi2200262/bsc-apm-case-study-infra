@@ -38,6 +38,12 @@ jobs:
           test -f /tmp/smoke/participant-package/scripts/list-chats.py
           test -f /tmp/smoke/participant-package/scripts/collect-chats.py
           test -f /tmp/smoke/participant-package/scripts/reset-chats.py
+          test -f /tmp/smoke/participant-package/.claude/skills/bsc-apm-study-helper/SKILL.md
+          test -f /tmp/smoke/participant-package/.claude/skills/bsc-apm-study-helper/references/system-requirements.md
+          test -f /tmp/smoke/participant-package/.claude/skills/bsc-apm-study-helper/references/workspace.md
+          test -f /tmp/smoke/participant-package/.claude/skills/bsc-apm-study-helper/references/mock-environment.md
+          test -f /tmp/smoke/participant-package/.claude/skills/bsc-apm-study-helper/references/session-workflow.md
+          test -f /tmp/smoke/participant-package/.claude/skills/bsc-apm-study-helper/references/submission.md
 
       - name: Publish release
         env:
