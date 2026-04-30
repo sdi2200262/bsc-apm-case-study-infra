@@ -165,7 +165,7 @@ After each session you produce one zip file containing two artefacts at its root
 
 The zip filename follows the strict pattern \texttt{\{PID\}\_S\{1\textbar{}2\}\_\{apm\textbar{}speckit\}.zip}, e.g., \texttt{P001\_S1\_apm.zip}.
 
-You also fill in a short post-session questionnaire after each session.
+You also answer a short post-session questionnaire about your experience with the framework, submitted on the same form alongside the zip.
 
 \section{Participant package}
 \label{sec:package}
@@ -477,6 +477,12 @@ mkdir -p ~/Documents/bsc-apm-submissions
 mv <workspace>/P001_S1_apm.zip ~/Documents/bsc-apm-submissions/
 \end{verbatim}
 
+\textbf{5. Submit the form.} Open the submission form, fill in the per-session questions, and attach the zip you just stored. Do this immediately after wrapping up, while the session is fresh.
+
+\begin{center}
+\href{https://forms.gle/yNDWvsBHAHwq8Dks7}{https://forms.gle/yNDWvsBHAHwq8Dks7}
+\end{center}
+
 \subsection{Resetting between sessions}
 \label{sec:between}
 
@@ -539,7 +545,7 @@ Once the baseline is in place, return to Section~\ref{sec:starting} and repeat t
 \subsection{Cleaning up}
 \label{sec:teardown}
 
-Optional. Once both session zips have been submitted (Section~\ref{sec:submission}), nothing in this study needs to stay on your machine. If you want a clean slate:
+Optional. Once both sessions are wrapped up and submitted, nothing in this study needs to stay on your machine. If you want a clean slate:
 
 \begin{itemize}
     \item Wipe session 2's transcripts: \texttt{python3 /path/to/scripts/reset-chats.py <workspace>}.
@@ -548,23 +554,6 @@ Optional. Once both session zips have been submitted (Section~\ref{sec:submissio
 \end{itemize}
 
 The participant package itself can be deleted at this point as well; it has no further role.
-
-\newpage
-\section{Submission}
-\label{sec:submission}
-
-Upload both session zips to the submission form: \placeholder{Google Form URL}.
-
-After each session, fill in the post-session questionnaire: \placeholder{Questionnaire URL}.
-
-\subsection{Submission checklist}
-\label{sec:submission:checklist}
-
-\begin{itemize}
-    \item \texttt{P001\_S1\_\{apm\textbar{}speckit\}.zip} containing \texttt{solution.patch} and a flat \texttt{transcripts/} directory.
-    \item \texttt{P001\_S2\_\{apm\textbar{}speckit\}.zip} with the same shape, framework swapped.
-    \item Post-session questionnaire submitted for each session.
-\end{itemize}
 
 \section{Contact}
 \label{sec:contact}
