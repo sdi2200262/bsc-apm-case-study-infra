@@ -1,0 +1,56 @@
+name: Build participant package release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-base \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            latexmk
+
+      - name: Build participant package
+        run: make participant-package
+
+      - name: Smoke-test the zip
+        run: |
+          mkdir -p /tmp/smoke
+          unzip -q release/participant-package.zip -d /tmp/smoke
+          test -f /tmp/smoke/participant-package/participant-guide-cc.pdf
+          test -f /tmp/smoke/participant-package/task/PRD.md
+          test -f /tmp/smoke/participant-package/task/PROMPT.md
+          test -f /tmp/smoke/participant-package/task/README.txt
+          test -f /tmp/smoke/participant-package/scripts/list-chats.py
+          test -f /tmp/smoke/participant-package/scripts/collect-chats.py
+          test -f /tmp/smoke/participant-package/scripts/reset-chats.py
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=participant-package
+          TITLE="Participant package"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/participant-package.zip --clobber
+          else
+            gh release create "$TAG" \
+              --title "$TITLE" \
+              --target "$GITHUB_SHA" \
+              --latest=true \
+              release/participant-package.zip
+          fi

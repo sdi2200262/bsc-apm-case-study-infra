@@ -13,6 +13,9 @@ venv/
 # Python packaging metadata
 *.egg-info/
 
+# Release-prep output
+release/
+
 # Editor and OS noise
 .vscode/
 .idea/
