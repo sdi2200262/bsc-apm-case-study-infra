@@ -1,11 +1,8 @@
 # Submission
 
-Upload both session zips to the submission form (the form URL is in the participant guide's *Submission* section, which this skill does not include; if the participant does not have the URL to hand, refer them to the study contact in `SKILL.md`).
-
-After each session, the participant fills in the post-session questionnaire (URL also in the participant guide; same fallback applies).
+After each session, the participant submits that session's zip and a short post-session questionnaire through the submission form. The form is filled once per session, immediately after wrapping up; the URL is in step 5 of the participant guide's *Wrapping up* section. If the participant does not have the URL to hand, refer them to the study contact in `SKILL.md`.
 
 ## Submission checklist
 
-- `P001_S1_{apm|speckit}.zip` containing `solution.patch` and a flat `transcripts/` directory.
-- `P001_S2_{apm|speckit}.zip` with the same shape, framework swapped.
-- Post-session questionnaire submitted for each session.
+- Session 1: form submitted with `P001_S1_{apm|speckit}.zip` attached.
+- Session 2: form submitted with `P001_S2_{apm|speckit}.zip` attached, framework swapped.

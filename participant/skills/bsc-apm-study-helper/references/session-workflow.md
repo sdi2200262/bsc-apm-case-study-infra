@@ -59,6 +59,8 @@ mkdir -p ~/Documents/bsc-apm-submissions
 mv <workspace>/P001_S1_apm.zip ~/Documents/bsc-apm-submissions/
 ```
 
+**5. Submit the form.** Open the submission form (URL in the participant guide; if not on hand, refer the participant to the study contact). Fill in the per-session questions and attach the zip just stored. Do this immediately after wrapping up, while the session is fresh.
+
 ## Resetting between sessions
 
 Run this after the first session has wrapped up and before the second session starts. Before running any of the steps below, confirm that session 1's submission zip is in the safe-storage directory (e.g., `ls -la ~/Documents/bsc-apm-submissions/` should list `P001_S1_*.zip`); the reset is destructive and only zips outside the workspace survive. Once that is confirmed, the reset returns the workspace and the transcript store to the same state setup produced for session 1, so session 2 begins from an identical baseline. The mock environment is left alone unless there is a reason to believe it has drifted from its initial state.
@@ -113,7 +115,7 @@ cd <mock>
 - The workspace root contains `PRD.md`, `PROMPT.md`, `eclass-mcp-server/`, and `openeclass/`, and nothing else; `PRD.md` and `PROMPT.md` match their original contents from the participant package.
 - The workspace's transcript directory contains no transcripts from session 1.
 
-Once the baseline is in place, the participant returns to *Starting a session* and repeats the same starting-working-wrapping-up flow for session 2 (with the other assigned framework). Session 2 ends after step 4 of *Wrapping up* (*Move the zip out of the workspace*); the resetting steps are not needed to be run again.
+Once the baseline is in place, the participant returns to *Starting a session* and repeats the same starting-working-wrapping-up flow for session 2 (with the other assigned framework). Session 2 ends after step 5 of *Wrapping up* (*Submit the form*); the resetting steps are not needed to be run again.
 
 ## Cleaning up
 

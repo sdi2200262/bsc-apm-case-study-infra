@@ -23,11 +23,11 @@ The participant's journey through the study has distinct phases. Infer the curre
 
 - **Mid-task** (the participant indicates they are working through their assigned framework's workflow). Engage only on logistics emergencies: mock environment crashed, a helper script fails, ports are bound. For anything else, redirect per *Scope* above and ask them to come back once the session has ended.
 
-- **Wrap-up after a session** (the participant says the session is over). Help with the four wrap-up steps in [references/session-workflow.md](references/session-workflow.md): create the patch, collect the transcripts, package the submission zip, move the zip out of the workspace. At step 4, recommend a concrete safe-storage directory outside the workspace and outside the participant package, e.g. `~/Documents/bsc-apm-submissions/`, and offer to create it and move the zip there with confirmation. The reset and cleanup commands wipe everything in their scope; only zips stored elsewhere survive.
+- **Wrap-up after a session** (the participant says the session is over). Help with the five wrap-up steps in [references/session-workflow.md](references/session-workflow.md): create the patch, collect the transcripts, package the submission zip, move the zip out of the workspace, submit the form. At step 4, recommend a concrete safe-storage directory outside the workspace and outside the participant package, e.g. `~/Documents/bsc-apm-submissions/`, and offer to create it and move the zip there with confirmation. The reset and cleanup commands wipe everything in their scope; only zips stored elsewhere survive. At step 5, the form URL lives in the participant guide; if the participant does not have it to hand, refer them to the study contact.
 
 - **Between sessions** (one session is wrapped up, the other is upcoming). Before running any of the destructive reset commands, confirm with the participant that the previous session's submission zip is in the safe-storage directory; ideally, list its contents (`ls -la ~/Documents/bsc-apm-submissions/`) and read the filename back. Only then proceed with the reset. Walk the participant through the steps and confirm the post-reset baseline. Once the baseline is in place, the cycle returns to the *Setup* phase's closing handoff: wish them good luck for the next session and step back.
 
-- **Wrap-up after the second session** (the participant says both sessions are now complete). Same four wrap-up steps as the first session's wrap-up, with the other framework's filename. Move this second zip into the same safe-storage directory alongside the first. The between-sessions reset steps are not run again.
+- **Wrap-up after the second session** (the participant says both sessions are now complete). Same five wrap-up steps as the first session's wrap-up, with the other framework's filename. Move this second zip into the same safe-storage directory alongside the first, then submit the second form. The between-sessions reset steps are not run again.
 
 - **Post-submission** (the participant says both zips are submitted). Offer the optional cleanup in *Cleaning up* of [references/session-workflow.md](references/session-workflow.md). Before any of the cleanup commands, list the contents of the safe-storage directory and confirm both zips are present; the cleanup commands target the workspace, the mock environment, and (optionally) the participant package, leaving the safe-storage directory untouched. After cleanup, the participant has no further use for this skill.
 
@@ -40,7 +40,7 @@ This skill helps with:
 - Mock environment install, lifecycle, MCP server configuration, and uninstall.
 - Workspace layout and cloning the two repositories at their pinned commits.
 - Running the participant package's helper scripts: `list-chats.py` (with `--from-projects` or `--from-dir`), `collect-chats.py`, `reset-chats.py`.
-- Producing the per-session `solution.patch`, collecting transcripts into `<workspace>/transcripts/`, packaging the submission zip with the prescribed filename pattern.
+- Producing the per-session `solution.patch`, collecting transcripts into `<workspace>/transcripts/`, packaging the submission zip with the prescribed filename pattern, and submitting it through the per-session form.
 - Resetting the workspace and the transcript store between sessions.
 - Optional cleanup after both sessions have been submitted.
 
@@ -106,7 +106,7 @@ Mirrors the participant guide section by section. Read the relevant one before a
 - [workspace.md](references/workspace.md): workspace layout, cloning the two pinned codebases.
 - [mock-environment.md](references/mock-environment.md): download, install, lifecycle, MCP server configuration, uninstall.
 - [session-workflow.md](references/session-workflow.md): starting a session, working on the task, wrapping up, resetting between sessions, cleaning up.
-- [submission.md](references/submission.md): upload, post-session questionnaire, checklist.
+- [submission.md](references/submission.md): per-session submission form, checklist.
 
 ## Contact
 
