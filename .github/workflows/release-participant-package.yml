@@ -22,6 +22,7 @@ jobs:
             texlive-latex-extra \
             texlive-fonts-recommended \
             texlive-fonts-extra \
+            lmodern \
             latexmk
 
       - name: Build participant package
