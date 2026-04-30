@@ -2,17 +2,25 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2025-2026 BSc APM Case Study Contributors
 
-"""List Claude Code transcripts for a workspace.
+"""List Claude Code transcripts.
 
-Resolves the workspace path to its corresponding entry under
-``~/.claude/projects/`` and prints one row per transcript file with the
+Two source modes, exactly one of which must be selected explicitly:
+
+* ``--from-projects``: treat the positional path as a workspace
+  directory Claude Code was launched in, and resolve it to the
+  corresponding entry under ``~/.claude/projects/``.
+* ``--from-dir``: treat the positional path as a directory of
+  ``.jsonl`` transcripts and scan it directly. Used to verify a
+  previously collected ``transcripts/`` directory.
+
+In either mode, the script prints one row per transcript file with the
 file name, the first record timestamp, the last record timestamp, and a
 short preview of the first user message. The default output is a plain
 text table; ``--json`` emits the same data as a JSON array on stdout.
 
 Exit codes: ``0`` on success (zero or more transcripts found); ``1`` on
-input errors (workspace path missing, no Claude Code project directory,
-unreadable transcripts).
+input errors (no source mode selected, path missing, no Claude Code
+project directory, unreadable transcripts).
 """
 
 from __future__ import annotations
@@ -213,31 +221,74 @@ def render_json(summaries: list[TranscriptInfo]) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
 
+def resolve_dir(path: Path) -> Path:
+    """Validate a directory of ``.jsonl`` transcripts supplied directly.
+
+    Args:
+        path: Directory to scan for ``.jsonl`` files.
+
+    Returns:
+        The resolved absolute path to the directory.
+
+    Raises:
+        FileNotFoundError: If the path does not exist or is not a directory.
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"path does not exist: {path}")
+    if not path.is_dir():
+        raise FileNotFoundError(f"path is not a directory: {path}")
+    return path.resolve()
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Construct the command-line argument parser."""
     parser = argparse.ArgumentParser(
         description=(
-            "List Claude Code transcripts for a workspace. Resolves the "
-            "workspace path to its ~/.claude/projects/ entry and prints one "
-            "row per transcript with first and last timestamps and a "
-            "preview of the first user message."
+            "List Claude Code transcripts. Exactly one source mode must be "
+            "selected: --from-projects resolves a workspace path to its "
+            "~/.claude/projects/ entry, --from-dir scans a directory of "
+            "*.jsonl transcripts directly. Prints one row per transcript "
+            "with first and last timestamps and a preview of the first "
+            "user message."
         ),
         epilog=(
-            "Example:\n"
-            "  list-chats.py ~/work/eclass-mcp-server\n"
-            "  list-chats.py ~/work/eclass-mcp-server --json"
+            "Examples:\n"
+            "  list-chats.py ~/work --from-projects\n"
+            "  list-chats.py ~/work --from-projects --json\n"
+            "  list-chats.py ~/work/transcripts --from-dir"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "workspace",
+        "path",
         type=Path,
-        help="Absolute path to the workspace directory Claude Code was launched in.",
+        help=(
+            "Workspace directory (with --from-projects) or directory of "
+            "*.jsonl transcripts (with --from-dir)."
+        ),
     )
     parser.add_argument(
         "--json",
         action="store_true",
         help="Emit summaries as a JSON array on stdout instead of a text table.",
+    )
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
+        "--from-projects",
+        action="store_true",
+        help=(
+            "Treat the positional path as the workspace Claude Code was "
+            "launched in, and resolve it to the matching ~/.claude/projects/ "
+            "entry."
+        ),
+    )
+    source.add_argument(
+        "--from-dir",
+        action="store_true",
+        help=(
+            "Treat the positional path as a directory of *.jsonl transcripts "
+            "and scan it directly."
+        ),
     )
     return parser
 
@@ -253,12 +304,12 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = build_parser().parse_args(argv)
     try:
-        project_dir = resolve_project_dir(args.workspace)
+        target_dir = resolve_dir(args.path) if args.from_dir else resolve_project_dir(args.path)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    summaries = collect_transcripts(project_dir)
-    output = render_json(summaries) if args.json else render_text(summaries, project_dir)
+    summaries = collect_transcripts(target_dir)
+    output = render_json(summaries) if args.json else render_text(summaries, target_dir)
     sys.stdout.write(output)
     return 0
 

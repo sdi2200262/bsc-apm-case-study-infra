@@ -1,0 +1,558 @@
+% !TEX program = pdflatex
+% !TEX encoding = UTF-8 Unicode
+
+\documentclass[11pt, a4paper]{article}
+
+% ============================================================================
+% PACKAGES
+% ============================================================================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage[framemethod=default]{mdframed}
+
+% ============================================================================
+% CONFIGURATION
+% ============================================================================
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    pdftitle={Agentic Project Management Research Study Participation Guide},
+    pdfauthor={Konstantinos Chaidemenos}
+}
+
+\renewcommand{\baselinestretch}{1.15}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5\baselineskip}
+\setlength{\emergencystretch}{3em}
+\hbadness=10000
+
+\titleformat{\section}[hang]{\Large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}[hang]{\large\bfseries}{\thesubsection.}{0.5em}{}
+
+\setlist[itemize]{topsep=0.25\baselineskip,itemsep=0.15\baselineskip,parsep=0pt}
+
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small Agentic Project Management Research Study}
+\rhead{\small Participation Guide}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\placeholder}[1]{\textcolor{red}{\textit{[#1]}}}
+
+\definecolor{noteborder}{HTML}{2F6FBF}
+\definecolor{warnborder}{HTML}{C0392B}
+
+\mdfsetup{
+    linewidth=0.6pt,
+    innertopmargin=8pt, innerbottommargin=8pt,
+    innerleftmargin=10pt, innerrightmargin=10pt,
+    skipabove=\baselineskip, skipbelow=\baselineskip,
+    backgroundcolor=white,
+}
+
+\newcommand{\note}[1]{%
+    \begin{mdframed}[linecolor=noteborder]
+    \textbf{\textcolor{noteborder}{Note.}}\enspace #1
+    \end{mdframed}%
+}
+\newcommand{\warn}[1]{%
+    \begin{mdframed}[linecolor=warnborder]
+    \textbf{\textcolor{warnborder}{Warning.}}\enspace #1
+    \end{mdframed}%
+}
+
+% ============================================================================
+% DOCUMENT
+% ============================================================================
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+
+    {\fontsize{24}{28}\selectfont\bfseries Agentic Project Management}\par
+    \vspace{0.3cm}
+    {\fontsize{14}{18}\selectfont BSc Thesis Case Study}\par
+    \vspace{2cm}
+
+    {\fontsize{18}{22}\selectfont Participation Guide}\par
+
+    \vspace{2cm}
+    \begin{center}
+        \includegraphics[width=0.28\textwidth]{assets/common/uoa-logo.jpeg}
+    \end{center}
+    \vspace{1cm}
+
+    {\normalsize Konstantinos Chaidemenos}\par
+    \vspace{0.2cm}
+    {\normalsize National and Kapodistrian University of Athens}\par
+    \vspace{0.2cm}
+    {\normalsize Department of Informatics and Telecommunications}\par
+    \vfill
+\end{titlepage}
+
+% ============================================================================
+
+\section{Welcome}
+\label{sec:welcome}
+
+Thank you for taking part in this research. The study compares two AI-assisted software development frameworks, Agentic Project Management (APM) and GitHub Spec-kit, on a fixed coding task. Your contribution helps build the empirical evidence base for the thesis.
+
+You are not being evaluated. The frameworks are. Whatever you produce during your sessions, including incomplete or non-functional code, is valuable data.
+
+\subsection{Data privacy and anonymity}
+\label{sec:privacy}
+
+Submissions are handled with strict confidentiality. No personal identifier is linked to your data. You have been assigned a participant ID (e.g., \texttt{P001}); use it in your submission filenames as described later. AI interaction logs are encrypted with a key held only by the research team before being added to the published research dataset. The dataset's structure is transparent; the contents of your sessions remain private.
+
+By proceeding, you consent to the anonymous collection and use of this data as described.
+
+\subsection{Before you start}
+\label{sec:beforestart}
+
+You have been provided separately with:
+
+\begin{itemize}
+    \item your participant ID;
+    \item your per-session framework assignment (which framework to use in session 1 and which in session 2);
+    \item credentials for the Anthropic Claude Max subscription you will use during the sessions.
+\end{itemize}
+
+Keep these to hand. They do not appear anywhere in this guide or in the participant package.
+
+Read the official documentation of your assigned framework before each session begins; a short throwaway run on an unrelated repository is recommended for first-time familiarity.
+
+\begin{itemize}
+    \item Agentic Project Management (APM): \url{https://agentic-project-management.dev}.
+    \item GitHub Spec-kit: \url{https://github.github.io/spec-kit/}.
+\end{itemize}
+
+\section{Study overview}
+\label{sec:overview}
+
+\subsection{What you do}
+\label{sec:whatyoudo}
+
+You will complete the same coding task twice, in two separate three-hour sessions, each using a different framework. The two sessions can run back to back, on the same day, or on different days. They must not overlap, and you must approach the second session as if the first had not happened, working from a fresh checkout of the codebase.
+
+\subsection{Time}
+\label{sec:time}
+
+Each session is strictly time-boxed to three hours. Stop at the three-hour mark whether or not the task is complete. Submitting unfinished work is an expected and valid outcome.
+
+\subsection{What you submit}
+\label{sec:whatyousubmit}
+
+After each session you produce one zip file containing two artefacts at its root:
+
+\begin{itemize}
+    \item \texttt{solution.patch}: a unified diff of your work against a pinned starting commit of the implementation codebase.
+    \item \texttt{transcripts/}: a flat directory of the AI interaction logs (one \texttt{.jsonl} file per conversation).
+\end{itemize}
+
+The zip filename follows the strict pattern \texttt{\{PID\}\_S\{1\textbar{}2\}\_\{apm\textbar{}speckit\}.zip}, e.g., \texttt{P001\_S1\_apm.zip}.
+
+You also fill in a short post-session questionnaire after each session.
+
+\section{Participant package}
+\label{sec:package}
+
+This guide ships inside a participant-package zip alongside the task specification and the helper scripts. Its layout:
+
+\begin{verbatim}
+participant-package/
+|-- participant-guide-cc.pdf       # this document
+|-- task/
+|   |-- PRD.md                     # Product Requirements Document
+|   |-- PROMPT.md                  # default opening prompt for the AI
+|   `-- README.txt                 # one-shot setup notes; delete after use
+`-- scripts/
+    |-- list-chats.py              # transcript listing helper
+    |-- collect-chats.py           # transcript collection helper
+    `-- reset-chats.py             # transcript wipe helper
+\end{verbatim}
+
+\texttt{PRD.md} is the sole source of truth for what to implement. The three Python scripts under \texttt{scripts/} manage the AI's transcript files; you run them yourself, between or after sessions, and they accept your workspace path as an argument so they can sit anywhere on disk.
+
+\note{Keep the \texttt{scripts/} directory \emph{outside} the workspace where you do the task. The AI agent must not see these scripts during a session.}
+
+\newpage
+\section{System requirements}
+\label{sec:requirements}
+
+\subsection{Operating system}
+\label{sec:os}
+
+A Linux environment is required. Two paths are supported:
+
+\begin{itemize}
+    \item \textbf{Native Linux} (Ubuntu 22.04 or 24.04, or an equivalent distribution).
+    \item \textbf{Linux virtual machine} on a non-Linux host. The virtual machine must satisfy every other requirement in this section; the work happens entirely inside it. The recommended setup is Multipass (Apple Silicon and Intel Macs supported, one-command launch, free).
+\end{itemize}
+
+Multipass is installed via Homebrew on macOS, so Homebrew (\url{https://brew.sh}) must be present first. Once Homebrew is in place, the three commands below install Multipass, launch an Ubuntu LTS VM with enough resources for the task, and drop you into a shell inside the VM. All study work happens inside that shell.
+
+\begin{verbatim}
+brew install --cask multipass
+multipass launch lts --name task --cpus 4 --memory 8G --disk 20G
+multipass shell task
+\end{verbatim}
+
+If Multipass is unavailable on your host or its image fetch is blocked on your network, UTM (\url{https://mac.getutm.app}) is a secondary option: free, open source, GUI-driven, install Ubuntu 24.04 arm64 from the official ISO and select Apple Virtualization for native speed.
+
+\warn{Docker Desktop is not a substitute. The mock environment described in Section~\ref{sec:env} runs Docker Engine \emph{inside} the VM, not on the host.}
+
+\subsection{System resources}
+\label{sec:resources}
+
+Allow at least 8 GB of RAM (16 GB recommended) and at least 5 GB of free disk after Docker images are loaded. The bulk of the disk usage is the openeclass container image (around 1.6 GB unpacked).
+
+\subsection{Tools and libraries}
+\label{sec:tools}
+
+Install these on the Linux environment that runs the case-study work:
+
+\begin{itemize}
+    \item Docker Engine plus Compose v2. Install from the official Docker apt repository per the instructions at \url{https://docs.docker.com/engine/install/ubuntu/}.
+    \item GitHub CLI (\texttt{gh}), used to download the mock-environment release.
+    \item \texttt{git}, \texttt{curl}, \texttt{tar}, \texttt{openssl}, \texttt{bash} (3.2 or newer).
+    \item Python 3.10 or newer; \texttt{uv} for managing the implementation codebase's dependencies.
+    \item \texttt{gcc}, \texttt{make}, \texttt{valgrind}, \texttt{pkg-config}, and the \texttt{libcurl} and \texttt{libxml2} development headers.
+\end{itemize}
+
+On Debian or Ubuntu derivatives, the Docker convenience script below installs Docker Engine and the Compose v2 plugin in one step, then \texttt{usermod} adds your user to the \texttt{docker} group so subsequent \texttt{docker} calls do not need \texttt{sudo} (the new group membership takes effect on your next login or after \texttt{newgrp docker}).
+
+\begin{verbatim}
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+\end{verbatim}
+
+The line below then installs every remaining tool from the list above. \texttt{build-essential} provides \texttt{gcc}, \texttt{g++}, \texttt{make}, and the standard C library development headers; \texttt{pkg-config}, \texttt{valgrind}, \texttt{libcurl4-openssl-dev}, and \texttt{libxml2-dev} are named explicitly because they are not part of that meta-package. The trailing \texttt{curl} pipe installs \texttt{uv}, the dependency manager for the implementation codebase, from its official installer.
+
+\begin{verbatim}
+sudo apt-get update
+sudo apt-get install -y \
+    build-essential pkg-config valgrind \
+    libcurl4-openssl-dev libxml2-dev \
+    git curl tar openssl gh python3 python3-pip
+curl -LsSf https://astral.sh/uv/install.sh | sh
+\end{verbatim}
+
+Required minimum versions: \texttt{gcc} 9.0 (for C11), \texttt{libcurl} 7.81.0, \texttt{libxml2} 2.9.13. Ubuntu 22.04 (gcc 11.2.0, libcurl 7.81.0, libxml2 2.9.13) and Ubuntu 24.04 (gcc 13.2.0, libcurl 8.5.0, libxml2 2.9.14) both satisfy them. Verify with:
+
+\begin{verbatim}
+gcc --version
+pkg-config --modversion libcurl
+pkg-config --modversion libxml-2.0
+valgrind --version
+\end{verbatim}
+
+\subsection{AI tool}
+\label{sec:aitool}
+
+Install the Claude Code CLI by following the official instructions at \url{https://docs.claude.com/en/docs/claude-code}. Sign in with the credentials you were provided.
+
+\newpage
+\section{Workspace}
+\label{sec:workspace}
+
+The participant package's \texttt{task/} directory holds \texttt{PRD.md} (the requirements you implement against), \texttt{PROMPT.md} (the message you give the AI to open the session), and a throwaway \texttt{README.txt} with the clone commands for the two repositories at their pinned commits. The \emph{workspace} is the directory in which you open Claude Code; it is the AI's working directory for the session, and it must end up with this exact layout:
+
+\begin{verbatim}
+<workspace>/
+|-- PRD.md
+|-- PROMPT.md
+|-- eclass-mcp-server/      # implementation codebase
+`-- openeclass/             # legacy PHP codebase (read-only reference)
+\end{verbatim}
+
+You can either use the package's \texttt{task/} directory as your workspace, or copy \texttt{PRD.md} and \texttt{PROMPT.md} into a fresh directory of your choice and clone the two repositories alongside them there. Either way, follow the clone commands in \texttt{README.txt} (or the equivalent commands in the next subsection), then delete \texttt{README.txt}; it has no role beyond initial setup.
+
+\subsection{Cloning the codebases}
+\label{sec:cloning}
+
+Clone \texttt{eclass-mcp-server} and check out the pinned commit \texttt{dbd2d16}. This commit is the patch baseline: every diff you submit is computed against it.
+
+\begin{verbatim}
+cd <workspace>
+git clone https://github.com/sdi2200262/eclass-mcp-server.git
+cd eclass-mcp-server
+git checkout dbd2d16
+uv sync --dev --all-extras
+cd ..
+\end{verbatim}
+
+Clone \texttt{openeclass} at its pinned commit \texttt{e8b3329}. The AI treats this codebase as a read-only reference; you should not modify it.
+
+\begin{verbatim}
+cd <workspace>
+git clone https://github.com/gunet/openeclass.git
+cd openeclass
+git checkout e8b3329
+cd ..
+\end{verbatim}
+
+\newpage
+\section{Mock environment}
+\label{sec:env}
+
+The task expands an existing Python MCP (Model Context Protocol) server that integrates with openeclass through a single-sign-on flow, and asks for a native C replica of the same surface. Both halves of the deliverable need an openeclass instance and a matching SSO endpoint to integrate with at runtime, and that same instance serves as the ground truth their behaviour is verified against. Running them against a real openeclass deployment would tie every session's correctness to whatever data and configuration that deployment happens to hold, and would not be reproducible across participants.
+
+Instead, the study ships a self-contained \emph{mock environment} that you run locally for the duration of each session. It pairs a real openeclass instance with a mock single-sign-on service whose flow matches what \texttt{eclass-mcp-server} integrates with, and it ships with a fixed set of pre-loaded test data so every participant's session runs against identical state.
+
+\subsection{Download and install}
+\label{sec:env:install}
+
+The mock environment ships from the \texttt{sdi2200262/bsc-apm-case-study-env} GitHub repository as two architecture-specific releases, each with a single tarball asset:
+
+\begin{itemize}
+    \item Tag \texttt{bsc-apm-case-study-env} ships \texttt{bsc-apm-amd64.tar.gz} for x86\_64 hosts (most Intel and AMD Linux machines, and the Linux VM on an Intel Mac).
+    \item Tag \texttt{bsc-apm-case-study-env-arm64} ships \texttt{bsc-apm-arm64.tar.gz} for arm64 hosts (Apple Silicon Macs running a Linux VM, arm64 Linux servers, Raspberry Pi 4/5, etc.).
+\end{itemize}
+
+Identify your architecture with \texttt{uname -m}: \texttt{x86\_64} means amd64, \texttt{aarch64} or \texttt{arm64} means arm64. Pick a prefix on disk for the mock environment, separate from your workspace (the rest of this guide writes \texttt{<mock>/} for that path; \texttt{\textasciitilde/.bsc-apm} is a reasonable default). Run \emph{one} of the two download commands below, the one that matches your architecture:
+
+\begin{verbatim}
+mkdir -p <mock> && cd <mock>
+
+# x86_64 hosts:
+gh release download bsc-apm-case-study-env \
+    -R sdi2200262/bsc-apm-case-study-env \
+    -p 'bsc-apm-amd64.tar.gz'
+
+# arm64 hosts:
+gh release download bsc-apm-case-study-env-arm64 \
+    -R sdi2200262/bsc-apm-case-study-env \
+    -p 'bsc-apm-arm64.tar.gz'
+\end{verbatim}
+
+Then unpack and bring the stack up. \texttt{./install} loads the bundled Docker images, generates self-signed TLS certificates into \texttt{./certs/}, and writes a pre-configured \texttt{.env} alongside. \texttt{./scripts/up} brings the three containers up, performs openeclass's first-time install on first run, and applies the test data; this takes a few minutes on a clean host.
+
+\begin{verbatim}
+tar -xzf bsc-apm-*.tar.gz
+./install
+./scripts/up
+\end{verbatim}
+
+The stack listens on two URLs once it is ready:
+
+\begin{itemize}
+    \item \texttt{http://localhost:18080/} for the openeclass instance.
+    \item \texttt{https://localhost:18443/} for the mock authentication service.
+\end{itemize}
+
+Ports 18080 and 18443 must be free on the Linux environment. If another service is bound to either port, stop it before running \texttt{./scripts/up}.
+
+\subsection{Lifecycle commands}
+\label{sec:env:lifecycle}
+
+Once installed, manage the environment from its prefix:
+
+\begin{itemize}
+    \item \texttt{./scripts/up}: bring the stack up. Idempotent.
+    \item \texttt{./scripts/down}: stop the stack; named volumes survive.
+    \item \texttt{./scripts/status}: probe each service and report health.
+    \item \texttt{./scripts/logs}: tail container logs.
+    \item \texttt{./scripts/reset}: drop database state and re-apply the test data.
+\end{itemize}
+
+You should not need to reset during a session. If you do (for instance, after a destructive experiment from the AI), \texttt{./scripts/reset} returns the environment to its initial state.
+
+\subsection{MCP server configuration}
+\label{sec:env:config}
+
+The \texttt{.env} and \texttt{certs/} that \texttt{./install} wrote are everything the implementation needs to authenticate against the mock. Copy both into the \texttt{eclass-mcp-server/} checkout, preserving the \texttt{certs/} subdirectory:
+
+\begin{verbatim}
+cp <mock>/.env <workspace>/eclass-mcp-server/.env
+cp -r <mock>/certs <workspace>/eclass-mcp-server/certs
+\end{verbatim}
+
+The \texttt{.env} references the certificate by relative path, so no further configuration is required.
+
+\note{Treat the credentials in \texttt{.env} as test fixtures. They authenticate against the local mock service only; they do not work against any production system.}
+
+\subsection{Uninstall}
+\label{sec:env:uninstall}
+
+To remove the mock environment from your machine after the study, stop the stack and drop its volumes (\texttt{down -v}), remove the loaded images, and delete the prefix:
+
+\begin{verbatim}
+docker compose -f <mock>/compose.yaml down -v
+docker rmi bsc-apm/openeclass:dev bsc-apm/mock-cas:dev
+rm -rf <mock>
+\end{verbatim}
+
+\section{Session workflow}
+\label{sec:workflow}
+
+A session has three phases: starting, working, and wrapping up. Between your two sessions, run the reset at the end of this section to return the workspace and the transcript store to the same state the setup steps above produced for session 1.
+
+\subsection{Starting a session}
+\label{sec:starting}
+
+Note the wall-clock start time, then open Claude Code with the workspace as its working directory and feed it \texttt{PROMPT.md} as the opening message. Each framework has its own way of starting (a slash command, a CLI entry point, a setup prompt); whichever your assigned framework documents, point it at \texttt{PROMPT.md} as the task. The framework's own documentation explains the workflow from there.
+
+\subsection{Working on the task}
+\label{sec:working}
+
+Work for up to three hours and stop at the three-hour mark whether or not you have finished. Use only the framework assigned to your current session and follow its documented workflow as written; the study compares frameworks as documented, not as adapted on the fly. Do not run the participant package's helper scripts during the session, and do not delete any \texttt{.jsonl} file from your workspace's transcript directory; those are your transcripts and are needed in your submission. Claude Code writes them to a per-workspace subdirectory of \texttt{\textasciitilde/.claude/projects/} whose name is the workspace's absolute path with every \texttt{/} replaced by \texttt{-}; the helper scripts resolve that mapping for you.
+
+\subsection{Wrapping up}
+\label{sec:wrapping}
+
+\textbf{1. Create the patch.} From inside the implementation codebase, stage every change (including new files) and diff against the pinned commit. The \texttt{-{}-cached} flag is what pulls newly created source files into the diff, even when the working tree is otherwise clean.
+
+\begin{verbatim}
+cd <workspace>/eclass-mcp-server
+git add -A
+git diff --cached dbd2d16 > ../solution.patch
+\end{verbatim}
+
+\textbf{2. Collect the transcripts.} List what is in your workspace's transcript directory and pick the rows that belong to the session you just finished. The \texttt{-{}-from-projects} flag selects this resolution mode:
+
+\begin{verbatim}
+python3 /path/to/scripts/list-chats.py \
+    <workspace> --from-projects
+\end{verbatim}
+
+The script prints one row per transcript with first and last record timestamps and a preview of the first user message. Copy the matching rows out with \texttt{collect-chats.py}, pasting the timestamps verbatim into \texttt{-{}-from} and \texttt{-{}-to} (slightly widen the window to be inclusive):
+
+\begin{verbatim}
+python3 /path/to/scripts/collect-chats.py <workspace> \
+    --from 2026-05-01T09:00 --to 2026-05-01T12:30
+\end{verbatim}
+
+The script copies the matching transcripts into \texttt{<workspace>/transcripts/}. Verify the contents of that directory by re-running \texttt{list-chats.py} against it with \texttt{-{}-from-dir}, which scans the directory directly instead of resolving a workspace path:
+
+\begin{verbatim}
+python3 /path/to/scripts/list-chats.py \
+    <workspace>/transcripts --from-dir
+\end{verbatim}
+
+The output should match the rows you intended to collect, with the same first and last timestamps. If a row is missing, widen the time window and re-run \texttt{collect-chats.py}.
+
+\textbf{3. Package the submission.} Zip \texttt{solution.patch} and \texttt{transcripts/} together at the workspace root. The filename uses your participant ID, the session number, and the framework you used in this session:
+
+\begin{verbatim}
+cd <workspace>
+zip -r P001_S1_apm.zip solution.patch transcripts/
+\end{verbatim}
+
+The zip must contain exactly two entries at its root: \texttt{solution.patch} and \texttt{transcripts/}. Files under \texttt{transcripts/} are flat \texttt{.jsonl} files; do not nest them under any subdirectory.
+
+\textbf{4. Move the zip out of the workspace.} The between-sessions reset wipes everything in the workspace, including the zip; store it somewhere safe before you run the reset.
+
+\subsection{Resetting between sessions}
+\label{sec:between}
+
+Run this after the first session has wrapped up and before the second session starts. The reset returns the workspace and the transcript store to the same state the setup steps above produced for session 1, so session 2 begins from an identical baseline. The mock environment is left alone unless you have a reason to believe it has drifted from its initial state.
+
+\textbf{1. Reset the implementation codebase.} From inside \texttt{eclass-mcp-server}, hard-reset to the pinned commit, wipe untracked and ignored files, and rebuild the virtual environment from scratch:
+
+\begin{verbatim}
+cd <workspace>/eclass-mcp-server
+git reset --hard dbd2d16
+git clean -fdx
+uv sync --dev --all-extras
+\end{verbatim}
+
+\texttt{git clean -fdx} removes every untracked file, including ignored files such as \texttt{.venv/} and any \texttt{\_\_pycache\_\_/} directories. Re-copy \texttt{.env} and \texttt{certs/} from the mock-environment prefix afterwards (Section~\ref{sec:env:config}); they are removed by \texttt{git clean}.
+
+\textbf{2. Reset the reference codebase.} Do the same for \texttt{openeclass}, in case the AI inadvertently modified it:
+
+\begin{verbatim}
+cd <workspace>/openeclass
+git reset --hard e8b3329
+git clean -fdx
+\end{verbatim}
+
+\textbf{3. Sweep the workspace.} Confirm the workspace root contains exactly four entries: \texttt{PRD.md}, \texttt{PROMPT.md}, \texttt{eclass-mcp-server/}, and \texttt{openeclass/}.
+
+\begin{verbatim}
+ls -la <workspace>
+\end{verbatim}
+
+Delete any extra files or directories the AI may have created at the workspace root. If \texttt{PRD.md} or \texttt{PROMPT.md} were modified during the session, restore them from the participant package's \texttt{task/} directory; session 2 must read them in their original form.
+
+\textbf{4. Wipe the transcripts.} Clear the transcript store for this workspace; the script touches only that workspace's transcripts:
+
+\begin{verbatim}
+python3 /path/to/scripts/reset-chats.py <workspace>
+\end{verbatim}
+
+The script lists the files it will delete and asks for confirmation. Run it only after you have safely stored the session's zip; the deletion is permanent.
+
+\textbf{5. Reset the mock environment, only if needed.} The mock environment retains its initial state across sessions and usually does not need a reset. Reset it only if a previous session messed with the seeded data:
+
+\begin{verbatim}
+cd <mock>
+./scripts/reset
+\end{verbatim}
+
+\textbf{6. Confirm the baseline.} After the reset, confirm the workspace and the transcript store match the same state setup produced for session 1:
+
+\begin{itemize}
+    \item \texttt{<mock>/scripts/status} reports every service ok.
+    \item \texttt{<workspace>/eclass-mcp-server} is at \texttt{dbd2d16} with a clean working tree.
+    \item \texttt{<workspace>/openeclass} is at \texttt{e8b3329} with a clean working tree.
+    \item The workspace root contains \texttt{PRD.md}, \texttt{PROMPT.md}, \texttt{eclass-mcp-server/}, and \texttt{openeclass/}, and nothing else; \texttt{PRD.md} and \texttt{PROMPT.md} match their original contents from the participant package.
+    \item Your workspace's transcript directory contains no transcripts from session 1.
+\end{itemize}
+
+Once the baseline is in place, return to Section~\ref{sec:starting} and repeat the same starting-working-wrapping-up flow for session 2 (with your other assigned framework). Session 2 ends after Section~\ref{sec:wrapping}, step 4 (\emph{Move the zip out of the workspace}); the resetting steps are not needed to be run again.
+
+\subsection{Cleaning up}
+\label{sec:teardown}
+
+Optional. Once both session zips have been submitted (Section~\ref{sec:submission}), nothing in this study needs to stay on your machine. If you want a clean slate:
+
+\begin{itemize}
+    \item Wipe session 2's transcripts: \texttt{python3 /path/to/scripts/reset-chats.py <workspace>}.
+    \item Delete the workspace: \texttt{rm -rf <workspace>}.
+    \item Uninstall the mock environment: follow the steps in Section~\ref{sec:env:uninstall}.
+\end{itemize}
+
+The participant package itself can be deleted at this point as well; it has no further role.
+
+\section{Submission}
+\label{sec:submission}
+
+Upload both session zips to the submission form: \placeholder{Google Form URL}.
+
+After each session, fill in the post-session questionnaire: \placeholder{Questionnaire URL}.
+
+\subsection{Submission checklist}
+\label{sec:submission:checklist}
+
+\begin{itemize}
+    \item \texttt{P001\_S1\_\{apm\textbar{}speckit\}.zip} containing \texttt{solution.patch} and a flat \texttt{transcripts/} directory.
+    \item \texttt{P001\_S2\_\{apm\textbar{}speckit\}.zip} with the same shape, framework swapped.
+    \item Post-session questionnaire submitted for each session.
+\end{itemize}
+
+\section{Contact}
+\label{sec:contact}
+
+This study is conducted for a Bachelor's thesis by Konstantinos Chaidemenos (\href{https://github.com/sdi2200262}{CobuterMan}).
+
+\begin{verbatim}
+sdi2200262@di.uoa.gr      Email
+cobuter_man               Discord
+\end{verbatim}
+
+
+\end{document}
