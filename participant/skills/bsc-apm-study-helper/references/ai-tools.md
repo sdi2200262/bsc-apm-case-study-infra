@@ -1,6 +1,6 @@
 # AI tools
 
-Each session uses one of two AI-assisted development frameworks (APM or Spec-kit), running on top of Claude Code. The participant package does not bundle either framework; install the assigned framework's CLI before that session begins. The system requirements (in `system-requirements.md`) cover the underlying tools both frameworks depend on. Claude Code itself is already installed (this skill loads from inside it).
+Each session uses one of two AI-assisted development frameworks (APM or Spec-kit), running on top of Claude Code. The participant package does not bundle either framework; install the assigned framework's CLI before that session begins. The system requirements (in `system-requirements.md`) cover the underlying tools both frameworks depend on. Claude Code itself is already installed; the participant opened it with the participant-package directory as its working directory, which is how this skill became visible.
 
 ## Agentic Project Management (APM)
 

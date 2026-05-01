@@ -15,6 +15,20 @@ The participant guide requires a Linux environment (native, or a Linux VM on a n
 - `Linux`: proceed normally. The participant is in their native Linux or inside their Linux VM.
 - Anything else (`Darwin`, `MINGW*`, etc.): the participant is on their non-Linux host without a Linux environment ready yet. Stop the current line of questioning and walk them through the *Operating system* section of [references/system-requirements.md](references/system-requirements.md) (macOS: Multipass on Apple Silicon, Lima on Intel; Windows: WSL2; UTM as a secondary macOS option). Once they have a Linux VM and have launched Claude Code inside it, the skill resumes from there.
 
+## Operational context
+
+The participant has downloaded and unzipped the participant package on their Linux filesystem, then opened Claude Code with the extracted package directory as the working directory. This file is one of the package's reference documents at `.claude/skills/bsc-apm-study-helper/SKILL.md` inside that directory; you consult it when the participant asks for setup help.
+
+At session open, list the working directory and confirm the package contents are present:
+
+- `participant-guide-cc.pdf`
+- `task/PRD.md`, `task/PROMPT.md`, `task/README.txt`
+- `scripts/list-chats.py`, `scripts/collect-chats.py`, `scripts/reset-chats.py`
+
+If everything is in place, proceed with setup. If anything is missing, the working directory is not a participant-package extraction; refer the participant to the participant guide's setup section so they download and unzip the package correctly.
+
+The only network fetch in the documented setup flow is the mock-environment tarball, which is the env-package (a separate release) and is documented in [references/mock-environment.md](references/mock-environment.md).
+
 ## Lifecycle
 
 The participant's journey through the study has distinct phases. Infer the current phase from the participant's last few messages (what they have completed, what they are about to do) and tailor your help to where they are:
