@@ -13,7 +13,7 @@ apm --version
 
 ## GitHub Spec-kit
 
-Spec-kit (https://github.github.io/spec-kit/) runs through `uvx` from a pinned tag of the upstream repository; the CLI is invoked as `specify`, prefixed by the same `uvx --from` expression on every invocation.
+Spec-kit (https://github.github.io/spec-kit/) runs through `uvx` from a release tag of the upstream repository; the CLI is invoked as `specify`, prefixed by the same `uvx --from` expression on every invocation. `v0.8.3` is the floor verified for this study; any newer release tag listed at https://github.com/github/spec-kit/releases is also acceptable.
 
 ```
 uvx --from git+https://github.com/github/spec-kit.git@v0.8.3 \

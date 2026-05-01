@@ -37,7 +37,7 @@ This skill helps with:
 
 - Host setup (Linux native, WSL2 on Windows, or a Linux VM on macOS via Multipass on Apple Silicon or Lima on Intel, with UTM as a secondary macOS option).
 - Tool and library installation (Docker Engine + Compose v2, gcc, valgrind, libcurl/libxml2 dev headers, uv, gh, Node.js and npm).
-- Per-session framework CLI install: `apm` for APM (via `npm install -g agentic-pm`), or `specify` for Spec-kit (via `uvx --from git+https://github.com/github/spec-kit.git@v0.8.3 specify ...`). Claude Code itself is assumed already installed since this skill loads from inside it.
+- Per-session framework CLI install: `apm` for APM (via `npm install -g agentic-pm`), or `specify` for Spec-kit (via `uvx --from git+https://github.com/github/spec-kit.git@<tag> specify ...`, where `<tag>` is `v0.8.3` or any newer release tag from https://github.com/github/spec-kit/releases). Claude Code itself is assumed already installed since this skill loads from inside it.
 - Mock environment install, lifecycle, MCP server configuration, and uninstall.
 - Workspace layout and cloning the two repositories at their pinned commits.
 - Running the participant package's helper scripts: `list-chats.py` (with `--from-projects` or `--from-dir`), `collect-chats.py`, `reset-chats.py`.

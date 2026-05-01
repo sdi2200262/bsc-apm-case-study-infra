@@ -308,7 +308,7 @@ apm --version
 \subsection{GitHub Spec-kit}
 \label{sec:aitools:speckit}
 
-Spec-kit runs through \texttt{uvx} from a pinned tag of the upstream repository; the CLI is invoked as \texttt{specify}, prefixed by the same \texttt{uvx --from} expression on every invocation.
+Spec-kit runs through \texttt{uvx} from a release tag of the upstream repository; the CLI is invoked as \texttt{specify}, prefixed by the same \texttt{uvx --from} expression on every invocation. \texttt{v0.8.3} is the floor verified for this study; any newer release tag listed at \url{https://github.com/github/spec-kit/releases} is also acceptable.
 
 \begin{verbatim}
 uvx --from git+https://github.com/github/spec-kit.git@v0.8.3 \
