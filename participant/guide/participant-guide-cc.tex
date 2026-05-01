@@ -410,7 +410,8 @@ Once installed, manage the environment from its prefix:
 \begin{itemize}
     \item \texttt{./scripts/up}: bring the stack up. Idempotent.
     \item \texttt{./scripts/down}: stop the stack; named volumes survive.
-    \item \texttt{./scripts/status}: probe each service and report health.
+    \item \texttt{./scripts/status}: probe each service from the mock side and report whether the stack itself is healthy.
+    \item \texttt{./scripts/verify-mcp -{}-mcp-root <path>}: consumer-side complement to \texttt{status}; verifies that an \texttt{eclass-mcp-server} checkout authenticates against the mock with the \texttt{.env} and \texttt{certs/} it has been given. Runs only against the pinned baseline (Section~\ref{sec:cloning}), at initial setup or after a between-sessions reset.
     \item \texttt{./scripts/logs}: tail container logs.
     \item \texttt{./scripts/reset}: drop database state and re-apply the test data.
 \end{itemize}
@@ -428,8 +429,6 @@ cp -r <mock>/certs <workspace>/eclass-mcp-server/certs
 \end{verbatim}
 
 The \texttt{.env} references the certificate by relative path, so no further configuration is required.
-
-\note{Treat the credentials in \texttt{.env} as test fixtures. They authenticate against the local mock service only; they do not work against any production system.}
 
 \subsection{Uninstall}
 \label{sec:env:uninstall}

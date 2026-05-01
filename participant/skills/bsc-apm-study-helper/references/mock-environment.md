@@ -46,7 +46,8 @@ Once installed, manage the environment from its prefix:
 
 - `./scripts/up`: bring the stack up. Idempotent.
 - `./scripts/down`: stop the stack; named volumes survive.
-- `./scripts/status`: probe each service and report health.
+- `./scripts/status`: probe each service from the mock side and report whether the stack itself is healthy.
+- `./scripts/verify-mcp --mcp-root <path>`: consumer-side complement to `status`; probes whether an `eclass-mcp-server` checkout authenticates against the mock with the `.env` and `certs/` it has been given, and prints `wiring ok` on success. Run only at initial setup or after a between-sessions reset, when the checkout is at the pinned baseline (`dbd2d16`) with no tracked-file changes; the script verifies wiring against the baseline auth code only and refuses to run otherwise.
 - `./scripts/logs`: tail container logs.
 - `./scripts/reset`: drop database state and re-apply the test data.
 
@@ -61,9 +62,13 @@ cp <mock>/.env <workspace>/eclass-mcp-server/.env
 cp -r <mock>/certs <workspace>/eclass-mcp-server/certs
 ```
 
-The `.env` references the certificate by relative path, so no further configuration is required.
+The `.env` references the certificate by relative path, so no further configuration is required. Verify the wiring with the env package's `verify-mcp` script, which does a single SSO login and logout using the credentials in the just-copied `.env`:
 
-**Note.** The credentials in `.env` are test fixtures, scoped to the local mock service.
+```
+<mock>/scripts/verify-mcp --mcp-root <workspace>/eclass-mcp-server
+```
+
+It prints `wiring ok` on success and names the missing file or environment variable on failure.
 
 ## Uninstall
 
