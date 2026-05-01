@@ -36,7 +36,8 @@ The participant's journey through the study has distinct phases. Infer the curre
 This skill helps with:
 
 - Host setup (Linux native, WSL2 on Windows, or a Linux VM on macOS via Multipass on Apple Silicon or Lima on Intel, with UTM as a secondary macOS option).
-- Tool and library installation (Docker Engine + Compose v2, gcc, valgrind, libcurl/libxml2 dev headers, uv, Claude Code CLI, gh).
+- Tool and library installation (Docker Engine + Compose v2, gcc, valgrind, libcurl/libxml2 dev headers, uv, gh, Node.js and npm).
+- Per-session framework CLI install: `apm` for APM (via `npm install -g agentic-pm`), or `specify` for Spec-kit (via `uvx --from git+https://github.com/github/spec-kit.git@v0.8.3 specify ...`). Claude Code itself is assumed already installed since this skill loads from inside it.
 - Mock environment install, lifecycle, MCP server configuration, and uninstall.
 - Workspace layout and cloning the two repositories at their pinned commits.
 - Running the participant package's helper scripts: `list-chats.py` (with `--from-projects` or `--from-dir`), `collect-chats.py`, `reset-chats.py`.
@@ -102,7 +103,8 @@ When the participant asks a framework concept question, redirect to the URL that
 
 Mirrors the participant guide section by section. Read the relevant one before answering:
 
-- [system-requirements.md](references/system-requirements.md): operating system, system resources, tools and libraries, AI tool.
+- [system-requirements.md](references/system-requirements.md): operating system, system resources, tools and libraries.
+- [ai-tools.md](references/ai-tools.md): per-session install of the assigned framework's CLI (APM via npm, Spec-kit via uvx).
 - [workspace.md](references/workspace.md): workspace layout, cloning the two pinned codebases.
 - [mock-environment.md](references/mock-environment.md): download, install, lifecycle, MCP server configuration, uninstall.
 - [session-workflow.md](references/session-workflow.md): starting a session, working on the task, wrapping up, resetting between sessions, cleaning up.

@@ -206,7 +206,7 @@ You then ask logistics questions in that session. To stop using the skill, simpl
 
 \note{The skill is intentionally project-scoped to the participant-package directory, not user-level. It is therefore not loaded in your task's workspace, only in a Claude Code session opened from the participant-package directory. Do not copy it to \texttt{\textasciitilde/.claude/skills/} or to your workspace's \texttt{.claude/skills/}; doing so would defeat that isolation.}
 
-\warn{The skill is for logistics only. The agent loading it is instructed to refuse questions about the implementation task (\texttt{eclass-mcp-server} code, openeclass internals, the C replica) and about framework concepts (APM, Spec-kit), and to redirect you to the appropriate documentation. The agent may still slip and answer such questions anyway; if it does, the responsibility lies with you. Do not act on, paraphrase, or carry into a session any task or framework content the helper produced. The study compares frameworks as documented; assistance from this helper outside its logistics scope contaminates your data.}
+\warn{The skill is for logistics only. It is instructed to refuse questions about the implementation task or the frameworks themselves and to redirect you to their documentation, but the agent may still slip; if it does, the responsibility to disregard such answers lies with you. Acting on, paraphrasing, or carrying any task or framework content the helper produced into a session contaminates your study data.}
 
 \section{System requirements}
 \label{sec:requirements}
@@ -254,54 +254,71 @@ The Linux environment needs at least 4 vCPUs, 8 GB of RAM, and a 20 GB virtual d
 \subsection{Tools and libraries}
 \label{sec:tools}
 
-Install these on the Linux environment that runs the case-study work:
-
-\begin{itemize}
-    \item Docker Engine plus Compose v2. Install from the official Docker apt repository per the instructions at \url{https://docs.docker.com/engine/install/ubuntu/}.
-    \item GitHub CLI (\texttt{gh}), used to download the mock-environment release.
-    \item \texttt{git}, \texttt{curl}, \texttt{tar}, \texttt{openssl}, \texttt{bash} (3.2 or newer).
-    \item Python 3.10 or newer; \texttt{uv} for managing the implementation codebase's dependencies.
-    \item \texttt{gcc}, \texttt{make}, \texttt{valgrind}, \texttt{pkg-config}, and the \texttt{libcurl} and \texttt{libxml2} development headers.
-\end{itemize}
-
-On Debian or Ubuntu derivatives, the Docker convenience script below installs Docker Engine and the Compose v2 plugin in one step, then \texttt{usermod} adds your user to the \texttt{docker} group so subsequent \texttt{docker} calls do not need \texttt{sudo} (the new group membership takes effect on your next login or after \texttt{newgrp docker}).
+The case-study work needs a container runtime (Docker Engine with Compose v2), a C build chain (\texttt{gcc}, \texttt{make}, \texttt{valgrind}, \texttt{pkg-config}, plus the \texttt{libcurl} and \texttt{libxml2} development headers), two scripting runtimes (Python 3.10 or newer with \texttt{uv}, and Node.js with \texttt{npm}), and a handful of command-line utilities (\texttt{git}, \texttt{curl}, \texttt{tar}, \texttt{openssl}, \texttt{bash} 3.2 or newer, and \texttt{gh}). Install Docker first via the official convenience script:
 
 \begin{verbatim}
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
 \end{verbatim}
 
-The line below then installs every remaining tool from the list above. \texttt{build-essential} provides \texttt{gcc}, \texttt{g++}, \texttt{make}, and the standard C library development headers; \texttt{pkg-config}, \texttt{valgrind}, \texttt{libcurl4-openssl-dev}, and \texttt{libxml2-dev} are named explicitly because they are not part of that meta-package. The trailing \texttt{curl} pipe installs \texttt{uv}, the dependency manager for the implementation codebase, from its official installer.
+The new \texttt{docker} group membership takes effect on your next login or after \texttt{newgrp docker}. Install everything else with \texttt{apt} and the official \texttt{uv} installer:
 
 \begin{verbatim}
 sudo apt-get update
 sudo apt-get install -y \
     build-essential pkg-config valgrind \
     libcurl4-openssl-dev libxml2-dev \
-    git curl tar openssl gh python3 python3-pip
+    git curl tar openssl gh python3 python3-pip npm
 curl -LsSf https://astral.sh/uv/install.sh | sh
 \end{verbatim}
 
-If \texttt{uv --version} reports \texttt{command not found} immediately after the install, run \texttt{source \textasciitilde/.local/bin/env} once or open a new login shell so the installer's PATH update takes effect.
-
-Required minimum versions: \texttt{gcc} 9.0 (for C11), \texttt{libcurl} 7.81.0, \texttt{libxml2} 2.9.13. Ubuntu 22.04 (gcc 11.2.0, libcurl 7.81.0, libxml2 2.9.13) and Ubuntu 24.04 (gcc 13.2.0, libcurl 8.5.0, libxml2 2.9.14) both satisfy them. Verify with:
+If \texttt{uv --version} reports \texttt{command not found} immediately after the install, run \texttt{source \textasciitilde/.local/bin/env} once or open a new login shell so the installer's PATH update takes effect. The C minimums are \texttt{gcc} 9.0 (for C11), \texttt{libcurl} 7.81.0, and \texttt{libxml2} 2.9.13; Ubuntu 22.04 and 24.04 both satisfy them. Verify the toolchain:
 
 \begin{verbatim}
 gcc --version
 pkg-config --modversion libcurl
 pkg-config --modversion libxml-2.0
 valgrind --version
+python3 --version
+node --version
+npm --version
+uv --version
 \end{verbatim}
 
-\subsection{AI tool}
-\label{sec:aitool}
+\section{AI tools}
+\label{sec:aitools}
+
+The session uses a coding-agent CLI (Claude Code) and one of two AI-assisted development frameworks (APM or Spec-kit). The participant package does not bundle any of them. Install Claude Code once before either session, and install the assigned framework's CLI before that session begins. The system requirements in Section~\ref{sec:requirements} cover the underlying tools all three depend on.
+
+\subsection{Claude Code}
+\label{sec:aitools:claude}
 
 Install the Claude Code CLI by following the official instructions at \url{https://docs.claude.com/en/docs/claude-code}. Sign in with the credentials you were provided.
+
+\subsection{Agentic Project Management (APM)}
+\label{sec:aitools:apm}
+
+APM ships as an npm package; the CLI is invoked as \texttt{apm}.
+
+\begin{verbatim}
+sudo npm install -g agentic-pm
+apm --version
+\end{verbatim}
+
+\subsection{GitHub Spec-kit}
+\label{sec:aitools:speckit}
+
+Spec-kit runs through \texttt{uvx} from a pinned tag of the upstream repository; the CLI is invoked as \texttt{specify}, prefixed by the same \texttt{uvx --from} expression on every invocation.
+
+\begin{verbatim}
+uvx --from git+https://github.com/github/spec-kit.git@v0.8.3 \
+    specify --help
+\end{verbatim}
 
 \section{Workspace}
 \label{sec:workspace}
 
-The participant package's \texttt{task/} directory holds \texttt{PRD.md} (the requirements you implement against), \texttt{PROMPT.md} (the message you give the AI to open the session), and a throwaway \texttt{README.txt} with the clone commands for the two repositories at their pinned commits. The \emph{workspace} is the directory in which you open Claude Code; it is the AI's working directory for the session, and it must end up with this exact layout:
+The participant package's \texttt{task/} directory holds \texttt{PRD.md} (the requirements you implement against), \texttt{PROMPT.md} (the message you give the AI to open the session), and a throwaway \texttt{README.txt} with the clone commands for the two repositories at their pinned commits. The \emph{workspace} is the directory in which you open Claude Code on your Linux environment (native or inside the VM); it is the AI's working directory for the session, and it must end up with this exact layout:
 
 \begin{verbatim}
 <workspace>/
@@ -311,7 +328,7 @@ The participant package's \texttt{task/} directory holds \texttt{PRD.md} (the re
 `-- openeclass/             # legacy PHP codebase (read-only reference)
 \end{verbatim}
 
-You can either use the package's \texttt{task/} directory as your workspace, or copy \texttt{PRD.md} and \texttt{PROMPT.md} into a fresh directory of your choice and clone the two repositories alongside them there. Either way, follow the clone commands in \texttt{README.txt} (or the equivalent commands in the next subsection), then delete \texttt{README.txt}; it has no role beyond initial setup.
+Create the workspace as a fresh directory of your choice on the Linux filesystem (\texttt{\textasciitilde/workspace/} is a reasonable default), copy \texttt{PRD.md} and \texttt{PROMPT.md} into it from the participant package's \texttt{task/} directory, and clone the two repositories alongside them following the next subsection. \texttt{README.txt} carries the same clone commands for convenience and has no further role.
 
 \subsection{Cloning the codebases}
 \label{sec:cloning}
@@ -340,9 +357,7 @@ cd ..
 \section{Mock environment}
 \label{sec:env}
 
-The task expands an existing Python MCP (Model Context Protocol) server that integrates with openeclass through a single-sign-on flow, and asks for a native C replica of the same surface. Both halves of the deliverable need an openeclass instance and a matching SSO endpoint to integrate with at runtime, and that same instance serves as the ground truth their behaviour is verified against. Running them against a real openeclass deployment would tie every session's correctness to whatever data and configuration that deployment happens to hold, and would not be reproducible across participants.
-
-Instead, the study ships a self-contained \emph{mock environment} that you run locally for the duration of each session. It pairs a real openeclass instance with a mock single-sign-on service whose flow matches what \texttt{eclass-mcp-server} integrates with, and it ships with a fixed set of pre-loaded test data so every participant's session runs against identical state.
+The task integrates with openeclass through a single-sign-on flow, both for the existing Python MCP (Model Context Protocol) server it expands and for the C replica it asks for. The study ships a self-contained \emph{mock environment} that you run locally during each session: a real openeclass instance paired with a mock SSO service whose flow matches \texttt{eclass-mcp-server}'s integration, pre-loaded with a fixed test data set so every participant's session runs against identical state.
 
 \subsection{Download and install}
 \label{sec:env:install}
@@ -435,12 +450,12 @@ A session has three phases: starting, working, and wrapping up. Between your two
 \subsection{Starting a session}
 \label{sec:starting}
 
-Note the wall-clock start time, then open Claude Code with the workspace as its working directory and feed it \texttt{PROMPT.md} as the opening message. Each framework has its own way of starting (a slash command, a CLI entry point, a setup prompt); whichever your assigned framework documents, point it at \texttt{PROMPT.md} as the task. The framework's own documentation explains the workflow from there.
+Note the wall-clock start time, then open Claude Code with the workspace as its working directory. Each framework has its own way of starting; follow your assigned framework's documentation and point it at \texttt{PROMPT.md} as the task.
 
 \subsection{Working on the task}
 \label{sec:working}
 
-Work for up to three hours and stop at the three-hour mark whether or not you have finished. Use only the framework assigned to your current session and follow its documented workflow as written; the study compares frameworks as documented, not as adapted on the fly. Do not run the participant package's helper scripts during the session, and do not delete any \texttt{.jsonl} file from your workspace's transcript directory; those are your transcripts and are needed in your submission. Claude Code writes them to a per-workspace subdirectory of \texttt{\textasciitilde/.claude/projects/} whose name is the workspace's absolute path with every \texttt{/} replaced by \texttt{-}; the helper scripts resolve that mapping for you.
+Work for up to three hours and stop at the three-hour mark whether or not you have finished. Use only the framework assigned to your current session and follow its documented workflow as written; the study compares frameworks as documented, not as adapted on the fly. Do not run the participant package's helper scripts during the session, and do not delete any \texttt{.jsonl} file from your workspace's transcript directory; those are your transcripts and are needed in your submission.
 
 \subsection{Wrapping up}
 \label{sec:wrapping}
@@ -453,7 +468,7 @@ git add -A
 git diff --cached dbd2d16 > ../solution.patch
 \end{verbatim}
 
-\textbf{2. Collect the transcripts.} List what is in your workspace's transcript directory and pick the rows that belong to the session you just finished. The \texttt{-{}-from-projects} flag selects this resolution mode:
+\textbf{2. Collect the transcripts.} Claude Code stores transcripts under \texttt{\textasciitilde/.claude/projects/} in a per-workspace subdirectory whose name is the workspace's absolute path with every \texttt{/} replaced by \texttt{-}. List what is in your workspace's transcript directory and pick the rows that belong to the session you just finished; the \texttt{-{}-from-projects} flag tells \texttt{list-chats.py} to resolve the mapping for you:
 
 \begin{verbatim}
 python3 /path/to/scripts/list-chats.py \

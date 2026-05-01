@@ -4,11 +4,11 @@ A session has three phases: starting, working, and wrapping up. Between the two 
 
 ## Starting a session
 
-Note the wall-clock start time, then open Claude Code with the workspace as its working directory and feed it `PROMPT.md` as the opening message. Each framework (APM or Spec-kit, as assigned for this session) has its own way of starting (a slash command, a CLI entry point, a setup prompt); whichever the assigned framework documents, point it at `PROMPT.md` as the task. The framework's own documentation explains the workflow from there.
+Note the wall-clock start time, then open Claude Code with the workspace as its working directory. Each framework (APM or Spec-kit, as assigned for this session) has its own way of starting; follow the assigned framework's documentation and point it at `PROMPT.md` as the task.
 
 ## Working on the task
 
-Work for up to three hours and stop at the three-hour mark whether or not the task is finished. Use only the framework assigned to the current session and follow its documented workflow as written; the study compares each framework as its documentation describes it. The helper scripts run only between or after sessions; the `.jsonl` files in the workspace's transcript directory accumulate untouched throughout the session and are collected at the end as part of the submission. Claude Code writes them to a per-workspace subdirectory of `~/.claude/projects/` whose name is the workspace's absolute path with every `/` replaced by `-`; the helper scripts resolve that mapping for the participant.
+Work for up to three hours and stop at the three-hour mark whether or not the task is finished. Use only the framework assigned to the current session and follow its documented workflow as written; the study compares each framework as its documentation describes it. The helper scripts run only between or after sessions; the `.jsonl` files in the workspace's transcript directory accumulate untouched throughout the session and are collected at the end as part of the submission.
 
 ## Wrapping up
 
@@ -20,7 +20,7 @@ git add -A
 git diff --cached dbd2d16 > ../solution.patch
 ```
 
-**2. Collect the transcripts.** List what is in the workspace's transcript directory and pick the rows that belong to the session just finished. The `--from-projects` flag selects this resolution mode:
+**2. Collect the transcripts.** Claude Code stores transcripts under `~/.claude/projects/` in a per-workspace subdirectory whose name is the workspace's absolute path with every `/` replaced by `-`. List what is in the workspace's transcript directory and pick the rows that belong to the session just finished; the `--from-projects` flag tells `list-chats.py` to resolve the mapping:
 
 ```
 python3 /path/to/scripts/list-chats.py \

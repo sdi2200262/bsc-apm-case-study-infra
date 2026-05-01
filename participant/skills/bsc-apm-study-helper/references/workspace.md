@@ -1,6 +1,6 @@
 # Workspace
 
-The participant package's `task/` directory holds `PRD.md` (the requirements the participant implements against), `PROMPT.md` (the message the participant gives the AI to open the session), and a throwaway `README.txt` with the clone commands for the two repositories at their pinned commits. The *workspace* is the directory in which the participant opens Claude Code; it is the AI's working directory for the session, and it must end up with this exact layout:
+The participant package's `task/` directory holds `PRD.md` (the requirements the participant implements against), `PROMPT.md` (the message the participant gives the AI to open the session), and a throwaway `README.txt` with the clone commands for the two repositories at their pinned commits. The *workspace* is the directory in which the participant opens Claude Code on the Linux environment (native or inside the VM); it is the AI's working directory for the session, and it must end up with this exact layout:
 
 ```
 <workspace>/
@@ -10,7 +10,7 @@ The participant package's `task/` directory holds `PRD.md` (the requirements the
 `-- openeclass/             # legacy PHP codebase (read-only reference)
 ```
 
-The participant can either use the package's `task/` directory as the workspace, or copy `PRD.md` and `PROMPT.md` into a fresh directory of their choice and clone the two repositories alongside them there. Either way, follow the clone commands in `README.txt` (or the equivalent commands below), then delete `README.txt`; it has no role beyond initial setup.
+Create the workspace as a fresh directory of the participant's choice on the Linux filesystem (`~/workspace/` is a reasonable default), copy `PRD.md` and `PROMPT.md` into it from the participant package's `task/` directory, and clone the two repositories alongside them following the next section. `README.txt` carries the same clone commands for convenience and has no further role.
 
 ## Cloning the codebases
 

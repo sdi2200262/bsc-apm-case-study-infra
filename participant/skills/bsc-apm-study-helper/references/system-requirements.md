@@ -38,43 +38,34 @@ The Linux environment needs at least 4 vCPUs, 8 GB of RAM, and a 20 GB virtual d
 
 ## Tools and libraries
 
-Install these on the Linux environment that runs the case-study work:
-
-- Docker Engine plus Compose v2. Install from the official Docker apt repository per the instructions at https://docs.docker.com/engine/install/ubuntu/.
-- GitHub CLI (`gh`), used to download the mock-environment release.
-- `git`, `curl`, `tar`, `openssl`, `bash` (3.2 or newer).
-- Python 3.10 or newer; `uv` for managing the implementation codebase's dependencies.
-- `gcc`, `make`, `valgrind`, `pkg-config`, and the `libcurl` and `libxml2` development headers.
-
-On Debian or Ubuntu derivatives, the Docker convenience script installs Docker Engine and the Compose v2 plugin in one step, then `usermod` adds the user to the `docker` group so subsequent `docker` calls do not need `sudo` (the new group membership takes effect on the next login or after `newgrp docker`):
+The case-study work needs a container runtime (Docker Engine with Compose v2), a C build chain (`gcc`, `make`, `valgrind`, `pkg-config`, plus the `libcurl` and `libxml2` development headers), two scripting runtimes (Python 3.10 or newer with `uv`, and Node.js with `npm`), and a handful of command-line utilities (`git`, `curl`, `tar`, `openssl`, `bash` 3.2 or newer, and `gh`). Install Docker first via the official convenience script:
 
 ```
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
 ```
 
-The line below then installs every remaining tool from the list above. `build-essential` provides `gcc`, `g++`, `make`, and the standard C library development headers; `pkg-config`, `valgrind`, `libcurl4-openssl-dev`, and `libxml2-dev` are named explicitly because they are not part of that meta-package. The trailing `curl` pipe installs `uv` from its official installer.
+The new `docker` group membership takes effect on the next login or after `newgrp docker`. Install everything else with `apt` and the official `uv` installer:
 
 ```
 sudo apt-get update
 sudo apt-get install -y \
     build-essential pkg-config valgrind \
     libcurl4-openssl-dev libxml2-dev \
-    git curl tar openssl gh python3 python3-pip
+    git curl tar openssl gh python3 python3-pip npm
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-If `uv --version` reports `command not found` immediately after the install, run `source ~/.local/bin/env` once or open a new login shell so the installer's PATH update takes effect.
-
-Required minimum versions: `gcc` 9.0 (for C11), `libcurl` 7.81.0, `libxml2` 2.9.13. Ubuntu 22.04 (gcc 11.2.0, libcurl 7.81.0, libxml2 2.9.13) and Ubuntu 24.04 (gcc 13.2.0, libcurl 8.5.0, libxml2 2.9.14) both satisfy them. Verify with:
+If `uv --version` reports `command not found` immediately after the install, run `source ~/.local/bin/env` once or open a new login shell so the installer's PATH update takes effect. The C minimums are `gcc` 9.0 (for C11), `libcurl` 7.81.0, and `libxml2` 2.9.13; Ubuntu 22.04 and 24.04 both satisfy them. Verify the toolchain:
 
 ```
 gcc --version
 pkg-config --modversion libcurl
 pkg-config --modversion libxml-2.0
 valgrind --version
+python3 --version
+node --version
+npm --version
+uv --version
 ```
 
-## AI tool
-
-Install the Claude Code CLI by following the official instructions at https://docs.claude.com/en/docs/claude-code. Sign in with the credentials the participant was provided.
