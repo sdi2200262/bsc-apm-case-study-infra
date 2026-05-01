@@ -35,10 +35,10 @@ tar -xzf bsc-apm-*.tar.gz
 
 The stack listens on two URLs once it is ready:
 
-- `http://localhost:18080/` for the openeclass instance.
+- `http://localhost/` for the openeclass instance.
 - `https://localhost:18443/` for the mock authentication service.
 
-Ports 18080 and 18443 must be free on the Linux environment. If another service is bound to either port, stop it before running `./scripts/up`.
+Ports 80 and 18443 must be free on the Linux environment. Port 80 is the default HTTP port and is more commonly held by another service than 18443 is; before running `./scripts/up`, check both with `ss -ltn '( sport = :80 or sport = :18443 )'`. If either is held, identify the holder (`sudo lsof -iTCP:<port> -sTCP:LISTEN` or `sudo fuser <port>/tcp`), state a concise plan for freeing it, and ask the participant for permission before stopping anything. Do not propose changing the port mapping; the env package depends on these specific ports.
 
 ## Lifecycle commands
 

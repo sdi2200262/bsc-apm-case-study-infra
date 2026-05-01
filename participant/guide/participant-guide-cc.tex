@@ -396,11 +396,11 @@ tar -xzf bsc-apm-*.tar.gz
 The stack listens on two URLs once it is ready:
 
 \begin{itemize}
-    \item \texttt{http://localhost:18080/} for the openeclass instance.
+    \item \texttt{http://localhost/} for the openeclass instance.
     \item \texttt{https://localhost:18443/} for the mock authentication service.
 \end{itemize}
 
-Ports 18080 and 18443 must be free on the Linux environment. If another service is bound to either port, stop it before running \texttt{./scripts/up}.
+Ports 80 and 18443 must be free on the Linux environment. Port 80 is the default HTTP port and is more commonly held by another service than 18443 is; if either is bound, stop the holder before running \texttt{./scripts/up}. The helper skill walks through identifying and stopping the holder if needed.
 
 \subsection{Lifecycle commands}
 \label{sec:env:lifecycle}

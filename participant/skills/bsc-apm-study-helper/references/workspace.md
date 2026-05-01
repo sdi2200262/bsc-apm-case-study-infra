@@ -10,7 +10,7 @@ The participant package's `task/` directory holds `PRD.md` (the requirements the
 `-- openeclass/             # legacy PHP codebase (read-only reference)
 ```
 
-Create the workspace as a fresh directory of the participant's choice on the Linux filesystem (`~/workspace/` is a reasonable default), copy `PRD.md` and `PROMPT.md` into it from the participant package's `task/` directory, and clone the two repositories alongside them following the next section. `README.txt` carries the same clone commands for convenience and has no further role.
+Create the workspace as a fresh directory of the participant's choice on the Linux filesystem. `~/workspace/` is the default the helper proposes; before creating it, announce the default in plain terms and offer the participant the chance to specify a different path. Copy `PRD.md` and `PROMPT.md` into the chosen directory from the participant package's `task/` directory, and clone the two repositories alongside them following the next section. `README.txt` carries the same clone commands for convenience and has no further role.
 
 ## Cloning the codebases
 

@@ -45,7 +45,7 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
 ```
 
-The new `docker` group membership takes effect on the next login or after `newgrp docker`. Install everything else with `apt` and the official `uv` installer:
+The new `docker` group membership takes effect on the next login or after `newgrp docker`. Within Claude Code, prefer wrapping docker calls in `sg docker -c '<cmd>'` instead: `sg` runs the command in a subshell with the docker group active for that single invocation and returns control to the parent shell, so the conversation's working shell is preserved. Use `newgrp docker` (or log out and back in) for the participant's own terminal sessions. Install everything else with `apt` and the official `uv` installer:
 
 ```
 sudo apt-get update
