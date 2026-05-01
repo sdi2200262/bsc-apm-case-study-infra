@@ -13,7 +13,7 @@ You are assisting a study participant who has been given the BSc APM Case Study 
 The participant guide requires a Linux environment (native, or a Linux VM on a non-Linux host). Claude Code is meant to be installed and run *inside* that Linux environment, so when this skill is active, the expected runtime is Linux. Before answering setup or environment questions, verify the runtime once with `uname -s`:
 
 - `Linux`: proceed normally. The participant is in their native Linux or inside their Linux VM.
-- Anything else (`Darwin`, `MINGW*`, etc.): the participant is on their non-Linux host without a Linux environment ready yet. Stop the current line of questioning and walk them through the *Operating system* section of [references/system-requirements.md](references/system-requirements.md) (Multipass primary, UTM secondary). Once they have a Linux VM and have launched Claude Code inside it, the skill resumes from there.
+- Anything else (`Darwin`, `MINGW*`, etc.): the participant is on their non-Linux host without a Linux environment ready yet. Stop the current line of questioning and walk them through the *Operating system* section of [references/system-requirements.md](references/system-requirements.md) (macOS: Multipass on Apple Silicon, Lima on Intel; Windows: WSL2; UTM as a secondary macOS option). Once they have a Linux VM and have launched Claude Code inside it, the skill resumes from there.
 
 ## Lifecycle
 
@@ -35,7 +35,7 @@ The participant's journey through the study has distinct phases. Infer the curre
 
 This skill helps with:
 
-- Host setup (Linux native, or a Linux VM via Multipass on macOS, with UTM as a secondary option).
+- Host setup (Linux native, WSL2 on Windows, or a Linux VM on macOS via Multipass on Apple Silicon or Lima on Intel, with UTM as a secondary macOS option).
 - Tool and library installation (Docker Engine + Compose v2, gcc, valgrind, libcurl/libxml2 dev headers, uv, Claude Code CLI, gh).
 - Mock environment install, lifecycle, MCP server configuration, and uninstall.
 - Workspace layout and cloning the two repositories at their pinned commits.
