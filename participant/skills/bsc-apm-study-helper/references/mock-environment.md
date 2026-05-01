@@ -15,14 +15,12 @@ Identify architecture with `uname -m`: `x86_64` means amd64, `aarch64` or `arm64
 mkdir -p <mock> && cd <mock>
 
 # x86_64 hosts:
-gh release download bsc-apm-case-study-env \
-    -R sdi2200262/bsc-apm-case-study-env \
-    -p 'bsc-apm-amd64.tar.gz'
+curl -L -o bsc-apm-amd64.tar.gz \
+    https://github.com/sdi2200262/bsc-apm-case-study-env/releases/download/bsc-apm-case-study-env/bsc-apm-amd64.tar.gz
 
 # arm64 hosts:
-gh release download bsc-apm-case-study-env-arm64 \
-    -R sdi2200262/bsc-apm-case-study-env \
-    -p 'bsc-apm-arm64.tar.gz'
+curl -L -o bsc-apm-arm64.tar.gz \
+    https://github.com/sdi2200262/bsc-apm-case-study-env/releases/download/bsc-apm-case-study-env-arm64/bsc-apm-arm64.tar.gz
 ```
 
 Then unpack and bring the stack up. `./install` loads the bundled Docker images, generates self-signed TLS certificates into `./certs/`, and writes a pre-configured `.env` alongside. `./scripts/up` brings the three containers up, performs openeclass's first-time install on first run, and applies the test data; this takes a few minutes on a clean host.
