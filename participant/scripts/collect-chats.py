@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc APM Case Study Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 
 """Copy Claude Code transcripts within a time range into a workspace folder.
 

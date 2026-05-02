@@ -165,7 +165,7 @@ After each session you produce one zip file containing two artefacts at its root
 
 The zip filename follows the strict pattern \texttt{\{PID\}\_S\{1\textbar{}2\}\_\{apm\textbar{}speckit\}.zip}, e.g., \texttt{P001\_S1\_apm.zip}.
 
-You also answer a short post-session questionnaire about your experience with the framework, submitted on the same form alongside the zip.
+You also answer a short post-session questionnaire about your experience with the framework. The questionnaire and the zip go through a single submission form, whose URL is given later in Section~\ref{sec:wrapping}, step 5.
 
 \section{Participant package}
 \label{sec:package}
@@ -552,7 +552,7 @@ python3 /path/to/scripts/reset-chats.py <workspace>
 
 The script lists the files it will delete and asks for confirmation. Run it only after you have safely stored the session's zip; the deletion is permanent.
 
-\textbf{5. Reset the mock environment, only if needed.} The mock environment retains its initial state across sessions and usually does not need a reset. Reset it only if a previous session messed with the seeded data:
+\textbf{5. Reset the mock environment, only if needed.} The mock environment retains its initial state across sessions and usually does not need a reset. Reset it only if a previous session modified the test data:
 
 \begin{verbatim}
 cd <mock>

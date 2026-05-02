@@ -13,7 +13,7 @@ The workspace contains:
 
 A local mock of that same `openeclass` release is running on
 this machine, paired with a mock single sign-on endpoint at
-`https://localhost:8082/` whose flow matches what the existing
+`https://localhost:18443/` whose flow matches what the existing
 `eclass-mcp-server` is configured to integrate with. This is the
 instance my MCP server connects to during development. The
 credentials and TLS material the server needs at startup are

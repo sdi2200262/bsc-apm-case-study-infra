@@ -100,7 +100,7 @@ python3 /path/to/scripts/reset-chats.py <workspace>
 
 The script lists the files it will delete and asks for confirmation. Run it only after the session's zip has been safely stored; the deletion is permanent.
 
-**5. Reset the mock environment, only if needed.** The mock environment retains its initial state across sessions and usually does not need a reset. Reset it only if a previous session messed with the seeded data:
+**5. Reset the mock environment, only if needed.** The mock environment retains its initial state across sessions and usually does not need a reset. Reset it only if a previous session modified the test data:
 
 ```
 cd <mock>

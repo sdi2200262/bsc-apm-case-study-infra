@@ -1,6 +1,6 @@
 # Mock environment
 
-The mock environment is a self-contained, containerised stack the participant runs locally during each session. It exposes the surfaces the implementation needs to integrate with, pre-loaded with seeded data so every participant runs against identical state.
+The mock environment is a self-contained, containerised stack the participant runs locally during each session. It exposes the surfaces the implementation needs to integrate with, pre-loaded with test data so every participant runs against identical state.
 
 ## Download and install
 
