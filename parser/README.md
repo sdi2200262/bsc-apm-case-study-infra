@@ -21,7 +21,7 @@ module from this directory so the package resolves on the import
 path:
 
 ```bash
-cd bsc-apm-case-study-task/parser
+cd bsc-apm-case-study-infra/parser
 
 # Build the canonical scope-nested metrics artifact
 python -m cc_chat_parser <submission-path> --framework {apm,speckit} --metrics -o metrics.json

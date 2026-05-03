@@ -1,69 +1,50 @@
-# BSc APM Case Study - Task, Grader & Participant Guides
+# BSc APM Case Study - Grader, Parser, Pipeline
 
-The task specification, grading suite and participant guides for the BSc Thesis Case Study evaluating the [Agentic Project Management (APM)](https://github.com/sdi2200262/agentic-project-management) framework against other approaches in AI-assisted software development.
+Grading suite, transcript parser, and submission processing pipeline for the BSc thesis case study evaluating the [Agentic Project Management (APM)](https://github.com/sdi2200262/agentic-project-management) framework against [GitHub Spec-kit](https://github.github.io/spec-kit/) for AI-assisted software development.
 
-## Task Summary
+This repository ships three packages:
 
-*Announcements Functionality and C Replica*
+- **Grader.** Applies a participant's patch on a fresh test branch, runs the rubric phases against the testing environment, and writes a JSON results artefact.
+- **Parser.** Reads Claude Code CLI JSONL transcripts produced by participant sessions and emits the canonical scope-nested metrics artefact (economic, time, user input, reliability, supplementary).
+- **Pipeline.** Five-stage data-processing pipeline that turns one zipped submission into one row in the aggregated dataset, with per-submission durable artefacts and a manifest audit trail.
 
-Participants implement new announcement tools (`get_course_announcements` and `get_general_announcements`) in a Python MCP server and create a high-performance C replica. Submissions are evaluated using an automated grading pipeline that runs against a separately-installed testing environment (the [`bsc-apm-case-study-env`](https://github.com/sdi2200262/bsc-apm-case-study-env) package).
-
-## Scoring
-
-Total: **100 points**
-
-| Category | Points | Description |
-|----------|--------|-------------|
-| Python Baseline | 12 | Existing functionality (must not break) |
-| Python Features | 36 | `get_course_announcements` and `get_general_announcements` |
-| C Replica | 52 | Full C implementation with memory safety |
-
-See [grader/SCORING.md](grader/SCORING.md) for the detailed rubric.
+The task specification, participant guide and helper skill, and the containerised testing environment the grader runs against ship from the separate [`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task) repository.
 
 ## Repository Structure
 
 ```
-bsc-apm-case-study-task/
+bsc-apm-case-study-infra/
 ├── README.md
 ├── LICENSE
 ├── grader/                             # Grading suite
 │   ├── README.md
-│   ├── SCORING.md                      # rubric
-│   ├── seed.yaml                       # pinned mirror of the env package's seed
+│   ├── SCORING.md                      # Rubric the grader implements against
+│   ├── seed.yaml                       # Pinned mirror of the testbed's seed
 │   ├── __main__.py                     # CLI entry: python -m grader
-│   ├── inspect.py                      # results browser
-│   └── src/                            # phase modules + protocol subpackage
+│   ├── inspect.py                      # Results browser
+│   └── src/                            # Phase modules + protocol subpackage
 ├── parser/                             # Transcript parser
 │   ├── README.md
 │   └── cc_chat_parser/                 # Claude Code chat parser package
-├── pipeline/                           # Data processing pipeline
-│   ├── README.md
-│   ├── PIPELINE.md
-│   └── *.py
-└── participant/                        # Participant-facing materials
+└── pipeline/                           # Submission processing pipeline
     ├── README.md
-    ├── guide/                          # Study guide (LaTeX source, PDF, assets)
-    ├── scripts/                        # Helper scripts shipped to participants
-    └── task/                           # Task specification
-        ├── PRD.md
-        └── PROMPT.md
+    ├── PIPELINE.md                     # Submission contract, processing sequence, schemas
+    └── *.py
 ```
 
 ## Documentation
 
-- **[participant/README.md](participant/README.md)** - Participant materials overview, including the task specification
-- **[grader/README.md](grader/README.md)** - Grading system overview, prerequisites, runtime workflow, and pinned references
+- **[grader/README.md](grader/README.md)** - Grading system overview, prerequisites, runtime workflow, pinned references
 - **[grader/SCORING.md](grader/SCORING.md)** - Rubric the grader implements against
-- **[parser/README.md](parser/README.md)** - Transcript parser overview
-- **[pipeline/README.md](pipeline/README.md)** - Pipeline scripts
-- **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Pipeline protocol
-- **[participant/guide/README.md](participant/guide/README.md)** - Guide building
+- **[parser/README.md](parser/README.md)** - Transcript parser overview, CLI surface, environment variables
+- **[pipeline/README.md](pipeline/README.md)** - Per-stage CLI usage
+- **[pipeline/PIPELINE.md](pipeline/PIPELINE.md)** - Submission contract, processing sequence, output layout, manifest schema, dataset CSV columns
 
 ## Related Repositories
 
 - [bsc-apm-thesis](https://github.com/sdi2200262/bsc-apm-thesis) - Thesis LaTeX source
-- [bsc-apm-case-study-env](https://github.com/sdi2200262/bsc-apm-case-study-env) - Participant testing environment the grader runs against
-- [bsc-apm-case-study-data](https://github.com/sdi2200262/bsc-apm-case-study-data) - Participant submissions (private)
+- [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task) - Task specification, participant package, and testing environment
+- [bsc-apm-case-study-data](https://github.com/sdi2200262/bsc-apm-case-study-data) - Participant submissions
 
 ## License
 
@@ -71,4 +52,4 @@ GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 ---
 
-*Part of BSc Thesis Case Study evaluating the Agentic Project Management (APM) framework - Department of Informatics and Telecommunications, University of Athens.*
+*Part of the BSc APM Case Study evaluating the Agentic Project Management (APM) framework - Department of Informatics and Telecommunications, University of Athens.*

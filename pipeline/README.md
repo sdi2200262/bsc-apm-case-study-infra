@@ -48,10 +48,10 @@ external paths so they need not be repeated on every invocation:
 
 ```yaml
 paths:
-  grader_root: /path/to/bsc-apm-case-study-task/grader
+  grader_root: /path/to/bsc-apm-case-study-infra/grader
   eclass_root: /path/to/eclass-mcp-server
-  parser_root: /path/to/bsc-apm-case-study-task/parser
-  mock_root: /path/to/bsc-apm-case-study-env
+  parser_root: /path/to/bsc-apm-case-study-infra/parser
+  mock_root: /path/to/bsc-apm-case-study-task
 ```
 
 CLI flags always win over the YAML.
@@ -65,7 +65,7 @@ python -m pipeline.run P001_S1_apm.zip \
     --grader-root /path/to/grader \
     --eclass-root /path/to/eclass-mcp-server \
     --parser-root /path/to/parser \
-    --mock-root /path/to/bsc-apm-case-study-env
+    --mock-root /path/to/bsc-apm-case-study-task
 
 # Or stage by stage (assuming pipeline.yaml supplies the paths)
 python -m pipeline.validate       P001_S1_apm.zip --output-root /path/to/dataset
