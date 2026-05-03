@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Pipeline configuration: paths and the ``pipeline.yaml`` loader.
 
@@ -21,10 +21,10 @@ do not need a path can run without it.
 The YAML's top-level shape:
 
     paths:
-      grader_root: /path/to/bsc-apm-case-study-task/grader
+      grader_root: /path/to/bsc-apm-case-study-infra/grader
       eclass_root: /path/to/eclass-mcp-server
-      parser_root: /path/to/bsc-apm-case-study-task/parser
-      mock_root: /path/to/bsc-apm-case-study-env
+      parser_root: /path/to/bsc-apm-case-study-infra/parser
+      mock_root: /path/to/bsc-apm-case-study-task
 
 A missing ``paths`` section is treated as an empty mapping; absent
 keys are treated as no default. The schema is extensible: unknown
@@ -57,18 +57,18 @@ class PipelineConfig:
     Attributes:
         output_root: Mandatory dataset output root. The only path
             every stage needs.
-        grader_root: Path to the ``bsc-apm-case-study-task/grader``
+        grader_root: Path to the ``bsc-apm-case-study-infra/grader``
             tree, required by the grade stage. ``None`` when not
             configured.
         eclass_root: Path to the ``eclass-mcp-server`` clone,
             required by the grade stage so the grader's
             ``--eclass-dir`` flag can be populated. ``None`` when
             not configured.
-        parser_root: Path to the ``bsc-apm-case-study-task/parser``
+        parser_root: Path to the ``bsc-apm-case-study-infra/parser``
             tree, required by the parse stage so the parser
             subprocess can resolve ``cc_chat_parser`` on
             ``PYTHONPATH``. ``None`` when not configured.
-        mock_root: Path to the ``bsc-apm-case-study-env`` install
+        mock_root: Path to the ``bsc-apm-case-study-task`` install
             whose endpoints the grader probes and whose reset
             script the grader invokes between grading runs.
             ``None`` when not configured.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Diagnostics block and invariant evaluator for the metrics artifact.
 
@@ -23,7 +23,7 @@ the analysis layer's diagnostics inspection.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from .commands import (
     extract_command_names,
@@ -50,7 +50,7 @@ def build_diagnostics(
     session: Session,
     artifact: dict[str, Any],
     rate_table: RateTable,
-    is_real_apm_role: Any,
+    is_real_apm_role: Callable[[str], bool],
 ) -> dict[str, Any]:
     """Assemble the diagnostics block for the metrics artifact.
 
@@ -115,7 +115,7 @@ def build_diagnostics(
 def _evaluate_invariants(
     artifact: dict[str, Any],
     rate_table: RateTable,
-    is_real_apm_role: Any,
+    is_real_apm_role: Callable[[str], bool],
 ) -> dict[str, Any]:
     """Evaluate every invariant identity across every scope.
 
@@ -229,7 +229,7 @@ def _evaluate_invariants(
     return checks
 
 
-def _every_conversation_has_real_role(artifact: dict[str, Any], is_real_apm_role: Any) -> bool:
+def _every_conversation_has_real_role(artifact: dict[str, Any], is_real_apm_role: Callable[[str], bool]) -> bool:
     """Return ``True`` when every conversation in metadata is a real APM role."""
     conversations = artifact["session_metadata"]["conversations"]
     return all(is_real_apm_role(conv["role_key"]) for conv in conversations)

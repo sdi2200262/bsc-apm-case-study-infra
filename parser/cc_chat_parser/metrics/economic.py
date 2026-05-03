@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Economic-dimension metrics: per-category token sums and API-equivalent cost.
 
@@ -345,7 +345,7 @@ def _agent_tool_use_id_index(records: list[Record]) -> dict[str, str]:
 
 
 def _matches_agent_dispatch(
-    user_record: Any,
+    user_record: Record,
     agent_tool_use_ids: dict[str, str],
 ) -> bool:
     """Return ``True`` when a user record's tool_result references an Agent dispatch."""
