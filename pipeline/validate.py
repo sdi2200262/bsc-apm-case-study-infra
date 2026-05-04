@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Validate a participant submission zip and unpack it to the dataset staging area.
 
 The submission zip contract:
 
 * Filename matches ``{PID}_S{1|2}_{apm|speckit}.zip``.
-* Inside the zip, a single top-level directory whose name equals
-  the manifest key (``{PID}_S{1|2}_{apm|speckit}``).
-* That directory contains exactly two top-level entries:
-  ``solution.patch`` (the patch the grader will apply against
-  baseline) and ``transcripts/`` (a flat directory of one or
-  more ``<sessionId>.jsonl`` files copied from
-  ``~/.claude/projects/<dashed-cwd>/``).
-* No other files or directories at the submission root.
+* The zip's root contains exactly two entries: ``solution.patch``
+  (the patch the grader will apply against baseline) and
+  ``transcripts/`` (a flat directory of one or more
+  ``<sessionId>.jsonl`` files copied from
+  ``~/.claude/projects/<dashed-cwd>/``). Participants produce this
+  layout by following the guide's wrap-up step: from inside the
+  workspace directory, ``zip -r <name>.zip solution.patch
+  transcripts/``.
+* No other files or directories at the zip's root.
 * Inside ``transcripts/``: every entry is a ``*.jsonl`` file at
-  the top level, no subdirectories. Sibling ``<sessionId>/``
-  directories with ``subagents/`` and ``tool-results/`` content
-  that Claude Code writes alongside the JSONL files are
-  intentionally excluded by the participant guide and the
-  validate stage rejects them; their content is not part of the
-  case study's measurement scope.
+  the top level, no subdirectories. The guide instructs
+  participants to omit the sibling ``<sessionId>/`` directories
+  (``subagents/`` and ``tool-results/`` content Claude Code writes
+  alongside the JSONL files); the validate stage rejects them so
+  their content stays out of the dataset's measurement scope.
 
 The validate stage:
 
@@ -53,7 +53,6 @@ from pathlib import Path
 from .errors import (
     PipelineError,
     StageExecutionError,
-    StageInputError,
     SubmissionFormatError,
 )
 from .io import compute_checksum
@@ -108,9 +107,6 @@ def main(argv: list[str] | None = None) -> int:
         save_manifest(manifest)
     except SubmissionFormatError as error:
         print(f"error: invalid submission: {error}", file=sys.stderr)
-        return 1
-    except StageInputError as error:
-        print(f"error: validate input missing: {error}", file=sys.stderr)
         return 1
     except StageExecutionError as error:
         print(f"error: validate failed: {error}", file=sys.stderr)
@@ -192,38 +188,24 @@ def _validate_layout(zip_path: Path, submission: SubmissionName) -> _Layout:
         raise StageExecutionError(
             f"validate: cannot open zip {zip_path}: {error}"
         ) from error
-    rooted = _normalise_entries(entries, submission.manifest_key, zip_path)
+    rooted = _normalise_entries(entries)
     _require_entry(rooted, PATCH_FILENAME, zip_path)
     transcripts_count, warnings = _validate_transcripts(rooted, zip_path)
     _reject_unknown_top_level(rooted, zip_path)
     return _Layout(transcripts_count=transcripts_count, warnings=warnings)
 
 
-def _normalise_entries(
-    entries: list[str],
-    manifest_key: str,
-    zip_path: Path,
-) -> list[str]:
-    """Return zip entries stripped of the top-level submission directory prefix.
+def _normalise_entries(entries: list[str]) -> list[str]:
+    """Return zip entries with empty entries dropped.
 
-    Every entry is expected to live under ``{manifest_key}/`` at
-    the zip root. Entries that omit the prefix or use a different
-    top-level name violate the contract.
+    The submission contract places ``solution.patch`` and the
+    ``transcripts/`` directory at the zip's root with no wrapping
+    directory; the per-submission staging directory is created by
+    the validate stage on extraction. This helper drops empty
+    entries and returns the rest unchanged for downstream layout
+    checks.
     """
-    prefix = f"{manifest_key}/"
-    rooted: list[str] = []
-    for entry in entries:
-        if not entry:
-            continue
-        if entry == manifest_key or entry == prefix:
-            continue
-        if not entry.startswith(prefix):
-            raise SubmissionFormatError(
-                f"validate: entry outside top-level directory in {zip_path.name}: "
-                f"{entry!r} (expected prefix {prefix!r})"
-            )
-        rooted.append(entry[len(prefix):])
-    return rooted
+    return [entry for entry in entries if entry]
 
 
 def _require_entry(rooted: list[str], name: str, zip_path: Path) -> None:
@@ -342,15 +324,11 @@ def _extract_to_staging(
             _remove_tree(destination)
         destination.mkdir(parents=True, exist_ok=False)
         with zipfile.ZipFile(zip_path, "r") as archive:
-            archive.extractall(staging_root)
+            archive.extractall(destination)
     except OSError as error:
         raise StageExecutionError(
             f"validate: extraction failed for {zip_path.name}: {error}"
         ) from error
-    if not destination.is_dir():
-        raise StageExecutionError(
-            f"validate: extracted layout missing expected directory at {destination}"
-        )
     return destination
 
 

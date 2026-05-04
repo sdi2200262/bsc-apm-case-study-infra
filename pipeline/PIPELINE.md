@@ -39,15 +39,14 @@ directories under both `_staging/` and the per-participant tree.
 ### Inner layout
 
 ```
-P001_S1_apm/
-├── solution.patch
-└── transcripts/
-    ├── <sessionId>.jsonl
-    ├── <sessionId>.jsonl
-    └── ...
+solution.patch
+transcripts/
+├── <sessionId>.jsonl
+├── <sessionId>.jsonl
+└── ...
 ```
 
-Two top-level entries inside the zip's named directory:
+Two entries at the zip's root:
 
 - `solution.patch`: the patch the participant produced against the
   pinned baseline. Consumed by the grader.
@@ -56,11 +55,17 @@ Two top-level entries inside the zip's named directory:
   `~/.claude/projects/<dashed-cwd>/`. Filenames stay as the UUIDs
   Claude Code wrote them with. Consumed by the parser.
 
-The participant guide instructs participants to omit the
-per-session `<sessionId>/subagents/` and `<sessionId>/tool-results/`
+Participants produce this layout by following the guide's wrap-up
+step: from inside the workspace directory, `zip -r
+{PID}_S{1|2}_{apm|speckit}.zip solution.patch transcripts/`. The
+validate stage extracts the contents into the manifest-keyed
+staging directory at `<output-root>/_staging/<manifest_key>/`.
+
+The guide instructs participants to omit the per-session
+`<sessionId>/subagents/` and `<sessionId>/tool-results/`
 subdirectories Claude Code writes alongside the JSONL files; the
 validate stage rejects nested files or directories under
-`transcripts/` to keep the dataset clean of artifacts the parser
+`transcripts/` so the dataset stays free of artifacts the parser
 does not consume.
 
 ## Processing sequence
