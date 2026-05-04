@@ -132,6 +132,31 @@ failures terminate the run early.
 A grading machine that produces a baseline score other than
 9/100 against these pinned references is misconfigured.
 
+## Seed-mirror sync
+
+`grader/seed.yaml` is a pinned mirror of the testing environment's
+seed file. The `Makefile` next to it carries two targets that keep
+the mirror in lock-step with the upstream source:
+
+```bash
+# Diff the mirror against the testing environment's release tag.
+# Exits 1 on drift.
+make check-seed
+
+# Overwrite the mirror's body from the testing environment's
+# release tag, preserving the local header comment block.
+make refresh-seed
+
+# Override the pin via REF=<tag-or-sha>:
+make check-seed REF=main
+```
+
+Default `REF` is `bsc-apm-case-study-task` (the amd64 release tag),
+so reproducibility tracks the released testing-environment surface.
+Run `make check-seed` before any grading run that uses a re-cut
+testing-environment release; run `make refresh-seed` to bring the
+mirror forward when drift surfaces.
+
 ## Directory structure
 
 ```
@@ -139,6 +164,7 @@ grader/
 ├── __init__.py
 ├── __main__.py                       # CLI entry: python -m grader
 ├── inspect.py                        # results browser
+├── Makefile                          # seed-mirror sync targets
 ├── README.md
 ├── seed.yaml                         # pinned mirror of the testing env's seed
 └── src/

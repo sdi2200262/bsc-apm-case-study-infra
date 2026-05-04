@@ -1,17 +1,18 @@
 # Pinned snapshot of the testing environment's seed data.
 #
-# The canonical file lives in the bsc-apm-case-study-env package at
-# seed/seed.yaml; that file is the editable source of truth for the
-# environment's data state, and the env's release pipeline turns it
-# into seed.json and the mock CAS config. This copy is the grader-
-# side mirror: the grader's assertions read these values directly,
-# so the file moves in lock-step with the env release the grader
-# is run against.
+# The canonical file lives in the bsc-apm-case-study-task repository
+# at seed/seed.yaml; that file is the editable source of truth for
+# the environment's data state, and the testing environment's
+# release pipeline turns it into seed.json and the mock CAS config.
+# This copy is the grader-side mirror: the grader's assertions read
+# these values directly, so the file moves in lock-step with the
+# testing-environment release the grader is run against.
 #
-# Refresh procedure when the env's seed changes: copy the env's
-# seed/seed.yaml verbatim over this file (preserving this header),
-# then run the grader against the new release end-to-end to confirm
-# the assertions still pass.
+# Refresh procedure: from this directory, run `make refresh-seed`
+# to overwrite the body from the testing environment's release tag
+# while preserving this header, or `make check-seed` to fetch and
+# diff non-destructively. The Makefile's REF variable pins the tag
+# (default: bsc-apm-case-study-task, the amd64 release).
 
 user:
   username: student1
