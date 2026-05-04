@@ -20,8 +20,8 @@ reference already passes; P.1.1 (the `tools/list` registration
 check for all six tools) is the one baseline row that requires
 the patch's tool additions to pass. The participant testing environment is shipped
 separately by the
-[`bsc-apm-case-study-env`](https://github.com/sdi2200262/bsc-apm-case-study-env)
-package; the grader probes its endpoints, invokes its reset script,
+[`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task)
+repository; the grader probes its endpoints, invokes its reset script,
 and spawns participant MCP servers under environment variables
 derived from its install prefix.
 
@@ -58,12 +58,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## Testing environment
 
-The `bsc-apm-case-study-env` package ships per-architecture release
+The `bsc-apm-case-study-task` repository ships per-architecture release
 tarballs (amd64 and arm64); install instructions, lifecycle scripts,
-and seed documentation live in that package's
-[INSTALL.md](https://github.com/sdi2200262/bsc-apm-case-study-env/blob/main/docs/INSTALL.md).
-The grader expects the env to be installed and running before it is
-invoked.
+and seed documentation live in that repository's
+[INSTALL.md](https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/docs/INSTALL.md).
+The grader expects the testing environment to be installed and
+running before it is invoked.
 
 ## Quick start
 
@@ -94,7 +94,7 @@ python -m grader --help
 
 The grader is a black-box sequencer. On every grading run the
 grader probes the environment's HTTP endpoints
-(`http://localhost/` for openeclass, `https://localhost:8082/health`
+(`http://localhost/` for openeclass, `https://localhost:18443/health`
 for the mock CAS), invokes `<mock-root>/scripts/reset` to flush the
 seed back to its baseline, then sequences the phase modules:
 
@@ -126,8 +126,8 @@ failures terminate the run early.
 | Component | Pinned at |
 |---|---|
 | `eclass-mcp-server` | commit `dbd2d16` on the `main` branch |
-| Testing environment (amd64) | `bsc-apm-case-study-env` release tag `bsc-apm-case-study-env` |
-| Testing environment (arm64) | `bsc-apm-case-study-env` release tag `bsc-apm-case-study-env-arm64` |
+| Testing environment (amd64) | `bsc-apm-case-study-task` release tag `bsc-apm-case-study-task` |
+| Testing environment (arm64) | `bsc-apm-case-study-task` release tag `bsc-apm-case-study-task-arm64` |
 
 A grading machine that produces a baseline score other than
 9/100 against these pinned references is misconfigured.
@@ -140,7 +140,7 @@ grader/
 ├── __main__.py                       # CLI entry: python -m grader
 ├── inspect.py                        # results browser
 ├── README.md
-├── seed.yaml                         # pinned mirror of the env package's seed
+├── seed.yaml                         # pinned mirror of the testing env's seed
 └── src/
     ├── __init__.py
     ├── config.py                     # path resolution from CLI flags or grader.yaml
@@ -172,8 +172,8 @@ grader/
 
 ## Related
 
-- [bsc-apm-case-study-env](https://github.com/sdi2200262/bsc-apm-case-study-env):
-  the participant testing environment the grader runs against.
+- [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task):
+  the participant testing environment and task specification the grader runs against.
 - [../parser/](../parser/): transcript parser for participant
   Claude Code session logs.
 - [../pipeline/](../pipeline/): submission processing pipeline

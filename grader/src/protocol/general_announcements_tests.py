@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 General-announcements protocol assertions.
 
@@ -10,16 +10,21 @@ first parameter so the Python and C aggregators drive the same
 body through either implementation.
 
 Strict-tier assertions check exact equality against the documented
-error strings. Implementation-tier assertions exercise the general
-endpoint at varying ``days_back`` values, asserting the seed-
-derived count preamble and the verbatim body of every in-scope
-announcement (admin entries plus enrolled-course entries within
-the 30-day backend floor).
+error strings. Every implementation-tier and anchor-tier assertion
+exercises the general endpoint at one ``days_back`` value and
+asserts:
 
-The anchor (P.3.6 / C.4.6) additionally asserts that the response
-renders system attribution with ``Source: System`` and that at
-least two distinct enrolled-course attributions appear, confirming
-the implementation aggregates rather than serving a single source.
+* the seed-derived ``Found N announcement(s):`` count preamble,
+* the verbatim body of every in-scope announcement (admin entries
+  plus enrolled-course entries within the 30-day backend floor),
+* ``Source: System`` is rendered for the admin entries, and
+* at least two distinct enrolled-course attributions appear.
+
+The PRD requires source attribution on every non-empty response,
+so the source-attribution checks apply at every window probe rather
+than only the default-window anchor; the anchor (P.3.6 / C.4.6)
+keeps its higher point weight because it covers the default path
+with the largest expected count.
 """
 
 from __future__ import annotations
@@ -46,7 +51,7 @@ DEFAULT_DAYS_BACK = 30
 MIN_DISTINCT_COURSE_SOURCES = 2
 
 ERR_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
-ERR_BAD_DAYS = "Error: days_back must be a positive integer."
+ERR_BAD_DAYS = "Error: days_back must be a non-negative integer."
 ERR_OVER_THIRTY = "Error: Cannot retrieve announcements older than 30 days."
 
 SERVER_START_FAIL = (False, "Could not start server", "Server failed to start")
@@ -123,6 +128,26 @@ def test_general_default_aggregation(
     impl: str, eclass_dir: Path, mock_root: Path, debug: bool
 ) -> tuple[bool, str, str]:
     """P.3.6 / C.4.6: default returns nine announcements with multi-source attribution."""
+    return _impl_window_test(
+        impl, eclass_dir, mock_root, debug, days_back=DEFAULT_DAYS_BACK
+    )
+
+
+def _impl_window_test(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    days_back: int,
+) -> tuple[bool, str, str]:
+    """Drive a general-endpoint window assertion at one ``days_back`` value.
+
+    Asserts the count preamble, every in-scope body verbatim, and
+    the source-attribution requirements PRD §5 makes hard on every
+    non-empty response: ``Source: System`` is rendered for the
+    admin entries and at least two distinct enrolled-course
+    attributions appear.
+    """
     with spawn_server(impl, eclass_dir, mock_root, debug) as server:
         if server is None:
             return SERVER_START_FAIL
@@ -130,11 +155,12 @@ def test_general_default_aggregation(
         if not tool_exists(server, TOOL_NAME):
             return _missing_tool_failure()
         call_tool(server, "login", {})
-        response = call_tool(server, TOOL_NAME, {})
+        args: dict = {} if days_back == DEFAULT_DAYS_BACK else {"days_back": days_back}
+        response = call_tool(server, TOOL_NAME, args)
         text = extract_text(response)
         if not text:
             return False, "empty or invalid response", json.dumps(response)
-        expected = general_announcements_in_window(SEED, DEFAULT_DAYS_BACK)
+        expected = general_announcements_in_window(SEED, days_back)
         ok, message = assert_count_and_bodies(text, expected)
         if not ok:
             return False, message, text
@@ -150,35 +176,10 @@ def test_general_default_aggregation(
             )
         return (
             True,
-            f"preamble, nine bodies, system source, "
+            f"preamble, {len(expected)} bodies, system source, "
             f"{len(course_sources)} distinct course sources",
             text,
         )
-
-
-def _impl_window_test(
-    impl: str,
-    eclass_dir: Path,
-    mock_root: Path,
-    debug: bool,
-    days_back: int,
-) -> tuple[bool, str, str]:
-    """Drive the implementation-tier window assertion at one ``days_back`` value."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        args: dict = {} if days_back == DEFAULT_DAYS_BACK else {"days_back": days_back}
-        response = call_tool(server, TOOL_NAME, args)
-        text = extract_text(response)
-        if not text:
-            return False, "empty or invalid response", json.dumps(response)
-        expected = general_announcements_in_window(SEED, days_back)
-        ok, message = assert_count_and_bodies(text, expected)
-        return ok, message, text
 
 
 def _missing_tool_failure() -> tuple[bool, str, str]:

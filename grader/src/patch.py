@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Git operations for the patch-grading flow.
 
 The grader applies a participant's patch on a fresh test branch
-inside the eclass-mcp-server checkout, runs the phase tests, then
-cleans up the branch and resets the working tree.
+created from the pinned eclass-mcp-server commit
+(``PATCH_BASELINE_PIN``). The participant's instructions check the
+same commit out before they begin work, so grader and participant
+share a byte-identical baseline regardless of where the upstream
+``main`` branch has advanced. After the phase tests run, the
+cleanup helper deletes the test branch and returns the working
+tree to the pinned commit (detached HEAD).
 
 Build artefacts (object files, shared libraries, the C-replica
 binary) are excluded from the apply so a participant who packaged
@@ -18,6 +23,14 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+
+# Commit the participant applies their patch against, per the
+# participant guide's setup steps. Embedding the pin here means a
+# stale or advanced ``main`` on the operator's local clone cannot
+# silently change the grading baseline; rebasing the pin requires
+# updating this constant in lock-step with the participant package
+# and the rubric narrative.
+PATCH_BASELINE_PIN = "dbd2d16"
 
 EXCLUDE_PATTERNS: tuple[str, ...] = (
     "*.o",
@@ -52,9 +65,13 @@ def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
 
     test_branch = f"{TEST_BRANCH_PREFIX}{patch_path.stem}"
 
-    ok, message = _git(repo_path, "checkout", "main")
+    ok, message = _git(repo_path, "checkout", PATCH_BASELINE_PIN)
     if not ok:
-        return False, f"could not checkout main branch: {message}", message
+        return (
+            False,
+            f"could not checkout patch baseline pin {PATCH_BASELINE_PIN}: {message}",
+            message,
+        )
 
     _git(repo_path, "branch", "-D", test_branch)
 
@@ -80,10 +97,12 @@ def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
 
 
 def cleanup(repo_path: Path) -> tuple[bool, str]:
-    """Restore the main branch and delete any leftover test branches.
+    """Return the working tree to the pinned baseline and delete test branches.
 
-    Idempotent: safe to call when no patch was applied. Deletes
-    every branch with the test prefix.
+    Idempotent: safe to call when no patch was applied. Checks out
+    the patch baseline pin (detached HEAD) so the next grading run
+    starts from the same commit, then deletes every branch with
+    the test prefix.
 
     Args:
         repo_path: Resolved path to the eclass-mcp-server checkout.
@@ -96,9 +115,9 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
     repo_path = Path(repo_path).resolve()
     actions: list[str] = []
 
-    ok, _ = _git(repo_path, "checkout", "main")
+    ok, _ = _git(repo_path, "checkout", PATCH_BASELINE_PIN)
     if ok:
-        actions.append("switched to main")
+        actions.append(f"checked out patch baseline pin {PATCH_BASELINE_PIN}")
 
     branches_ok, branches_out = _git(repo_path, "branch", "--list", f"{TEST_BRANCH_PREFIX}*")
     if branches_ok and branches_out:

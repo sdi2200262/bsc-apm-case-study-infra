@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Protocol-test runner: server spawning, JSON-RPC framing, fixtures.
 
@@ -50,7 +50,7 @@ CLIENT_VERSION = "1.0.0"
 BASELINE_TOOL_NAMES = frozenset({"login", "logout", "get_courses", "authstatus"})
 
 ECLASS_BASE_URL = "http://localhost"
-SSO_DOMAIN = "172.17.0.1:8082"
+SSO_DOMAIN = "172.17.0.1:18443"
 SSO_PROTOCOL = "https"
 
 

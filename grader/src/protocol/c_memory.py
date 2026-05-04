@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 C memory phase aggregator: C.5.1 through C.5.4.
 """

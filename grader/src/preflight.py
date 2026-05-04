@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Pre-flight HTTP probes against the testing environment.
 
@@ -25,7 +25,7 @@ import urllib3
 from .errors import PreflightError
 
 OPENECLASS_URL = "http://localhost/"
-MOCK_CAS_HEALTH_URL = "https://localhost:8082/health"
+MOCK_CAS_HEALTH_URL = "https://localhost:18443/health"
 PROBE_TIMEOUT_SECONDS = 5
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Baseline-tier protocol assertions.
 
@@ -38,6 +38,17 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset({
     "get_course_announcements",
     "get_general_announcements",
 })
+
+# The baseline string constants below are inherited verbatim from
+# the upstream eclass-mcp-server reference at the patch baseline
+# pin (commit dbd2d16). Strict-tier baseline tests (P.1.2-P.1.10
+# and C.2.2-C.2.10) assert exact equality against these strings,
+# so any rebase of the patch baseline pin must re-verify the
+# wording. The `LOGIN_MISSING_CREDS` two-sentence form extends the
+# single-sentence wording documented in
+# eclass-mcp-server/docs/reference/tools-reference.md; C-replica
+# participants reproduce the full string by reading the upstream
+# Python source at src/eclass_mcp_server/server.py.
 
 GET_COURSES_PREAMBLE = f"Found {len(SEED.enrolled_course_codes)} courses:"
 

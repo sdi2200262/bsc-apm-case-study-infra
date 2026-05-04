@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Grader CLI entry point.
 
@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Callable
 
 from .src import (
     build_c,
@@ -204,10 +205,13 @@ def _run_c_phases(
     _record_phase(scorer, "c memory", c_memory.run, eclass_root, mock_root, debug)
 
 
+PhaseRunner = Callable[[Path, Path, bool], dict[str, tuple[bool, str, str]]]
+
+
 def _record_phase(
     scorer: scoring.Scorer,
     label: str,
-    run_func,
+    run_func: PhaseRunner,
     eclass_root: Path,
     mock_root: Path,
     debug: bool,

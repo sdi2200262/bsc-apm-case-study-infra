@@ -55,7 +55,7 @@ monotonically with `days_back`.
 |----|--------|-------------|
 | P.2.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
 | P.2.2 | 1 | Strict: an unparseable `course_url` returns `"Error: Could not extract course code."` |
-| P.2.3 | 1 | Strict: a negative `days_back` returns `"Error: days_back must be a positive integer."` |
+| P.2.3 | 1 | Strict: a negative `days_back` returns `"Error: days_back must be a non-negative integer."` |
 | P.2.4 | 1 | Strict: MATH201 with default `days_back` returns `"No announcements found."` |
 | P.2.5 | 3 | Implementation: `days_back=0` returns the day-zero announcement only (count = 1) |
 | P.2.6 | 3 | Implementation: `days_back=15` returns the two in-scope announcements (count = 2) |
@@ -76,14 +76,21 @@ three `CS101` announcements (0, 15, 30), and three `PHYS150` announcements
 announcements (one admin + one `CS101` + one `PHYS150`), so the expected
 count grows by three per step.
 
+Every implementation-tier and anchor-tier row asserts the count
+preamble, every in-scope body verbatim, that `Source: System` is
+rendered for the admin entries, and that at least two distinct
+enrolled-course attributions appear. The anchor's higher point
+weight reflects coverage of the default `days_back` path with the
+largest expected count, not a stricter assertion shape.
+
 | ID | Points | Description |
 |----|--------|-------------|
 | P.3.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
-| P.3.2 | 1 | Strict: a negative `days_back` returns `"Error: days_back must be a positive integer."` |
+| P.3.2 | 1 | Strict: a negative `days_back` returns `"Error: days_back must be a non-negative integer."` |
 | P.3.3 | 1 | Strict: `days_back=31` returns `"Error: Cannot retrieve announcements older than 30 days."` |
-| P.3.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements (count = 3) |
-| P.3.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements (count = 6) |
-| P.3.6 | 5 | Anchor: default `days_back=30` returns the nine in-scope announcements (count = 9) with `Source: System` present and at least two distinct course-source attributions present |
+| P.3.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements (count = 3) with source attribution |
+| P.3.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements (count = 6) with source attribution |
+| P.3.6 | 5 | Anchor: default `days_back=30` returns the nine in-scope announcements (count = 9) with source attribution |
 
 ## C Replica Implementation (59 points)
 
@@ -131,7 +138,7 @@ difference is which executable serves the JSON-RPC.
 |----|--------|-------------|
 | C.3.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
 | C.3.2 | 1 | Strict: an unparseable `course_url` returns the extract-course-code error |
-| C.3.3 | 1 | Strict: a negative `days_back` returns the positive-integer error |
+| C.3.3 | 1 | Strict: a negative `days_back` returns the non-negative-integer error |
 | C.3.4 | 1 | Strict: MATH201 with default `days_back` returns the no-announcements message |
 | C.3.5 | 3 | Implementation: `days_back=0` returns the day-zero announcement only |
 | C.3.6 | 3 | Implementation: `days_back=15` returns the two in-scope announcements |
@@ -142,16 +149,17 @@ difference is which executable serves the JSON-RPC.
 
 Mirror of P.3 against the C binary. Seed values, the backend's 30-day
 floor, the enrollment filter, and the assertion style match the Python
-feature section above.
+feature section above; every implementation-tier and anchor-tier row
+asserts source attribution.
 
 | ID | Points | Description |
 |----|--------|-------------|
 | C.4.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
-| C.4.2 | 1 | Strict: a negative `days_back` returns the positive-integer error |
+| C.4.2 | 1 | Strict: a negative `days_back` returns the non-negative-integer error |
 | C.4.3 | 1 | Strict: `days_back=31` returns the older-than-30-days error |
-| C.4.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements |
-| C.4.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements |
-| C.4.6 | 5 | Anchor: default `days_back=30` returns the nine in-scope announcements with `Source: System` and at least two distinct course-source attributions present |
+| C.4.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements with source attribution |
+| C.4.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements with source attribution |
+| C.4.6 | 5 | Anchor: default `days_back=30` returns the nine in-scope announcements with source attribution |
 
 ### Memory (13 points)
 

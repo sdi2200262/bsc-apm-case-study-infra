@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Course-announcements protocol assertions.
 
@@ -45,7 +45,7 @@ DEFAULT_DAYS_BACK = 30
 
 ERR_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
 ERR_BAD_URL = "Error: Could not extract course code."
-ERR_BAD_DAYS = "Error: days_back must be a positive integer."
+ERR_BAD_DAYS = "Error: days_back must be a non-negative integer."
 EMPTY_RESULT = "No announcements found."
 
 SERVER_START_FAIL = (False, "Could not start server", "Server failed to start")

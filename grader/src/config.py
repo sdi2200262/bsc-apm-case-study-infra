@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Grader configuration: paths and the ``grader.yaml`` loader.
 
@@ -21,7 +21,7 @@ it.
 The YAML's top-level shape:
 
     paths:
-      mock_root: /path/to/bsc-apm-case-study-env
+      mock_root: /path/to/bsc-apm-case-study-task/installed-prefix
       eclass_root: /path/to/eclass-mcp-server
 
 A missing ``paths`` section is treated as an empty mapping; absent
