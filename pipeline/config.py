@@ -24,7 +24,7 @@ The YAML's top-level shape:
       grader_root: /path/to/bsc-apm-case-study-infra/grader
       eclass_root: /path/to/eclass-mcp-server
       parser_root: /path/to/bsc-apm-case-study-infra/parser
-      mock_root: /path/to/bsc-apm-case-study-task
+      mock_root: ~/.bsc-apm
 
 A missing ``paths`` section is treated as an empty mapping; absent
 keys are treated as no default. The schema is extensible: unknown
