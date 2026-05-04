@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Append one row to the aggregated dataset CSV.
 
@@ -156,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest = load_manifest(config.output_root)
         _verify_combined_checksum(manifest, submission, combined_path)
         combined = read_json(combined_path)
-        row = _build_row(combined)
+        row = _build_row(combined, submission.manifest_key)
         dataset_path = config.output_root / DATASET_FILENAME
         before_checksum = (
             compute_checksum(dataset_path) if dataset_path.exists() else ""
@@ -229,7 +229,14 @@ def _verify_combined_checksum(
     submission: SubmissionName,
     combined_path: Path,
 ) -> None:
-    """Surface a warning when combined.json differs from its manifest checksum."""
+    """Raise when combined.json differs from its manifest checksum.
+
+    A mismatch means the on-disk artifact has been edited or
+    overwritten without the manifest being refreshed. The operator
+    must re-run the combine stage (which rewrites the recorded
+    checksum) before add_to_dataset can proceed, otherwise the
+    dataset row's provenance would not match the bytes it consumed.
+    """
     submission_entry = manifest.get(submission.manifest_key)
     if submission_entry is None:
         return
@@ -238,114 +245,134 @@ def _verify_combined_checksum(
         return
     expected = combine_entry.fields.get("output_checksum", "")
     if expected and not validate_checksum(combined_path, expected):
-        print(
-            f"warning: combined.json checksum differs from manifest entry",
-            file=sys.stderr,
+        raise StageExecutionError(
+            f"add_to_dataset: {submission.manifest_key}: {COMBINED_FILENAME} "
+            f"checksum differs from the manifest entry recorded by the "
+            f"combine stage; re-run pipeline.combine to refresh it"
         )
 
 
-def _build_row(combined: dict[str, Any]) -> dict[str, Any]:
+def _build_row(combined: dict[str, Any], manifest_key: str) -> dict[str, Any]:
     """Project the combined artifact into the flat per-submission CSV row.
 
     Reads only session-scope leaves from the metrics artifact;
-    phase and role decompositions stay in combined.json. Missing
-    keys default to the empty string so the row stays valid even
-    on a malformed upstream (the row's truthiness can be inspected
-    by validate_dataset later).
+    phase and role decompositions stay in combined.json. Every
+    field is required: a malformed combined artifact raises
+    ``StageExecutionError`` naming the submission and the missing
+    key so the operator can locate the malformation in the
+    upstream parser or grader output.
     """
-    metrics = combined.get("metrics", {}) or {}
-    metadata = metrics.get("session_metadata", {}) or {}
-    grading = combined.get("grading", {}) or {}
-    session = metrics.get("session", {}) or {}
-    economic = session.get("economic", {}) or {}
-    process = session.get("process", {}) or {}
-    time_block = process.get("time", {}) or {}
-    user_input = process.get("user_input", {}) or {}
-    reliability = process.get("reliability", {}) or {}
-    supplementary = session.get("supplementary", {}) or {}
-    diagnostics = metrics.get("diagnostics", {}) or {}
-    invariants = diagnostics.get("invariant_checks", {}) or {}
-    failure_count = sum(
-        1
-        for entry in invariants.values()
-        if isinstance(entry, dict) and entry.get("status") != "ok"
-    )
-    turn_prompts_shares = _leaf_value(user_input.get("turn_prompts_bucket_shares"), {}) or {}
-    all_inputs_shares = _leaf_value(user_input.get("all_inputs_bucket_shares"), {}) or {}
-    return {
-        "participant_id": combined.get("participant_id", ""),
-        "session": combined.get("session", ""),
-        "framework": combined.get("framework", ""),
-        "processing_timestamp": combined.get("processing_timestamp", ""),
-        "cc_version": metadata.get("cc_version", ""),
-        "model": metadata.get("model", ""),
-        "model_drift": metadata.get("model_drift", ""),
-        "entrypoint": metadata.get("entrypoint", ""),
-        "auth_mode_indicator": metadata.get("auth_mode_indicator", ""),
-        "service_tier": metadata.get("service_tier", ""),
-        "session_start_timestamp": metadata.get("session_start_timestamp", ""),
-        "session_end_timestamp": metadata.get("session_end_timestamp", ""),
-        "total_score": grading.get("total", {}).get("score", ""),
-        "max_score": grading.get("total", {}).get("max", ""),
-        "python_baseline_score": grading.get("python_baseline", {}).get("score", ""),
-        "python_feature_score": grading.get("python_feature", {}).get("score", ""),
-        "c_replica_score": grading.get("c_replica", {}).get("score", ""),
-        "cost_usd": _leaf_value(economic.get("cost_usd"), ""),
-        "total_input_tokens": _leaf_value(economic.get("total_input_tokens"), ""),
-        "total_output_tokens": _leaf_value(economic.get("total_output_tokens"), ""),
-        "total_cache_read_tokens": _leaf_value(economic.get("total_cache_read_tokens"), ""),
-        "total_cache_5m_tokens": _leaf_value(economic.get("total_cache_5m_tokens"), ""),
-        "total_cache_1h_tokens": _leaf_value(economic.get("total_cache_1h_tokens"), ""),
-        "total_prompt_tokens": _leaf_value(economic.get("total_prompt_tokens"), ""),
-        "main_input_tokens": _leaf_value(economic.get("main_input_tokens"), ""),
-        "main_output_tokens": _leaf_value(economic.get("main_output_tokens"), ""),
-        "delegated_input_tokens": _leaf_value(economic.get("delegated_input_tokens"), ""),
-        "delegated_output_tokens": _leaf_value(economic.get("delegated_output_tokens"), ""),
-        "duration": _leaf_value(time_block.get("duration"), ""),
-        "turn_time": _leaf_value(time_block.get("turn_time"), ""),
-        "turn_time_solo": _leaf_value(time_block.get("turn_time_solo"), ""),
-        "turn_time_concurrent": _leaf_value(time_block.get("turn_time_concurrent"), ""),
-        "inter_turn_time": _leaf_value(time_block.get("inter_turn_time"), ""),
-        "turn_count": _leaf_value(time_block.get("turn_count"), ""),
-        "mean_turn_duration": _leaf_value(time_block.get("mean_turn_duration"), ""),
-        "turn_duration_p50": _leaf_value(time_block.get("turn_duration_p50"), ""),
-        "turn_duration_p95": _leaf_value(time_block.get("turn_duration_p95"), ""),
-        "turn_duration_stdev": _leaf_value(time_block.get("turn_duration_stdev"), ""),
-        "turn_prompt_count": _leaf_value(user_input.get("turn_prompt_count"), ""),
-        "steer_delivered_count": _leaf_value(user_input.get("steer_delivered_count"), ""),
-        "steer_abandoned_count": _leaf_value(user_input.get("steer_abandoned_count"), ""),
-        "steer_attempted_count": _leaf_value(user_input.get("steer_attempted_count"), ""),
-        "turn_prompts_share_protocol": turn_prompts_shares.get("protocol", ""),
-        "turn_prompts_share_short": turn_prompts_shares.get("short", ""),
-        "turn_prompts_share_standard": turn_prompts_shares.get("standard", ""),
-        "all_inputs_share_protocol": all_inputs_shares.get("protocol", ""),
-        "all_inputs_share_short": all_inputs_shares.get("short", ""),
-        "all_inputs_share_standard": all_inputs_shares.get("standard", ""),
-        "tool_success_rate": _leaf_value(reliability.get("tool_success_rate"), ""),
-        "subagent_count": _leaf_value(supplementary.get("subagent_count"), ""),
-        "subagent_tool_count": _leaf_value(supplementary.get("subagent_tool_count"), ""),
-        "reasoning_token_share": _leaf_value(supplementary.get("reasoning_token_share"), ""),
-        "compaction_events_total": diagnostics.get("compaction_events_total", ""),
-        "cost_excludes_compaction_synthesis": diagnostics.get("cost_excludes_compaction_synthesis", ""),
-        "synthetic_assistant_records_excluded": diagnostics.get("synthetic_assistant_records_excluded", ""),
-        "agent_dispatches_without_usage": diagnostics.get("agent_dispatches_without_usage", ""),
-        "entrypoint_valid": diagnostics.get("entrypoint_valid", ""),
-        "auth_mode_valid": diagnostics.get("auth_mode_valid", ""),
-        "invariant_failures": failure_count,
-    }
+    try:
+        metrics = combined["metrics"]
+        grading = combined["grading"]
+        metadata = metrics["session_metadata"]
+        session = metrics["session"]
+        diagnostics = metrics["diagnostics"]
+        economic = session["economic"]
+        process = session["process"]
+        supplementary = session["supplementary"]
+        time_block = process["time"]
+        user_input = process["user_input"]
+        reliability = process["reliability"]
+        invariants = diagnostics["invariant_checks"]
+        turn_prompts_shares = _leaf_value(user_input, "turn_prompts_bucket_shares")
+        all_inputs_shares = _leaf_value(user_input, "all_inputs_bucket_shares")
+        row = {
+            "participant_id": combined["participant_id"],
+            "session": combined["session"],
+            "framework": combined["framework"],
+            "processing_timestamp": combined["processing_timestamp"],
+            "cc_version": metadata["cc_version"],
+            "model": metadata["model"],
+            "model_drift": metadata["model_drift"],
+            "entrypoint": metadata["entrypoint"],
+            "auth_mode_indicator": metadata["auth_mode_indicator"],
+            "service_tier": metadata["service_tier"],
+            "session_start_timestamp": metadata["session_start_timestamp"],
+            "session_end_timestamp": metadata["session_end_timestamp"],
+            "total_score": grading["total"]["score"],
+            "max_score": grading["total"]["max"],
+            "python_baseline_score": grading["python_baseline"]["score"],
+            "python_feature_score": grading["python_feature"]["score"],
+            "c_replica_score": grading["c_replica"]["score"],
+            "cost_usd": _leaf_value(economic, "cost_usd"),
+            "total_input_tokens": _leaf_value(economic, "total_input_tokens"),
+            "total_output_tokens": _leaf_value(economic, "total_output_tokens"),
+            "total_cache_read_tokens": _leaf_value(economic, "total_cache_read_tokens"),
+            "total_cache_5m_tokens": _leaf_value(economic, "total_cache_5m_tokens"),
+            "total_cache_1h_tokens": _leaf_value(economic, "total_cache_1h_tokens"),
+            "total_prompt_tokens": _leaf_value(economic, "total_prompt_tokens"),
+            "main_input_tokens": _leaf_value(economic, "main_input_tokens"),
+            "main_output_tokens": _leaf_value(economic, "main_output_tokens"),
+            "delegated_input_tokens": _leaf_value(economic, "delegated_input_tokens"),
+            "delegated_output_tokens": _leaf_value(economic, "delegated_output_tokens"),
+            "duration": _leaf_value(time_block, "duration"),
+            "turn_time": _leaf_value(time_block, "turn_time"),
+            "turn_time_solo": _leaf_value(time_block, "turn_time_solo"),
+            "turn_time_concurrent": _leaf_value(time_block, "turn_time_concurrent"),
+            "inter_turn_time": _leaf_value(time_block, "inter_turn_time"),
+            "turn_count": _leaf_value(time_block, "turn_count"),
+            "mean_turn_duration": _leaf_value(time_block, "mean_turn_duration"),
+            "turn_duration_p50": _leaf_value(time_block, "turn_duration_p50"),
+            "turn_duration_p95": _leaf_value(time_block, "turn_duration_p95"),
+            "turn_duration_stdev": _leaf_value(time_block, "turn_duration_stdev"),
+            "turn_prompt_count": _leaf_value(user_input, "turn_prompt_count"),
+            "steer_delivered_count": _leaf_value(user_input, "steer_delivered_count"),
+            "steer_abandoned_count": _leaf_value(user_input, "steer_abandoned_count"),
+            "steer_attempted_count": _leaf_value(user_input, "steer_attempted_count"),
+            "turn_prompts_share_protocol": turn_prompts_shares["protocol"],
+            "turn_prompts_share_short": turn_prompts_shares["short"],
+            "turn_prompts_share_standard": turn_prompts_shares["standard"],
+            "all_inputs_share_protocol": all_inputs_shares["protocol"],
+            "all_inputs_share_short": all_inputs_shares["short"],
+            "all_inputs_share_standard": all_inputs_shares["standard"],
+            "tool_success_rate": _leaf_value(reliability, "tool_success_rate"),
+            "subagent_count": _leaf_value(supplementary, "subagent_count"),
+            "subagent_tool_count": _leaf_value(supplementary, "subagent_tool_count"),
+            "reasoning_token_share": _leaf_value(supplementary, "reasoning_token_share"),
+            "compaction_events_total": diagnostics["compaction_events_total"],
+            "cost_excludes_compaction_synthesis": diagnostics["cost_excludes_compaction_synthesis"],
+            "synthetic_assistant_records_excluded": diagnostics["synthetic_assistant_records_excluded"],
+            "agent_dispatches_without_usage": diagnostics["agent_dispatches_without_usage"],
+            "entrypoint_valid": diagnostics["entrypoint_valid"],
+            "auth_mode_valid": diagnostics["auth_mode_valid"],
+            "invariant_failures": sum(
+                1
+                for entry in invariants.values()
+                if isinstance(entry, dict) and entry.get("status") != "ok"
+            ),
+        }
+    except KeyError as error:
+        raise StageExecutionError(
+            f"add_to_dataset: {manifest_key}: combined.json missing required "
+            f"field {error}"
+        ) from error
+    except TypeError as error:
+        raise StageExecutionError(
+            f"add_to_dataset: {manifest_key}: combined.json has unexpected "
+            f"structure: {error}"
+        ) from error
+    return row
 
 
-def _leaf_value(leaf: Any, default: Any) -> Any:
-    """Unwrap a measurement leaf's ``value`` field, or return ``default``.
+def _leaf_value(parent: dict[str, Any], key: str) -> Any:
+    """Return ``parent[key]["value"]`` for a parser-side measurement leaf.
 
     Every parser-side measurement is wrapped in a
-    ``{value, anchor, constructed}`` triple. The dataset CSV
-    captures the value only; anchor and constructed flags travel
-    with combined.json for downstream consumers that want them.
+    ``{value, anchor, constructed}`` triple; the dataset CSV
+    captures the value only. Anchor and constructed flags travel
+    with combined.json for downstream consumers.
+
+    Raises ``KeyError`` when ``parent[key]`` or its ``value`` field
+    is missing; the caller's outer ``except KeyError`` re-raises as
+    ``StageExecutionError`` with submission context.
     """
-    if isinstance(leaf, dict) and "value" in leaf:
-        return leaf["value"]
-    return default
+    if key not in parent:
+        raise KeyError(key)
+    leaf = parent[key]
+    if not isinstance(leaf, dict) or "value" not in leaf:
+        raise KeyError(f"{key}.value")
+    return leaf["value"]
 
 
 def _append_row(dataset_path: Path, row: dict[str, Any]) -> int:

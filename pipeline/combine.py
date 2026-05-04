@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 Combine grader and parser outputs into a single per-submission artifact.
 
@@ -163,13 +163,14 @@ def _verify_upstream_checksums(
     results_path: Path,
     metrics_path: Path,
 ) -> None:
-    """Surface a warning when an upstream artifact differs from its manifest checksum.
+    """Raise when an upstream artifact differs from its manifest checksum.
 
-    A mismatch typically means the file has been edited or a stage
-    has been re-run without the manifest being updated; the
-    combine stage proceeds either way (the new content is what the
-    operator chose to keep) but a stale upstream is worth
-    flagging.
+    A mismatch means the on-disk artifact has been edited or
+    overwritten without the manifest being refreshed. The operator
+    must re-run the upstream stage (which rewrites the manifest's
+    recorded checksum) before combine can proceed, otherwise the
+    combined artifact would record provenance that does not match
+    the bytes it consumed.
     """
     submission_entry = manifest.get(submission.manifest_key)
     if submission_entry is None:
@@ -179,16 +180,18 @@ def _verify_upstream_checksums(
     if grade_entry is not None:
         expected = grade_entry.fields.get("output_checksum", "")
         if expected and not validate_checksum(results_path, expected):
-            print(
-                f"warning: results.json checksum differs from manifest entry",
-                file=sys.stderr,
+            raise StageExecutionError(
+                f"combine: {submission.manifest_key}: {results_path.name} "
+                f"checksum differs from the manifest entry recorded by the "
+                f"grade stage; re-run pipeline.grade to refresh it"
             )
     if parse_entry is not None:
         expected = parse_entry.fields.get("output_checksum", "")
         if expected and not validate_checksum(metrics_path, expected):
-            print(
-                f"warning: metrics.json checksum differs from manifest entry",
-                file=sys.stderr,
+            raise StageExecutionError(
+                f"combine: {submission.manifest_key}: {metrics_path.name} "
+                f"checksum differs from the manifest entry recorded by the "
+                f"parse stage; re-run pipeline.parse to refresh it"
             )
 
 
@@ -205,7 +208,7 @@ def _build_combined(
     timestamp is the wall-clock time the combine stage ran; it
     does not match either upstream stage's timestamp.
     """
-    grading = _extract_grading(results_payload)
+    grading = _extract_grading(results_payload, submission.manifest_key)
     return {
         "participant_id": submission.pid,
         "session": submission.session,
@@ -216,48 +219,45 @@ def _build_combined(
     }
 
 
-def _extract_grading(results_payload: Any) -> dict[str, Any]:
+def _extract_grading(results_payload: Any, manifest_key: str) -> dict[str, Any]:
     """Flatten the grader's nested score structure into the combined wrapper.
 
     The grader's ``scores`` block carries Python under
-    ``scores.python.{baseline,feature,total}`` and C under
-    ``scores.c.total``. The combined artifact's ``grading`` block
-    surfaces the three rubric categories separately (so analysis
-    can compare per-category) plus the overall total computed
-    from ``grand_total`` when present, otherwise summed from the
-    per-category fields.
-
-    A malformed results payload raises ``StageExecutionError``.
+    ``scores.python.{baseline,feature}`` and C under
+    ``scores.c.total``, plus an overall ``scores.grand_total``.
+    Every field is required; a malformed results payload raises
+    ``StageExecutionError`` naming the submission and the missing
+    field path.
     """
     if not isinstance(results_payload, dict):
         raise StageExecutionError(
-            "combine: results.json top level must be an object"
+            f"combine: {manifest_key}: results.json top level must be an object"
         )
-    scores = results_payload.get("scores")
-    if not isinstance(scores, dict):
+    try:
+        scores = results_payload["scores"]
+        python = scores["python"]
+        python_baseline = _score_pair(
+            python["baseline"], manifest_key, "scores.python.baseline"
+        )
+        python_feature = _score_pair(
+            python["feature"], manifest_key, "scores.python.feature"
+        )
+        c_total = _score_pair(
+            scores["c"]["total"], manifest_key, "scores.c.total"
+        )
+        total = _score_pair(
+            scores["grand_total"], manifest_key, "scores.grand_total"
+        )
+    except KeyError as error:
         raise StageExecutionError(
-            "combine: results.json missing 'scores' object"
-        )
-    python = scores.get("python", {}) or {}
-    python_baseline = _score_pair(python.get("baseline"), default_max=12)
-    python_feature = _score_pair(python.get("feature"), default_max=36)
-    c_total = _score_pair(scores.get("c", {}).get("total"), default_max=52)
-    grand_total = scores.get("grand_total")
-    if isinstance(grand_total, dict):
-        total = _score_pair(grand_total, default_max=100)
-    else:
-        total = {
-            "score": (
-                python_baseline["score"]
-                + python_feature["score"]
-                + c_total["score"]
-            ),
-            "max": (
-                python_baseline["max"]
-                + python_feature["max"]
-                + c_total["max"]
-            ),
-        }
+            f"combine: {manifest_key}: results.json missing required field "
+            f"{error}"
+        ) from error
+    except TypeError as error:
+        raise StageExecutionError(
+            f"combine: {manifest_key}: results.json has unexpected structure: "
+            f"{error}"
+        ) from error
     return {
         "total": total,
         "python_baseline": python_baseline,
@@ -266,15 +266,27 @@ def _extract_grading(results_payload: Any) -> dict[str, Any]:
     }
 
 
-def _score_pair(value: Any, default_max: int) -> dict[str, int]:
-    """Return ``{"score": int, "max": int}`` from a possibly-missing nested score block."""
-    if isinstance(value, dict):
-        score = value.get("score", 0)
-        maximum = value.get("max", default_max)
-    else:
-        score = 0
-        maximum = default_max
-    return {"score": int(score), "max": int(maximum)}
+def _score_pair(value: Any, manifest_key: str, field_path: str) -> dict[str, int]:
+    """Return ``{"score": int, "max": int}`` from a score block.
+
+    Raises ``StageExecutionError`` when ``value`` is not an object or
+    is missing either required key, naming the submission and the
+    field path so the operator can locate the malformation.
+    """
+    if not isinstance(value, dict):
+        raise StageExecutionError(
+            f"combine: {manifest_key}: {field_path} must be an object, "
+            f"got {type(value).__name__}"
+        )
+    if "score" not in value:
+        raise StageExecutionError(
+            f"combine: {manifest_key}: {field_path}.score is missing"
+        )
+    if "max" not in value:
+        raise StageExecutionError(
+            f"combine: {manifest_key}: {field_path}.max is missing"
+        )
+    return {"score": int(value["score"]), "max": int(value["max"])}
 
 
 if __name__ == "__main__":

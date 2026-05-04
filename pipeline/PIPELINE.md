@@ -169,9 +169,9 @@ fields.
         "output_checksum": "sha256:...",
         "score": "87/100",
         "score_breakdown": {
-          "python_baseline": "12/12",
-          "python_feature": "31/36",
-          "c_replica": "44/52"
+          "python_baseline": "10/10",
+          "python_feature": "25/31",
+          "c_replica": "52/59"
         }
       },
       "parse": {

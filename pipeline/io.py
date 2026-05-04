@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2025-2026 BSc Case Study Grader Contributors
+# Copyright (C) BSc APM Case Study 2025-2026
 """
 File input and output helpers shared across the pipeline package.
 
@@ -73,15 +73,17 @@ def validate_checksum(path: Path, expected: str) -> bool:
     """Verify a file's content against an expected ``"sha256:<hex>"`` checksum.
 
     Args:
-        path: Path to the file to verify.
+        path: Path to the file to verify. The caller is responsible
+            for confirming the file exists; this helper does not
+            check, and a missing file surfaces as ``OSError`` from
+            the underlying read.
         expected: The expected checksum string with prefix.
 
     Returns:
-        ``True`` when the file exists and the recomputed checksum
-        equals ``expected``; ``False`` otherwise. A missing file
-        returns ``False`` rather than raising so callers can use
-        this helper inside boolean expressions.
+        ``True`` when the recomputed checksum equals ``expected``,
+        ``False`` otherwise.
+
+    Raises:
+        OSError: When the file cannot be read.
     """
-    if not path.exists():
-        return False
     return compute_checksum(path) == expected
