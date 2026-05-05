@@ -41,7 +41,14 @@ directories under both `_staging/` and the per-participant tree.
 ```
 solution.patch
 transcripts/
-├── <sessionId>.jsonl
+├── <sessionId>.jsonl                   (main session)
+├── <sessionId>/                        (sibling, when the session
+│   ├── subagents/                       had subagent dispatches or
+│   │   ├── agent-<agentId>.jsonl        cached tool results)
+│   │   ├── agent-<agentId>.meta.json
+│   │   └── ...
+│   └── tool-results/
+│       └── <toolUseId>.<ext>
 ├── <sessionId>.jsonl
 └── ...
 ```
@@ -50,23 +57,36 @@ Two entries at the zip's root:
 
 - `solution.patch`: the patch the participant produced against the
   pinned baseline. Consumed by the grader.
-- `transcripts/`: a flat directory of one or more
-  `<sessionId>.jsonl` files copied straight from
-  `~/.claude/projects/<dashed-cwd>/`. Filenames stay as the UUIDs
-  Claude Code wrote them with. Consumed by the parser.
+- `transcripts/`: per-session content copied straight from
+  `~/.claude/projects/<dashed-cwd>/`. Top-level entries are
+  `<sessionId>.jsonl` main-session files plus `<sessionId>/`
+  subdirectories carrying the auxiliary records Claude Code wrote
+  alongside that session (`subagents/agent-<agentId>.jsonl` for
+  every Task-tool dispatch and `tool-results/<toolUseId>.<ext>`
+  for cached tool outputs). Each `<sessionId>/` subdirectory's
+  name must match a top-level `<sessionId>.jsonl`. Sessions with
+  no subagent dispatches and no cached tool results have no
+  subdirectory and ship as a bare `.jsonl` only. Consumed by the
+  parser.
 
 Participants produce this layout by following the guide's wrap-up
 step: from inside the workspace directory, `zip -r
 {PID}_S{1|2}_{apm|speckit}.zip solution.patch transcripts/`. The
-validate stage extracts the contents into the manifest-keyed
-staging directory at `<output-root>/_staging/<manifest_key>/`.
+participant package's `collect-chats.py` helper copies each
+selected main transcript alongside its sibling subdirectory
+recursively. The validate stage extracts the contents into the
+manifest-keyed staging directory at
+`<output-root>/_staging/<manifest_key>/`.
 
-The guide instructs participants to omit the per-session
-`<sessionId>/subagents/` and `<sessionId>/tool-results/`
-subdirectories Claude Code writes alongside the JSONL files; the
-validate stage rejects nested files or directories under
-`transcripts/` so the dataset stays free of artifacts the parser
-does not consume.
+The validate stage enforces the structural shape (top-level
+`.jsonl` files, `<sessionId>/` subdirectories with matching main
+files, only `subagents/` and `tool-results/` under each session
+subdirectory, only `agent-<id>.jsonl` and `agent-<id>.meta.json`
+under `subagents/`). Semantic completeness (every `Agent`
+dispatch having a matching subagent file) is enforced by the
+parser at parse time as a strict `KeyError` rather than at
+validate time, so the contract violation surfaces with the
+specific missing `agentId` named in the error.
 
 ## Processing sequence
 
@@ -117,7 +137,12 @@ promoted artifacts.
 │   ├── P001_S1_apm/
 │   │   ├── solution.patch
 │   │   └── transcripts/
-│   │       └── <sessionId>.jsonl
+│   │       ├── <sessionId>.jsonl
+│   │       └── <sessionId>/
+│   │           ├── subagents/
+│   │           │   └── agent-<agentId>.jsonl
+│   │           └── tool-results/
+│   │               └── <toolUseId>.<ext>
 │   └── P001_S2_speckit/
 │       └── ...
 └── P001/
@@ -126,7 +151,10 @@ promoted artifacts.
     │   ├── metrics.json
     │   ├── combined.json
     │   └── sanitized_transcripts/
-    │       └── sanitized_<sessionId>.json
+    │       ├── sanitized_<sessionId>.json
+    │       └── <sessionId>/
+    │           └── subagents/
+    │               └── sanitized_agent-<agentId>.json
     └── S2_speckit/
         └── ...
 ```

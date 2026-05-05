@@ -9,32 +9,45 @@ The submission zip contract:
 * Filename matches ``{PID}_S{1|2}_{apm|speckit}.zip``.
 * The zip's root contains exactly two entries: ``solution.patch``
   (the patch the grader will apply against baseline) and
-  ``transcripts/`` (a flat directory of one or more
-  ``<sessionId>.jsonl`` files copied from
-  ``~/.claude/projects/<dashed-cwd>/``). Participants produce this
-  layout by following the guide's wrap-up step: from inside the
-  workspace directory, ``zip -r <name>.zip solution.patch
-  transcripts/``.
+  ``transcripts/``. Participants produce this layout by following
+  the guide's wrap-up step: from inside the workspace directory,
+  ``zip -r <name>.zip solution.patch transcripts/``.
 * No other files or directories at the zip's root.
-* Inside ``transcripts/``: every entry is a ``*.jsonl`` file at
-  the top level, no subdirectories. The guide instructs
-  participants to omit the sibling ``<sessionId>/`` directories
-  (``subagents/`` and ``tool-results/`` content Claude Code writes
-  alongside the JSONL files); the validate stage rejects them so
-  their content stays out of the dataset's measurement scope.
+* Inside ``transcripts/``: top-level entries are either
+  ``<sessionId>.jsonl`` main-session files (one per main session
+  Claude Code wrote under ``~/.claude/projects/<dashed-cwd>/``) or
+  ``<sessionId>/`` subdirectories carrying the auxiliary records
+  Claude Code wrote alongside that session. Each
+  ``<sessionId>/`` subdirectory's name must match a top-level
+  ``<sessionId>.jsonl`` file (no orphan subdirectories), and its
+  contents are restricted to ``subagents/agent-<agentId>.jsonl``
+  files and ``tool-results/`` files. Sessions with no subagent
+  dispatches and no cached tool results have no subdirectory and
+  ship as a bare ``.jsonl`` only.
 
 The validate stage:
 
 1. Parses the zip filename into a ``SubmissionName``.
 2. Inspects the zip's contents without extracting: confirms the
-   exact two-entry structure, the patch presence, and the
-   transcripts contents.
+   exact two-entry structure at the root, the patch presence, and
+   the transcripts contents (top-level ``.jsonl`` files plus
+   well-formed ``<sessionId>/`` subdirectories with matching main
+   files).
 3. Extracts to ``<output-root>/_staging/<manifest_key>/`` when
    the zip layout is well-formed.
 4. Records the validate stage entry in
    ``<output-root>/pipeline_manifest.json`` with the input zip
    checksum, the extracted staging path, the transcript file
-   count, and any non-fatal warnings.
+   count, the session-subdirectory count, and any non-fatal
+   warnings.
+
+The validate stage enforces structural shape only; semantic
+completeness (every ``Agent`` dispatch in a main JSONL having a
+matching ``subagents/agent-<agentId>.jsonl`` sibling) is the
+parser's responsibility and is enforced as a strict
+``KeyError`` at parse time. A submission whose subagent files are
+absent for dispatches that did happen passes validate but fails
+parse with a descriptive error pointing at the missing file.
 
 A non-zero exit code is returned on filename mismatch, on layout
 violations that prevent extraction, on extraction errors, and on
@@ -69,6 +82,11 @@ STAGING_DIRNAME = "_staging"
 TRANSCRIPTS_DIRNAME = "transcripts"
 PATCH_FILENAME = "solution.patch"
 JSONL_SUFFIX = ".jsonl"
+SUBAGENTS_DIRNAME = "subagents"
+TOOL_RESULTS_DIRNAME = "tool-results"
+SUBAGENT_FILENAME_PREFIX = "agent-"
+SUBAGENT_META_SUFFIX = ".meta.json"
+ALLOWED_SESSION_SUBDIRS = frozenset({SUBAGENTS_DIRNAME, TOOL_RESULTS_DIRNAME})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
             input_checksum=compute_checksum(args.zip_path),
             staging_path=str(staging_dir.relative_to(args.output_root)),
             transcripts_count=layout.transcripts_count,
+            session_subdirs_count=layout.session_subdirs_count,
             warnings=warnings,
         )
         save_manifest(manifest)
@@ -117,7 +136,9 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"validated: {submission.manifest_key} "
         f"({layout.transcripts_count} transcript file"
-        f"{'s' if layout.transcripts_count != 1 else ''}); "
+        f"{'s' if layout.transcripts_count != 1 else ''}, "
+        f"{layout.session_subdirs_count} session subdirector"
+        f"{'ies' if layout.session_subdirs_count != 1 else 'y'}); "
         f"unpacked to {staging_dir.relative_to(args.output_root)}"
     )
     return 0
@@ -160,8 +181,14 @@ class _Layout:
     ``add_stage``, not this class.
     """
 
-    def __init__(self, transcripts_count: int, warnings: list[str]) -> None:
+    def __init__(
+        self,
+        transcripts_count: int,
+        session_subdirs_count: int,
+        warnings: list[str],
+    ) -> None:
         self.transcripts_count = transcripts_count
+        self.session_subdirs_count = session_subdirs_count
         self.warnings = warnings
 
 
@@ -190,9 +217,15 @@ def _validate_layout(zip_path: Path, submission: SubmissionName) -> _Layout:
         ) from error
     rooted = _normalise_entries(entries)
     _require_entry(rooted, PATCH_FILENAME, zip_path)
-    transcripts_count, warnings = _validate_transcripts(rooted, zip_path)
+    transcripts_count, session_subdirs_count, warnings = _validate_transcripts(
+        rooted, zip_path
+    )
     _reject_unknown_top_level(rooted, zip_path)
-    return _Layout(transcripts_count=transcripts_count, warnings=warnings)
+    return _Layout(
+        transcripts_count=transcripts_count,
+        session_subdirs_count=session_subdirs_count,
+        warnings=warnings,
+    )
 
 
 def _normalise_entries(entries: list[str]) -> list[str]:
@@ -220,54 +253,170 @@ def _require_entry(rooted: list[str], name: str, zip_path: Path) -> None:
 def _validate_transcripts(
     rooted: list[str],
     zip_path: Path,
-) -> tuple[int, list[str]]:
-    """Confirm the transcripts directory contains only ``*.jsonl`` files.
+) -> tuple[int, int, list[str]]:
+    """Confirm the transcripts directory matches the per-session shape.
 
-    Returns the number of JSONL files found and a list of
-    non-fatal warnings (empty-file warnings, future-extension
-    warnings if any). Non-jsonl files inside ``transcripts/`` are
-    fatal.
+    Top-level entries inside ``transcripts/`` are either main
+    ``<sessionId>.jsonl`` files or ``<sessionId>/`` subdirectories
+    whose name matches a top-level main file. Inside each
+    subdirectory only ``subagents/`` and ``tool-results/`` are
+    accepted; ``subagents/`` may only hold ``agent-<id>.jsonl``
+    files, ``tool-results/`` may hold any file. Sessions with no
+    subagent dispatches and no cached tool results have no
+    subdirectory.
+
+    Returns:
+        Tuple ``(transcripts_count, session_subdirs_count,
+        warnings)``. ``transcripts_count`` is the number of
+        top-level ``*.jsonl`` files; ``session_subdirs_count`` is
+        the number of ``<sessionId>/`` subdirectories; ``warnings``
+        accumulates any non-fatal observations (currently empty).
+
+    Raises:
+        SubmissionFormatError: When an entry violates the shape
+            rules (non-jsonl at the top level, unexpected
+            subdirectory under a session directory, malformed
+            subagent filename, sub-subdirectory under
+            ``subagents/`` or ``tool-results/``, orphan session
+            subdirectory with no matching top-level file, or no
+            top-level ``.jsonl`` files at all).
     """
     prefix = f"{TRANSCRIPTS_DIRNAME}/"
-    count = 0
+    main_jsonls: set[str] = set()
+    session_subdirs: set[str] = set()
     warnings: list[str] = []
     has_dir = False
     for entry in rooted:
-        if entry == prefix or entry == TRANSCRIPTS_DIRNAME:
+        if entry == TRANSCRIPTS_DIRNAME or entry == prefix:
             has_dir = True
             continue
         if not entry.startswith(prefix):
             continue
         has_dir = True
         relative = entry[len(prefix):]
-        if relative.endswith("/"):
-            raise SubmissionFormatError(
-                f"validate: nested directory under transcripts/ in "
-                f"{zip_path.name}: {relative!r}; the parser does not consume "
-                f"subagent or tool-result subdirectories"
+        if not relative:
+            continue
+        is_dir_marker = relative.endswith("/")
+        rel = relative.rstrip("/")
+        if not rel:
+            continue
+        parts = rel.split("/")
+        if len(parts) == 1:
+            _classify_top_level(parts[0], is_dir_marker, main_jsonls, session_subdirs, zip_path)
+        elif len(parts) == 2:
+            _classify_session_child(parts[0], parts[1], is_dir_marker, session_subdirs, zip_path)
+        elif len(parts) == 3:
+            _classify_session_grandchild(
+                parts[0], parts[1], parts[2], is_dir_marker, session_subdirs, zip_path
             )
-        if "/" in relative:
+        else:
             raise SubmissionFormatError(
-                f"validate: nested file under transcripts/ in {zip_path.name}: "
-                f"{relative!r}; transcripts must be flat"
-            )
-        if not relative.endswith(JSONL_SUFFIX):
-            raise SubmissionFormatError(
-                f"validate: non-JSONL file in transcripts/ of "
+                f"validate: unexpected deep nesting under transcripts/ in "
                 f"{zip_path.name}: {relative!r}"
             )
-        count += 1
     if not has_dir:
         raise SubmissionFormatError(
             f"validate: required directory {TRANSCRIPTS_DIRNAME}/ missing "
             f"from {zip_path.name}"
         )
-    if count == 0:
+    if not main_jsonls:
         raise SubmissionFormatError(
-            f"validate: transcripts/ directory empty in {zip_path.name}; "
-            f"at least one .jsonl file is required"
+            f"validate: transcripts/ contains no top-level *.jsonl files in "
+            f"{zip_path.name}; at least one main session transcript is required"
         )
-    return count, warnings
+    orphans = sorted(session_subdirs - main_jsonls)
+    if orphans:
+        raise SubmissionFormatError(
+            f"validate: transcripts/ in {zip_path.name} carries session "
+            f"subdirectories with no matching <sessionId>.jsonl: {orphans!r}"
+        )
+    return len(main_jsonls), len(session_subdirs), warnings
+
+
+def _classify_top_level(
+    name: str,
+    is_dir_marker: bool,
+    main_jsonls: set[str],
+    session_subdirs: set[str],
+    zip_path: Path,
+) -> None:
+    """Record a top-level entry under ``transcripts/`` as a main file or session subdir."""
+    if is_dir_marker:
+        session_subdirs.add(name)
+        return
+    if not name.endswith(JSONL_SUFFIX):
+        raise SubmissionFormatError(
+            f"validate: non-JSONL file at transcripts/ root in {zip_path.name}: "
+            f"{name!r}"
+        )
+    main_jsonls.add(name[: -len(JSONL_SUFFIX)])
+
+
+def _classify_session_child(
+    session_id: str,
+    child: str,
+    is_dir_marker: bool,
+    session_subdirs: set[str],
+    zip_path: Path,
+) -> None:
+    """Validate an entry of the form ``transcripts/<sessionId>/<child>``.
+
+    The only well-formed direct children of a session subdirectory
+    are the ``subagents/`` and ``tool-results/`` subdirectory
+    markers; stray files at the session root are rejected.
+    """
+    session_subdirs.add(session_id)
+    if not is_dir_marker:
+        raise SubmissionFormatError(
+            f"validate: stray file directly under transcripts/{session_id}/ in "
+            f"{zip_path.name}: {child!r}; per-session content lives under "
+            f"subagents/ or tool-results/"
+        )
+    if child not in ALLOWED_SESSION_SUBDIRS:
+        raise SubmissionFormatError(
+            f"validate: unexpected subdirectory under transcripts/{session_id}/ "
+            f"in {zip_path.name}: {child!r}; only "
+            f"{sorted(ALLOWED_SESSION_SUBDIRS)} are permitted"
+        )
+
+
+def _classify_session_grandchild(
+    session_id: str,
+    bucket: str,
+    leaf: str,
+    is_dir_marker: bool,
+    session_subdirs: set[str],
+    zip_path: Path,
+) -> None:
+    """Validate an entry of the form ``transcripts/<sessionId>/<bucket>/<leaf>``.
+
+    Inside ``subagents/``, leaves must be ``agent-<id>.jsonl``
+    files; inside ``tool-results/``, any filename is permitted.
+    Sub-subdirectories under either bucket are rejected.
+    """
+    session_subdirs.add(session_id)
+    if bucket not in ALLOWED_SESSION_SUBDIRS:
+        raise SubmissionFormatError(
+            f"validate: unexpected nesting transcripts/{session_id}/{bucket}/ "
+            f"in {zip_path.name}; only {sorted(ALLOWED_SESSION_SUBDIRS)} are "
+            f"permitted under a session subdirectory"
+        )
+    if is_dir_marker:
+        raise SubmissionFormatError(
+            f"validate: unexpected sub-subdirectory under "
+            f"transcripts/{session_id}/{bucket}/ in {zip_path.name}: {leaf!r}"
+        )
+    if bucket == SUBAGENTS_DIRNAME:
+        prefix_ok = leaf.startswith(SUBAGENT_FILENAME_PREFIX)
+        suffix_ok = leaf.endswith(JSONL_SUFFIX) or leaf.endswith(SUBAGENT_META_SUFFIX)
+        if not (prefix_ok and suffix_ok):
+            raise SubmissionFormatError(
+                f"validate: unexpected file under "
+                f"transcripts/{session_id}/{SUBAGENTS_DIRNAME}/ in "
+                f"{zip_path.name}: {leaf!r}; expected "
+                f"{SUBAGENT_FILENAME_PREFIX}<id>{JSONL_SUFFIX} or "
+                f"{SUBAGENT_FILENAME_PREFIX}<id>{SUBAGENT_META_SUFFIX}"
+            )
 
 
 def _reject_unknown_top_level(rooted: list[str], zip_path: Path) -> None:

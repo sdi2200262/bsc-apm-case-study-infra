@@ -289,12 +289,17 @@ def _invoke_sanitize_and_promote(
             f"{stderr_tail[0]}"
         )
     promoted: list[str] = []
-    for entry in transcripts_dir.iterdir():
+    candidates = list(transcripts_dir.glob(f"{SANITIZED_PREFIX}*.json")) + list(
+        transcripts_dir.glob(f"*/subagents/{SANITIZED_PREFIX}*.json")
+    )
+    for entry in candidates:
         if not entry.name.startswith(SANITIZED_PREFIX) or entry.suffix != ".json":
             continue
-        destination = sanitized_dir / entry.name
+        relative = entry.relative_to(transcripts_dir)
+        destination = sanitized_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(entry), str(destination))
-        promoted.append(entry.name)
+        promoted.append(str(relative))
     promoted.sort()
     return promoted
 

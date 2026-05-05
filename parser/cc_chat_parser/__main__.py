@@ -55,7 +55,7 @@ from .buckets import DEFAULT_SHORT_THRESHOLD
 from .cli_render import print_economic, print_inspection, print_process
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .io import is_sanitised_payload, load_json, write_file_text, write_json
-from .loader import discover_conversation_files
+from .loader import discover_conversation_files, discover_sanitisable_jsonl_files
 from .metrics.economic import compute_session_economic
 from .rates import (
     RateTableError,
@@ -245,12 +245,18 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_sanitize(path: Path) -> int:
-    """Encrypt every ``*.jsonl`` file at ``path`` and write a sidecar next to it."""
+    """Encrypt every JSONL under ``path`` and write a sidecar next to each input.
+
+    Walks the main session ``*.jsonl`` files at the top level plus
+    every ``<sessionId>/subagents/agent-*.jsonl`` file Claude Code
+    writes alongside them, so subagent transcripts are sealed
+    alongside their parents instead of staying in plaintext.
+    """
     secret = _read_secret()
     if secret is None:
         return 1
     try:
-        files = discover_conversation_files(path)
+        files = discover_sanitisable_jsonl_files(path)
     except SchemaError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -263,7 +269,13 @@ def _run_sanitize(path: Path) -> int:
 
 
 def _run_unsanitize(path: Path) -> int:
-    """Decrypt every sanitised sidecar at ``path`` and write the restored JSONL."""
+    """Decrypt every sanitised sidecar at ``path`` and write the restored JSONL.
+
+    Walks both the top-level ``sanitized_*.json`` sidecars and any
+    sibling ``<sessionId>/subagents/sanitized_*.json`` so subagent
+    sidecars produced by ``--sanitize`` round-trip back to their
+    original JSONLs in place.
+    """
     secret = _read_secret()
     if secret is None:
         return 1
@@ -274,7 +286,9 @@ def _run_unsanitize(path: Path) -> int:
     if resolved.is_file():
         candidates = [resolved]
     else:
-        candidates = sorted(resolved.glob("*.json"))
+        top_level = sorted(resolved.glob("*.json"))
+        nested = sorted(resolved.glob("*/subagents/*.json"))
+        candidates = top_level + nested
     if not candidates:
         print(f"error: no sanitised sidecar files found at {resolved}", file=sys.stderr)
         return 1

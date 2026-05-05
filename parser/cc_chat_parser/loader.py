@@ -186,7 +186,7 @@ class Conversation:
 
 
 def discover_conversation_files(path: Path) -> list[Path]:
-    """Return the JSONL files a submission path resolves to.
+    """Return the main session JSONL files a submission path resolves to.
 
     Args:
         path: Either a single ``*.jsonl`` file or a directory containing
@@ -195,9 +195,12 @@ def discover_conversation_files(path: Path) -> list[Path]:
     Returns:
         A list of absolute paths in filesystem order. Top-level only
         when ``path`` is a directory; nested subdirectories are not
-        descended into so that sibling ``subagents/`` and
-        ``tool-results/`` directories (which can contain their own
-        ``*.jsonl`` files) do not pollute the loaded set.
+        descended into. The per-conversation
+        ``SubagentModelIndex`` is built separately from the sibling
+        ``<sessionId>/subagents/`` directory by ``load_conversation``;
+        callers that want every JSONL the submission ships (main
+        plus subagent) for a non-metric pass like sanitisation use
+        ``discover_sanitisable_jsonl_files`` instead.
 
     Raises:
         SchemaError: When the path does not exist, when it is a file
@@ -221,6 +224,25 @@ def discover_conversation_files(path: Path) -> list[Path]:
             )
         return files
     raise SchemaError(f"submission path is neither a file nor a directory: {resolved}")
+
+
+def discover_sanitisable_jsonl_files(path: Path) -> list[Path]:
+    """Return every JSONL the sanitiser should seal under a submission path.
+
+    Extends ``discover_conversation_files`` by also walking the
+    sibling ``<sessionId>/subagents/agent-*.jsonl`` files Claude
+    Code wrote alongside each main JSONL. Tool-result files under
+    ``<sessionId>/tool-results/`` are not jsonl and out of scope.
+    """
+    main_files = discover_conversation_files(path)
+    if path.resolve().is_file():
+        return main_files
+    sanitisable: list[Path] = list(main_files)
+    for main_file in main_files:
+        subagents_dir = main_file.parent / main_file.stem / "subagents"
+        if subagents_dir.is_dir():
+            sanitisable.extend(sorted(subagents_dir.glob("agent-*.jsonl")))
+    return sanitisable
 
 
 def load_conversation(path: Path) -> Conversation:
