@@ -35,7 +35,6 @@ from .rates import (
     CATEGORY_INPUT,
     CATEGORY_OUTPUT,
     RateTable,
-    rates_for_model,
 )
 from .schema import (
     is_compact_summary_user,
@@ -162,23 +161,18 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
     """Render the session-scope economic metric block to stdout.
 
     The output groups the three populations the parser distinguishes
-    (main API calls, delegated subagent dispatches, and their sum)
-    and shows the per-call cost contribution by category against the
-    pinned model's rates so the rate table's effect on the headline
-    figure is auditable.
+    (main API calls, delegated subagent dispatches, and their sum),
+    shows the modal main-call model alongside the rate-table
+    metadata, and reports the per-model token distribution and the
+    delegated-attribution mix that drove the headline cost figure.
     """
-    rates = rates_for_model(rate_table, economic.model)
     print(f"economic dimension (session scope):")
-    print(f"  pinned model:                 {economic.model}")
+    print(f"  modal main model:             {economic.model or '(none)'}")
     print(f"  rate table snapshot date:     {rate_table.snapshot_date}")
     print(f"  rate table source path:       {rate_table.source_path}")
     print(f"  pricing sources:")
     for url in rate_table.sources:
         print(f"    - {url}")
-    print()
-    print(f"  per-million USD rates:        input={rates.input:.2f} "
-          f"output={rates.output:.2f} cache_read={rates.cache_read:.2f} "
-          f"cache_5m={rates.cache_5m:.2f} cache_1h={rates.cache_1h:.2f}")
     print()
     print(f"  agent dispatches (total/with usage): "
           f"{economic.agent_dispatches_total}/{economic.agent_dispatches_with_usage}")
@@ -195,16 +189,14 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
     print()
     print(f"  total prompt tokens:          {economic.total_prompt_tokens:>14,}")
     print()
-    print(f"  cost breakdown (USD):")
-    breakdown = (
-        ("input",      economic.total.input      * rates.input),
-        ("output",     economic.total.output     * rates.output),
-        ("cache_read", economic.total.cache_read * rates.cache_read),
-        ("cache_5m",   economic.total.cache_5m   * rates.cache_5m),
-        ("cache_1h",   economic.total.cache_1h   * rates.cache_1h),
-    )
-    for label, amount in breakdown:
-        print(f"    {label:12} ${amount / 1_000_000.0:>10.4f}")
+    print(f"  per-model billed token volume:")
+    for model, tokens in sorted(
+        economic.model_token_distribution.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    ):
+        print(f"    {model:30} {tokens:>14,}")
+    print()
     print(f"  cost_usd:                     ${economic.cost_usd:.4f}")
 
 

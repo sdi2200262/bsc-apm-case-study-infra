@@ -30,13 +30,17 @@ populations and the parser sums both:
   are counted in diagnostics so the ratio of complete-to-incomplete
   dispatches is visible.
 
-Cost is computed against the pinned per-model rate table at
-``rates.RATE_TABLE``. Each of the five token categories is billed at
-its own published rate; cache-read, 5-minute cache write, and 1-hour
-cache write each carry a different multiplier of the input rate. The
-cost figure reported is therefore the sum across categories at their
-distinct rates, not a single-rate approximation against a flat token
-total.
+Cost is computed call-by-call against the pinned rate table. The
+``cost_attribution`` sibling module walks the records, prices each
+main call against its own ``message.model``, and prices each
+delegated dispatch against the resolved subagent model (subagent
+file > parent alias > Explore default > inherit). Each of the five
+token categories is billed at the matched model's published rate;
+cache-read, 5-minute cache write, and 1-hour cache write each carry
+a different multiplier of the input rate. The session-scope ``model``
+field exposed on ``EconomicSession`` is the modal non-synthetic
+``message.model`` across main records and is a diagnostic, not the
+pricing input.
 
 A Claude Code autocompaction event mid-session is handled correctly
 without any special boundary logic. Each call's ``message.usage``
@@ -76,7 +80,6 @@ from ..rates import (
     CATEGORY_INPUT,
     CATEGORY_OUTPUT,
     RateTable,
-    cost_in_usd,
 )
 from ..schema import (
     CONTENT_BLOCK_TOOL_RESULT,
@@ -87,6 +90,7 @@ from ..schema import (
     SYNTHETIC_MODEL_MARKER,
 )
 from ..session import Session
+from .cost_attribution import attribute_cost_for_records
 
 AGENT_TOOL_NAME = "Agent"
 
@@ -147,17 +151,22 @@ class EconomicSession:
         total: Per-category sum of ``main`` and ``delegated``.
         total_prompt_tokens: ``input + cache_read + cache_5m + cache_1h``
             of ``total`` (the full input volume; output is disjoint).
-        cost_usd: API-equivalent cost in USD, computed against the
-            pinned rate table for the session's pinned model.
-        model: The Claude model identifier the cost was computed
-            against. The modal value of ``message.model`` across
-            non-synthetic assistant records is taken as the session's
-            pinned model.
+        cost_usd: API-equivalent cost in USD, summed call by call:
+            each main call priced at its own ``message.model``, each
+            delegated dispatch priced at the subagent's
+            ``message.model`` from the ``SubagentModelIndex``.
+        model: Diagnostic. The modal non-synthetic ``message.model``
+            across main records, surfaced so a reader can see which
+            family dominated the session at a glance. Not the pricing
+            input; pricing is per-call.
         agent_dispatches_total: Number of Agent tool_use blocks
             observed across the session.
         agent_dispatches_with_usage: Number of those dispatches whose
             ``toolUseResult.usage`` was populated and contributed to
             ``delegated``.
+        model_token_distribution: ``model -> total billed tokens``
+            (sum of all five categories) for every model that
+            contributed to ``cost_usd`` in either population.
     """
 
     main: TokenSums
@@ -168,6 +177,7 @@ class EconomicSession:
     model: str
     agent_dispatches_total: int
     agent_dispatches_with_usage: int
+    model_token_distribution: dict[str, int]
 
 
 def compute_session_economic(session: Session, rate_table: RateTable) -> EconomicSession:
@@ -184,24 +194,25 @@ def compute_session_economic(session: Session, rate_table: RateTable) -> Economi
         A populated ``EconomicSession``.
 
     Raises:
-        rates.RateTableError: When the session's modal model is not
-            present in ``rate_table.models``. The caller is
-            responsible for either adding the model to the YAML or
-            surfacing the unpinned model as an actionable error.
+        rates.RateTableError: When a model encountered during per-call
+            pricing is not present in ``rate_table.models``. The
+            caller is responsible for either adding the model to the
+            YAML or surfacing the unpinned model as an actionable
+            error.
     """
     all_records = [
         record
         for view in session.views
         for record in view.conversation.records
     ]
-    model = _resolve_pinned_model(session)
-    return compute_economic_for_records(all_records, rate_table, model)
+    subagent_models = _merge_subagent_indices(session)
+    return compute_economic_for_records(all_records, rate_table, subagent_models)
 
 
 def compute_economic_for_records(
     records: list[Record],
     rate_table: RateTable,
-    model: str,
+    subagent_models_by_agent_id: dict[str, str],
 ) -> EconomicSession:
     """Compute economic metrics over an arbitrary subset of records.
 
@@ -215,30 +226,77 @@ def compute_economic_for_records(
     Args:
         records: The records to aggregate over.
         rate_table: The rate table to compute cost against.
-        model: The Claude model identifier to price against.
+        subagent_models_by_agent_id: Merged
+            ``SubagentModelIndex.by_agent_id`` map across every
+            conversation in the session. Used by
+            ``cost_attribution`` to price each delegated dispatch at
+            the actual subagent's model when the sibling file was
+            shipped.
 
     Returns:
         A populated ``EconomicSession``.
 
     Raises:
-        rates.RateTableError: When ``model`` is not present in
-            ``rate_table.models``.
+        rates.RateTableError: When a per-call model resolves to an
+            id not present in ``rate_table.models``.
     """
     main_total = _sum_main_from_records(records)
     delegated_total, dispatches_total, dispatches_with_usage = _sum_delegated_from_records(records)
     total = main_total.add(delegated_total)
     total_prompt = total.input + total.cache_read + total.cache_5m + total.cache_1h
-    cost = cost_in_usd(rate_table, model, total.as_dict())
+    attribution = attribute_cost_for_records(records, rate_table, subagent_models_by_agent_id)
     return EconomicSession(
         main=main_total,
         delegated=delegated_total,
         total=total,
         total_prompt_tokens=total_prompt,
-        cost_usd=cost,
-        model=model,
+        cost_usd=attribution.total_cost_usd,
+        model=_modal_main_model_from_records(records),
         agent_dispatches_total=dispatches_total,
         agent_dispatches_with_usage=dispatches_with_usage,
+        model_token_distribution=attribution.model_token_distribution,
     )
+
+
+def _merge_subagent_indices(session: Session) -> dict[str, str]:
+    """Merge per-conversation subagent-model indices into one session-scope map.
+
+    ``agentId`` values are globally unique across Claude Code, so a
+    flat ``dict.update`` per conversation produces a session-scope
+    index without collisions. When two conversations happen to
+    re-use an id (which Claude Code is not expected to do), the
+    later conversation's value wins; this is acceptable as a
+    fall-through and is not surfaced separately.
+    """
+    merged: dict[str, str] = {}
+    for view in session.views:
+        merged.update(view.conversation.subagent_model_index.by_agent_id)
+    return merged
+
+
+def _modal_main_model_from_records(records: list[Record]) -> str:
+    """Return the modal non-synthetic ``message.model`` across a record subset.
+
+    Returns the empty string when the subset contains no qualifying
+    main assistant record, which can happen for a phase or role
+    scope that holds only delegated activity. Callers treat the
+    empty string as "no main-call modal model" and rely on the
+    per-call cost computation for the figure.
+    """
+    counts: Counter[str] = Counter()
+    for record in records:
+        if record.record_type != RECORD_TYPE_ASSISTANT:
+            continue
+        message = record.payload.get("message")
+        if not isinstance(message, dict):
+            continue
+        model = message.get("model")
+        if not isinstance(model, str) or not model or model == SYNTHETIC_MODEL_MARKER:
+            continue
+        counts[model] += 1
+    if not counts:
+        return ""
+    return counts.most_common(1)[0][0]
 
 
 def resolve_pinned_model(session: Session) -> str:

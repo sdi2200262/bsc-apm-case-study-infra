@@ -59,9 +59,46 @@ CATEGORIES: tuple[str, ...] = (
 
 _TOKENS_PER_MILLION = 1_000_000.0
 
+MODEL_ALIASES: dict[str, str] = {
+    "opus": "claude-opus-4-7",
+    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-4-5",
+}
+
 
 class RateTableError(Exception):
     """Raised when the rate-table YAML file is missing fields or malformed."""
+
+
+def canonical_model_id(value: str) -> str:
+    """Normalise a Claude model identifier to the rate-table key form.
+
+    Two normalisation steps are applied. Short aliases used by the
+    Claude Code Task tool's per-invocation ``model`` parameter
+    (``opus``, ``sonnet``, ``haiku``) are expanded to the
+    case-study's pinned canonical model ids per ``MODEL_ALIASES``.
+    Date-suffixed full ids of the shape
+    ``claude-<family>-<major>-<minor>-<YYYYMMDD>`` (which Claude
+    Code emits on subagent records) are stripped of the trailing
+    eight-digit date so they match the family-keyed entries in
+    ``rates.yaml``. Identifiers that already match a canonical
+    family-keyed form pass through unchanged.
+
+    Args:
+        value: A Claude model identifier or alias as it appears on a
+            ``message.model`` field, on a ``tool_use.input.model``
+            parameter, or in any other surface a caller hands in.
+
+    Returns:
+        The canonical family-keyed model id used as a rate-table
+        lookup key, e.g. ``claude-haiku-4-5``.
+    """
+    if value in MODEL_ALIASES:
+        return MODEL_ALIASES[value]
+    parts = value.split("-")
+    if len(parts) >= 2 and len(parts[-1]) == 8 and parts[-1].isdigit():
+        return "-".join(parts[:-1])
+    return value
 
 
 @dataclass(frozen=True)

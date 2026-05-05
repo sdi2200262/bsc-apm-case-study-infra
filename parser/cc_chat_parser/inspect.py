@@ -193,8 +193,16 @@ def _print_diagnostics(diagnostics: dict[str, Any]) -> None:
     print(f"  compaction_events_total:                  {diagnostics['compaction_events_total']}")
     print(f"  cost_excludes_compaction_synthesis:       {diagnostics['cost_excludes_compaction_synthesis']}")
     print(f"  synthetic_assistant_records_excluded:     {diagnostics['synthetic_assistant_records_excluded']}")
+    print(f"  errored_calls_excluded:                   {diagnostics.get('errored_calls_excluded', 0)}")
     print(f"  agent_dispatches_total:                   {diagnostics['agent_dispatches_total']}")
     print(f"  agent_dispatches_without_usage:           {diagnostics['agent_dispatches_without_usage']}")
+    print(f"  subagent_files_seen:                      {diagnostics.get('subagent_files_seen', 0)}")
+    print(f"  subagent_models_indexed:                  {diagnostics.get('subagent_models_indexed', 0)}")
+    distribution = diagnostics.get("model_token_distribution", {})
+    if distribution:
+        print(f"  model_token_distribution:")
+        for model, tokens in sorted(distribution.items(), key=lambda item: item[1], reverse=True):
+            print(f"    {model:30} {tokens:>14,}")
     print(f"  tool_result_count / tool_error_count:     {diagnostics['tool_result_count']} / {diagnostics['tool_error_count']}")
     print(f"  entrypoint_valid / auth_mode_valid:       {diagnostics['entrypoint_valid']} / {diagnostics['auth_mode_valid']}")
     print(f"  turns_with_missing_uuid:                  {diagnostics['turns_with_missing_uuid']}")

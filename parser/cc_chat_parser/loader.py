@@ -7,12 +7,15 @@ Load Claude Code JSONL conversation files from disk.
 A submission can be a single JSONL file (development and inspection
 convenience) or a directory containing one or more ``<sessionId>.jsonl``
 files copied straight from ``~/.claude/projects/<dashed-cwd>/``. When a
-directory is given, only top-level ``*.jsonl`` files are loaded;
-sibling subdirectories such as ``<sessionId>/subagents/`` and
-``<sessionId>/tool-results/`` are ignored. Filenames are not modified
-by participants and stay as the UUIDs Claude Code wrote them with; the
-parser orders conversations by the earliest record timestamp in each
-file rather than by filename.
+directory is given, only top-level ``*.jsonl`` files are loaded as
+main conversations; sibling ``<sessionId>/subagents/`` directories
+adjacent to each main file are read separately to populate the
+per-conversation ``SubagentModelIndex`` (so delegated dispatches are
+priced against the actual subagent's model rather than the parent's),
+while ``<sessionId>/tool-results/`` directories are ignored.
+Filenames are not modified by participants and stay as the UUIDs
+Claude Code wrote them with; the parser orders conversations by the
+earliest record timestamp in each file rather than by filename.
 
 The loader is responsible for three orthogonal jobs that share the same
 single-pass walk over a file's records:
@@ -57,6 +60,7 @@ from .schema import (
     queue_operation,
     queue_record_content,
 )
+from .subagents import SubagentModelIndex, build_subagent_model_index
 
 CONVERSATION_FILE_GLOB = "*.jsonl"
 
@@ -107,11 +111,18 @@ class RequestUsageIndex:
         records_without_request_id: Count of non-synthetic assistant
             records that lacked a ``requestId``. Always zero on
             well-formed Claude Code data; surfaced for diagnostics.
+        errored_calls_excluded: Count of assistant records whose
+            ``isApiErrorMessage`` flag was ``True`` and which were
+            therefore excluded from the index. Anthropic's API does
+            not bill failed requests, so the exclusion keeps the
+            cost figure honest; the count is surfaced so a session
+            with a high error volume is visible in diagnostics.
     """
 
     usage_by_request_id: dict[str, dict[str, Any]]
     synthetic_assistant_count: int
     records_without_request_id: int
+    errored_calls_excluded: int
 
 
 @dataclass(frozen=True)
@@ -150,6 +161,10 @@ class Conversation:
         records: Every parsed record from the file in document order.
         usage_index: Deduplicated ``message.usage`` values keyed by
             ``requestId``.
+        subagent_model_index: ``agentId``-keyed map of canonical model
+            ids built from the sibling ``<sessionId>/subagents/``
+            directory. Empty when the directory is absent (the
+            historical submission contract excluded it).
         steer_events: Classified user-authored enqueues with their
             delivery or abandonment outcome.
         compaction_events: ``compact_boundary`` events observed in the
@@ -164,6 +179,7 @@ class Conversation:
     session_id: str | None
     records: tuple[Record, ...]
     usage_index: RequestUsageIndex
+    subagent_model_index: SubagentModelIndex
     steer_events: tuple[SteerEvent, ...]
     compaction_events: tuple[CompactionEvent, ...]
     queue_lifecycle_warnings: tuple[str, ...]
@@ -226,6 +242,7 @@ def load_conversation(path: Path) -> Conversation:
     records = tuple(_parse_lines(resolved))
     session_id = _resolve_session_id(records)
     usage_index = _build_usage_index(records, str(resolved))
+    subagent_model_index = build_subagent_model_index(resolved)
     steer_events, queue_warnings = _replay_queue_lifecycle(records)
     compaction_events = tuple(_extract_compaction_events(records))
     return Conversation(
@@ -233,6 +250,7 @@ def load_conversation(path: Path) -> Conversation:
         session_id=session_id,
         records=records,
         usage_index=usage_index,
+        subagent_model_index=subagent_model_index,
         steer_events=steer_events,
         compaction_events=compaction_events,
         queue_lifecycle_warnings=queue_warnings,
@@ -282,15 +300,26 @@ def _build_usage_index(
     of a streaming response. The skip is silent in normal operation;
     callers needing to verify that the duplicate carries the same usage
     can inspect the records directly.
+
+    Records whose ``isApiErrorMessage`` flag is ``True`` are excluded
+    entirely. Anthropic's API does not bill failed requests, so an
+    errored record's notional ``usage`` (when one is present at all)
+    is not part of the cost the caller paid. The exclusion is
+    counted in ``errored_calls_excluded`` and surfaced in
+    diagnostics.
     """
     usage_by_request_id: dict[str, dict[str, Any]] = {}
     synthetic_count = 0
     missing_request_id = 0
+    errored_excluded = 0
     for record in records:
         if record.record_type != "assistant":
             continue
         if is_synthetic_assistant(record):
             synthetic_count += 1
+            continue
+        if record.payload.get("isApiErrorMessage") is True:
+            errored_excluded += 1
             continue
         request_id = assistant_request_id(record)
         if request_id is None:
@@ -309,6 +338,7 @@ def _build_usage_index(
         usage_by_request_id=usage_by_request_id,
         synthetic_assistant_count=synthetic_count,
         records_without_request_id=missing_request_id,
+        errored_calls_excluded=errored_excluded,
     )
 
 

@@ -29,6 +29,7 @@ from .commands import (
     extract_command_names,
     is_known_command,
 )
+from .metrics.economic import compute_session_economic
 from .rates import RateTable
 from .schema import (
     SYNTHETIC_MODEL_MARKER,
@@ -88,13 +89,35 @@ def build_diagnostics(
     turns_with_missing_uuid = sum(
         1 for turn in session.turns if not turn.starting_prompt.uuid
     )
+    errored_excluded = sum(
+        view.conversation.usage_index.errored_calls_excluded
+        for view in session.views
+    )
+    subagent_files_seen = sum(
+        view.conversation.subagent_model_index.files_seen
+        for view in session.views
+    )
+    subagent_files_without_model = sum(
+        view.conversation.subagent_model_index.files_without_model
+        for view in session.views
+    )
+    subagent_models_indexed = sum(
+        len(view.conversation.subagent_model_index.by_agent_id)
+        for view in session.views
+    )
+    economic = compute_session_economic(session, rate_table)
     return {
         "compaction_events_total": compaction_total,
         "compaction_events_by_file": compaction_by_file,
         "cost_excludes_compaction_synthesis": compaction_total > 0,
         "synthetic_assistant_records_excluded": synthetic_excluded,
+        "errored_calls_excluded": errored_excluded,
         "agent_dispatches_total": agent_dispatches_total,
         "agent_dispatches_without_usage": agent_dispatches_total - agent_dispatches_with_usage,
+        "subagent_files_seen": subagent_files_seen,
+        "subagent_files_without_model": subagent_files_without_model,
+        "subagent_models_indexed": subagent_models_indexed,
+        "model_token_distribution": economic.model_token_distribution,
         "tool_result_count": tool_result_total,
         "tool_error_count": tool_error_total,
         "queue_lifecycle_warnings": queue_warnings,
@@ -106,6 +129,9 @@ def build_diagnostics(
         "notes": [
             "cost_usd is the API-equivalent cost from visible API calls "
             "and excludes the synthesis cost of compaction events when present.",
+            "cost_usd is summed call by call: each main call priced at its own "
+            "message.model, each delegated dispatch priced at the subagent's "
+            "message.model from the sibling subagents/ directory.",
             "reasoning_token_share is approximated from character counts because "
             "message.usage.output_tokens does not split by content block type.",
         ],
@@ -122,16 +148,21 @@ def _evaluate_invariants(
     Walks session, every phase, and every role scope. For each
     scope checks the time composition (where defined), the
     per-category token composition (main + delegated == total),
-    the prompt-token composition, the cost composition against
-    the rate table, the steer accounting, and the bucket share
-    sums. Records partition is also checked: phase tokens and
-    role tokens should sum to the session totals for each
-    category. Each check returns ``{"status": "ok"}`` when within
-    tolerance and a residual block otherwise.
+    the prompt-token composition, the steer accounting, and the
+    bucket share sums. Records partition is also checked: phase
+    tokens and role tokens should sum to the session totals for
+    each category. Each check returns ``{"status": "ok"}`` when
+    within tolerance and a residual block otherwise.
+
+    Cost is no longer cross-checked against a single-rate
+    arithmetic identity. With per-call pricing each call is priced
+    at its own model's rates, and the session's mixed-model token
+    population does not reduce to a single rate. The
+    ``model_token_distribution`` and the
+    ``delegated_priced_via_*`` counters surface the attribution
+    mix instead.
     """
     checks: dict[str, Any] = {}
-    pinned_model = artifact["session_metadata"]["model"]
-    rates = rate_table.models.get(pinned_model)
     scopes: list[tuple[str, dict[str, Any]]] = [("session", artifact["session"])]
     for phase, block in artifact["phases"].items():
         scopes.append((f"phase_{phase}", block))
@@ -167,17 +198,6 @@ def _evaluate_invariants(
             + economic["total_cache_1h_tokens"]["value"],
             INVARIANT_TOLERANCE_TOKENS,
         )
-        if rates is not None:
-            expected_cost = (
-                economic["total_input_tokens"]["value"] * rates.input
-                + economic["total_output_tokens"]["value"] * rates.output
-                + economic["total_cache_read_tokens"]["value"] * rates.cache_read
-                + economic["total_cache_5m_tokens"]["value"] * rates.cache_5m
-                + economic["total_cache_1h_tokens"]["value"] * rates.cache_1h
-            ) / 1_000_000.0
-            checks[f"cost_composition_{scope_label}"] = _check_close(
-                economic["cost_usd"]["value"], expected_cost, INVARIANT_TOLERANCE_USD
-            )
         user_input = block["process"]["user_input"]
         checks[f"steer_accounting_{scope_label}"] = _check_close(
             user_input["steer_attempted_count"]["value"],

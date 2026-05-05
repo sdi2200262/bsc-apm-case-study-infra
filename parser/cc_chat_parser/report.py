@@ -48,7 +48,6 @@ from .metrics.economic import (
     EconomicSession,
     compute_economic_for_records,
     compute_session_economic,
-    resolve_pinned_model,
 )
 from .metrics.reliability import compute_reliability_metrics
 from .metrics.supplementary import compute_supplementary_metrics
@@ -323,8 +322,10 @@ def _compute_economic_for_scope(
     records: list[Record] = []
     for turn in turns:
         records.extend(turn.records)
-    model = resolve_pinned_model(session)
-    return compute_economic_for_records(records, rate_table, model)
+    subagent_models: dict[str, str] = {}
+    for view in session.views:
+        subagent_models.update(view.conversation.subagent_model_index.by_agent_id)
+    return compute_economic_for_records(records, rate_table, subagent_models)
 
 
 def _build_turn_records(session: Session) -> list[dict[str, Any]]:
