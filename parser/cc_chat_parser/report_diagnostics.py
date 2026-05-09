@@ -116,8 +116,8 @@ def build_diagnostics(
         "compaction_events_total": compaction_total,
         "compaction_events_by_file": compaction_by_file,
         "cost_excludes_compaction_synthesis": compaction_total > 0,
-        "synthetic_assistant_records_excluded": synthetic_excluded,
         "errored_calls_excluded": errored_excluded,
+        "synthetic_assistant_records_excluded": synthetic_excluded,
         "agent_dispatches_total": agent_dispatches_total,
         "agent_dispatches_without_usage": agent_dispatches_total - agent_dispatches_with_usage,
         "subagent_files_seen": subagent_files_seen,
@@ -148,6 +148,13 @@ def build_diagnostics(
             "delegated dispatch was priced deterministically, a "
             "(cost_usd_lower_bound, cost_usd_upper_bound) pair when at least "
             "one dispatch was bracketed by the resolver.",
+            "synthetic_assistant_records_excluded counts placeholder assistant "
+            "records the local Claude Code client writes around session "
+            "boundaries and adjacent to compaction events to keep the "
+            "user-assistant alternation balanced. Their emission is "
+            "independent of compaction event count: a session can produce "
+            "more, fewer, or the same number of synthetic placeholders as "
+            "compaction events, and the two should not be read as paired.",
         ],
     }
 

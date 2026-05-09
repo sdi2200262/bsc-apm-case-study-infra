@@ -50,6 +50,7 @@ from typing import Iterable
 from .loader import STEER_FATE_DELIVERED, Conversation, SteerEvent
 from .schema import (
     QUEUE_OP_ENQUEUE,
+    RECORD_TYPE_ASSISTANT,
     Record,
     is_compact_summary_user,
     is_synthetic_assistant,
@@ -305,12 +306,31 @@ def _steer_events_in_interval(
 
 
 def _last_timestamp(records: tuple[Record, ...], fallback: datetime) -> datetime:
-    """Return the latest timestamp on any record in ``records``, or ``fallback``."""
+    """Return the timestamp at which model activity in the turn ended.
+
+    Anchors on the latest non-synthetic ``assistant`` record in the
+    turn's slice. Trailing platform bookkeeping (file-history snapshots,
+    permission-mode records, queue-operation records, session-close
+    user records appended when the conversation window was left idle)
+    must not extend the turn's wall-clock interval; only assistant
+    records mark moments at which the model was producing output.
+
+    Tool-result records returned to the model are user-side payloads
+    written by the platform; the model's response to a tool result is
+    the next assistant record, so the last assistant record of the
+    slice covers every model-active instant in the turn.
+
+    Falls back to ``fallback`` when the slice carries no assistant
+    record (a turn whose only record is the prompt itself, with no
+    response yet).
+    """
     latest: datetime | None = None
     for record in records:
-        if record.timestamp is None:
+        if record.record_type != RECORD_TYPE_ASSISTANT:
             continue
         if is_synthetic_assistant(record):
+            continue
+        if record.timestamp is None:
             continue
         if latest is None or record.timestamp > latest:
             latest = record.timestamp

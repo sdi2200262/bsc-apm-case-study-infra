@@ -69,7 +69,6 @@ from .commands import (
     ROLE_UNASSIGNED,
     classify_command,
     extract_command_names,
-    is_known_command,
     phase_index,
     role_from_initiate_command,
     speckit_command_phase,
@@ -350,25 +349,26 @@ def _phase_by_uuid_constant(records: tuple[Record, ...], phase: str) -> dict[str
 
 
 def _first_slash_command(conversation: Conversation) -> tuple[str, Record | None]:
-    """Return the verbatim first recognised framework command in a conversation.
+    """Return the verbatim first framework command in a conversation.
 
     Walks the conversation's records in document order. The first
-    genuine user prompt that carries at least one recognised APM or
-    Spec-kit command in its ``<command-name>`` markers contributes the
-    first such command as the conversation's first command. Local
-    Claude Code commands such as ``/clear``, ``/exit``, ``/usage``,
-    and ``/compact`` are skipped: they are not framework participation
-    and would mis-classify a Manager or Worker conversation as
-    unassigned simply because the participant cleared their screen
-    before invoking the framework. When no recognised framework
-    command appears anywhere in the conversation, the empty string and
-    ``None`` are returned and the caller assigns the unassigned role.
+    genuine user prompt that carries at least one APM or Spec-kit
+    command in its ``<command-name>`` markers contributes the first
+    such command as the conversation's first command. Claude Code
+    built-ins such as ``/clear``, ``/exit``, ``/usage``, ``/compact``,
+    and ``/model`` are skipped: they are platform vocabulary, not
+    framework participation, and would mis-classify a Manager or
+    Worker conversation as unassigned simply because the participant
+    issued a built-in before the framework command. When no framework
+    command appears anywhere in the conversation, the empty string
+    and ``None`` are returned and the caller assigns the unassigned
+    role.
     """
     for record in conversation.records:
         if not is_user_authored_prompt(record):
             continue
         for command in extract_command_names(user_prompt_text(record)):
-            if is_known_command(command):
+            if classify_command(command):
                 return command, record
     return "", None
 

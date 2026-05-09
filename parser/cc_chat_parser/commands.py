@@ -42,6 +42,23 @@ advances the ratchet to ``implementation``, later ``planning`` commands
 count themselves as planning but do not move the ratchet back. The
 command-to-phase table is consumed by the per-prompt classifier in the
 session assembler.
+
+A third vocabulary lives alongside the framework tables: Claude Code's
+own built-in slash commands. The platform ships dozens of built-ins
+covering session control (``/exit``, ``/clear``, ``/compact``, ``/resume``),
+configuration (``/model``, ``/effort``, ``/permissions``, ``/config``,
+``/theme``), bundled skills that drive a model call (``/review``,
+``/loop``, ``/simplify``, ``/init``, ``/security-review``), and
+diagnostic surfaces (``/status``, ``/usage``, ``/stats``, ``/doctor``).
+Source: https://code.claude.com/docs/en/commands. A participant typing
+any of these produces a slash-command marker that the parser must
+recognise as a known invocation; otherwise every such occurrence
+pollutes the ``unknown_commands_observed`` diagnostic. Built-ins are
+classified separately from the framework tables: they do not move the
+Spec-kit phase ratchet, do not assign an APM role, and do not count
+toward the framework protocol bucket. The case study compares the two
+frameworks, not the platform; built-ins are platform vocabulary the
+participant happens to use alongside the framework they are running.
 """
 
 from __future__ import annotations
@@ -108,6 +125,31 @@ SPECKIT_PHASE_BY_COMMAND: dict[str, str] = {
 }
 
 SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset(SPECKIT_PHASE_BY_COMMAND.keys())
+
+# Claude Code built-in slash commands. Source:
+# https://code.claude.com/docs/en/commands. The list covers every name
+# the platform ships out of the box, including bundled skills that
+# render a body to the model and local-only commands that act on the
+# CLI without sending a payload. Two recently-removed names
+# (``vim``, ``pr-comments``) are kept for transcripts captured against
+# Claude Code versions that predated their removal.
+CLAUDE_CODE_BUILTINS: frozenset[str] = frozenset({
+    "add-dir", "agents", "autofix-pr", "batch", "branch", "btw",
+    "chrome", "claude-api", "clear", "color", "compact", "config",
+    "context", "copy", "debug", "desktop", "diff", "doctor", "effort",
+    "exit", "export", "extra-usage", "fast", "feedback",
+    "fewer-permission-prompts", "focus", "heapdump", "help", "hooks",
+    "ide", "init", "insights", "install-github-app", "install-slack-app",
+    "keybindings", "login", "logout", "loop", "mcp", "memory", "mobile",
+    "model", "passes", "permissions", "plan", "plugin", "powerup",
+    "pr-comments", "privacy-settings", "radio", "recap", "release-notes",
+    "reload-plugins", "remote-control", "remote-env", "rename", "resume",
+    "review", "rewind", "sandbox", "schedule", "security-review",
+    "setup-bedrock", "setup-vertex", "simplify", "skills", "stats",
+    "status", "statusline", "stickers", "tasks", "team-onboarding",
+    "teleport", "terminal-setup", "theme", "tui", "ultraplan",
+    "ultrareview", "upgrade", "usage", "vim", "voice", "web-setup",
+})
 
 # A user prompt's slash-command invocation appears inside the prompt
 # text wrapped in a ``<command-name>`` XML-like tag, with a leading
@@ -188,8 +230,18 @@ def speckit_command_phase(name: str) -> str | None:
 
 
 def is_known_command(name: str) -> bool:
-    """Return ``True`` when the command name is in either framework's known set."""
-    return name in APM_KNOWN_COMMANDS or name in SPECKIT_KNOWN_COMMANDS
+    """Return ``True`` when the command name is recognised by the parser.
+
+    The known set is the union of both framework tables and the Claude
+    Code built-in vocabulary. The ``unknown_commands_observed``
+    diagnostic surfaces only names outside this union (typos, unknown
+    plugins, custom user commands).
+    """
+    return (
+        name in APM_KNOWN_COMMANDS
+        or name in SPECKIT_KNOWN_COMMANDS
+        or name in CLAUDE_CODE_BUILTINS
+    )
 
 
 def phase_index(phase: str) -> int:
