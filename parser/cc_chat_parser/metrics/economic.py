@@ -30,17 +30,15 @@ populations and the parser sums both:
   are counted in diagnostics so the ratio of complete-to-incomplete
   dispatches is visible.
 
-Cost is computed call-by-call against the pinned rate table. The
-``cost_attribution`` sibling module walks the records, prices each
-main call against its own ``message.model``, and prices each
-delegated dispatch against the resolved subagent model (subagent
-file > parent alias > Explore default > inherit). Each of the five
-token categories is billed at the matched model's published rate;
-cache-read, 5-minute cache write, and 1-hour cache write each carry
-a different multiplier of the input rate. The session-scope ``model``
+Cost is computed call-by-call against the pinned rate table by the
+``cost_attribution`` sibling module. The session-scope ``model``
 field exposed on ``EconomicSession`` is the modal non-synthetic
 ``message.model`` across main records and is a diagnostic, not the
-pricing input.
+pricing input. When at least one delegated dispatch was bracketed
+by the unindexed-model resolver, ``EconomicSession.cost_usd`` is
+``None`` and the ``cost_usd_lower_bound`` / ``cost_usd_upper_bound``
+fields carry the range; otherwise ``cost_usd`` carries the single
+attributed figure and the bound fields are ``None``.
 
 A Claude Code autocompaction event mid-session is handled correctly
 without any special boundary logic. Each call's ``message.usage``
@@ -143,41 +141,49 @@ class TokenSums:
 class EconomicSession:
     """Session-scope economic metric block.
 
+    Cost is reported either as a single ``cost_usd`` figure or as a
+    ``cost_usd_lower_bound`` / ``cost_usd_upper_bound`` pair, never
+    both. The pair shape is used when at least one delegated
+    dispatch in the scope was bracketed by the unindexed-model
+    resolver; otherwise cost is a single number.
+
     Attributes:
-        main: Token totals from the main agents' deduplicated API
-            calls across every conversation in the session.
-        delegated: Token totals from subagent dispatches' rolled-up
-            ``toolUseResult.usage`` across every conversation.
+        main: Main-call deduplicated token totals.
+        delegated: Subagent-dispatch rolled-up token totals.
         total: Per-category sum of ``main`` and ``delegated``.
         total_prompt_tokens: ``input + cache_read + cache_5m + cache_1h``
             of ``total`` (the full input volume; output is disjoint).
-        cost_usd: API-equivalent cost in USD, summed call by call:
-            each main call priced at its own ``message.model``, each
-            delegated dispatch priced at the subagent's
-            ``message.model`` from the ``SubagentModelIndex``.
-        model: Diagnostic. The modal non-synthetic ``message.model``
-            across main records, surfaced so a reader can see which
-            family dominated the session at a glance. Not the pricing
-            input; pricing is per-call.
-        agent_dispatches_total: Number of Agent tool_use blocks
-            observed across the session.
-        agent_dispatches_with_usage: Number of those dispatches whose
-            ``toolUseResult.usage`` was populated and contributed to
-            ``delegated``.
-        model_token_distribution: ``model -> total billed tokens``
-            (sum of all five categories) for every model that
-            contributed to ``cost_usd`` in either population.
+        cost_usd: API-equivalent USD cost; ``None`` when bracketed.
+        cost_usd_lower_bound: Lower bound when bracketed; else ``None``.
+        cost_usd_upper_bound: Upper bound when bracketed; else ``None``.
+        model: Modal non-synthetic ``message.model`` across main
+            records (diagnostic; not the pricing input).
+        agent_dispatches_total: Number of Agent tool_use blocks.
+        agent_dispatches_with_usage: Subset whose
+            ``toolUseResult.usage`` was populated.
+        model_token_distribution: ``model -> billed tokens`` summed
+            over the five categories. For bracketed dispatches the
+            point-estimate model is recorded.
+        dispatches_resolved_without_index: Dispatches whose
+            ``agentId`` was not in the ``SubagentModelIndex`` and
+            which were priced via the fallback resolver.
+        dispatches_bracketed: Subset of the above that hit the
+            bracket path.
     """
 
     main: TokenSums
     delegated: TokenSums
     total: TokenSums
     total_prompt_tokens: int
-    cost_usd: float
+    cost_usd: float | None
+    cost_usd_lower_bound: float | None
+    cost_usd_upper_bound: float | None
     model: str
     agent_dispatches_total: int
     agent_dispatches_with_usage: int
     model_token_distribution: dict[str, int]
+    dispatches_resolved_without_index: int
+    dispatches_bracketed: int
 
 
 def compute_session_economic(session: Session, rate_table: RateTable) -> EconomicSession:
@@ -250,11 +256,15 @@ def compute_economic_for_records(
         delegated=delegated_total,
         total=total,
         total_prompt_tokens=total_prompt,
-        cost_usd=attribution.total_cost_usd,
+        cost_usd=attribution.cost_usd,
+        cost_usd_lower_bound=attribution.cost_usd_lower_bound,
+        cost_usd_upper_bound=attribution.cost_usd_upper_bound,
         model=_modal_main_model_from_records(records),
         agent_dispatches_total=dispatches_total,
         agent_dispatches_with_usage=dispatches_with_usage,
         model_token_distribution=attribution.model_token_distribution,
+        dispatches_resolved_without_index=attribution.dispatches_resolved_without_index,
+        dispatches_bracketed=attribution.dispatches_bracketed,
     )
 
 

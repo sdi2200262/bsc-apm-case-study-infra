@@ -58,6 +58,13 @@ def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
     shape is uniform across sessions; analysis consumers should
     filter empty scopes by ``turn_count == 0`` rather than by
     missing keys.
+
+    The cost shape is conditional. A scope whose every delegated
+    dispatch was priced deterministically emits a single
+    ``cost_usd`` leaf. A scope with at least one bracketed dispatch
+    instead emits ``cost_usd_lower_bound`` and ``cost_usd_upper_bound``
+    leaves and omits ``cost_usd`` entirely; consumers that read cost
+    must check for both shapes.
     """
     if economic is None:
         zero_token = metric_leaf(0, ANCHOR_SECONDARY, False)
@@ -71,7 +78,7 @@ def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
             "total_prompt_tokens": zero_token,
             "cost_usd": zero_cost,
         }
-    return {
+    block: dict[str, Any] = {
         "main_input_tokens":            metric_leaf(economic.main.input,            ANCHOR_SECONDARY, False),
         "main_output_tokens":           metric_leaf(economic.main.output,           ANCHOR_SECONDARY, False),
         "main_cache_read_tokens":       metric_leaf(economic.main.cache_read,       ANCHOR_SECONDARY, False),
@@ -88,8 +95,17 @@ def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
         "total_cache_5m_tokens":        metric_leaf(economic.total.cache_5m,        ANCHOR_SECONDARY, False),
         "total_cache_1h_tokens":        metric_leaf(economic.total.cache_1h,        ANCHOR_SECONDARY, False),
         "total_prompt_tokens":          metric_leaf(economic.total_prompt_tokens,   ANCHOR_SECONDARY, False),
-        "cost_usd":                     metric_leaf(round(economic.cost_usd, 4),    ANCHOR_PRIMARY,   True),
     }
+    if economic.cost_usd is not None:
+        block["cost_usd"] = metric_leaf(round(economic.cost_usd, 4), ANCHOR_PRIMARY, True)
+    else:
+        block["cost_usd_lower_bound"] = metric_leaf(
+            round(economic.cost_usd_lower_bound or 0.0, 4), ANCHOR_PRIMARY, True
+        )
+        block["cost_usd_upper_bound"] = metric_leaf(
+            round(economic.cost_usd_upper_bound or 0.0, 4), ANCHOR_PRIMARY, True
+        )
+    return block
 
 
 def time_block(metrics: TimeMetrics, scope_kind: str) -> dict[str, Any]:

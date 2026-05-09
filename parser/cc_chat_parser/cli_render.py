@@ -197,7 +197,19 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
     ):
         print(f"    {model:30} {tokens:>14,}")
     print()
-    print(f"  cost_usd:                     ${economic.cost_usd:.4f}")
+    if economic.cost_usd is not None:
+        print(f"  cost_usd:                     ${economic.cost_usd:.4f}")
+    else:
+        lower = economic.cost_usd_lower_bound or 0.0
+        upper = economic.cost_usd_upper_bound or 0.0
+        print(f"  cost_usd_lower_bound:         ${lower:.4f}")
+        print(f"  cost_usd_upper_bound:         ${upper:.4f}")
+    if economic.dispatches_resolved_without_index > 0:
+        print(
+            f"  dispatches priced via fallback resolver: "
+            f"{economic.dispatches_resolved_without_index} "
+            f"(bracketed: {economic.dispatches_bracketed})"
+        )
 
 
 def print_process(session: Session, short_threshold: int) -> None:

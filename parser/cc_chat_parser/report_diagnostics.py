@@ -117,6 +117,8 @@ def build_diagnostics(
         "subagent_files_seen": subagent_files_seen,
         "subagent_files_without_model": subagent_files_without_model,
         "subagent_models_indexed": subagent_models_indexed,
+        "subagent_dispatches_resolved_without_index": economic.dispatches_resolved_without_index,
+        "subagent_dispatches_bracketed": economic.dispatches_bracketed,
         "model_token_distribution": economic.model_token_distribution,
         "tool_result_count": tool_result_total,
         "tool_error_count": tool_error_total,
@@ -127,11 +129,17 @@ def build_diagnostics(
         "turns_with_missing_uuid": turns_with_missing_uuid,
         "invariant_checks": invariants,
         "notes": [
-            "cost_usd is the API-equivalent cost from visible API calls "
+            "cost is the API-equivalent cost from visible API calls "
             "and excludes the synthesis cost of compaction events when present.",
-            "cost_usd is summed call by call: each main call priced at its own "
+            "cost is summed call by call: each main call priced at its own "
             "message.model, each delegated dispatch priced at the subagent's "
-            "message.model from the sibling subagents/ directory.",
+            "model. The model is read from the sibling subagents/ directory "
+            "when shipped, otherwise resolved by the documented fallback in "
+            "subagents.resolve_unindexed_subagent_model.",
+            "the cost shape is conditional: a single cost_usd leaf when every "
+            "delegated dispatch was priced deterministically, a "
+            "(cost_usd_lower_bound, cost_usd_upper_bound) pair when at least "
+            "one dispatch was bracketed by the resolver.",
             "reasoning_token_share is approximated from character counts because "
             "message.usage.output_tokens does not split by content block type.",
         ],

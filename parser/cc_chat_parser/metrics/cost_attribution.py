@@ -4,14 +4,14 @@
 """
 Per-call cost attribution against the rate table.
 
-The economic dimension exposes a single ``cost_usd`` figure and a
-per-population token breakdown. Token sums are model-agnostic. Cost is
-not: the case-study sessions mix Opus main work with Sonnet helper
-agents and Haiku ``Explore`` dispatches, and pricing every token at the
-session's modal model would over-bill the cheaper-model dispatches by
-multiples. This module walks each record subset call-by-call, resolves
-the model that actually billed each call, and sums per-call cost
-against that model's row in the rate table.
+The economic dimension exposes a per-population token breakdown and a
+cost figure. Token sums are model-agnostic. Cost is not: the
+case-study sessions mix Opus main work with Sonnet helper agents and
+Haiku ``Explore`` dispatches, and pricing every token at the session's
+modal model would over-bill the cheaper-model dispatches by multiples.
+This module walks each record subset call-by-call, resolves the model
+that actually billed each call, and sums per-call cost against that
+model's row in the rate table.
 
 Two populations are priced separately:
 
@@ -25,17 +25,26 @@ Two populations are priced separately:
 
 * **Delegated dispatches.** Each ``Agent`` tool dispatch's rolled-up
   ``toolUseResult.usage`` is priced against the subagent's actual
-  model, looked up by ``agentId`` in the conversation's
-  ``SubagentModelIndex``. The submission contract requires the
-  sibling ``<sessionId>/subagents/agent-<agentId>.jsonl`` to ship
-  with every main session JSONL; an unindexed ``agentId`` therefore
-  surfaces as a loud ``KeyError`` rather than silently falling back
-  to a parent-derived approximation, so a contract violation is
-  caught at parse time instead of attributed against the wrong
-  model.
+  model. The canonical case-study submission ships a sibling
+  ``<sessionId>/subagents/agent-<agentId>.jsonl`` with every main
+  session JSONL and the subagent's actual ``message.model`` is read
+  from there via ``SubagentModelIndex``. Some submissions arrived
+  without those sibling files; for those dispatches the parser
+  consults ``subagents.resolve_unindexed_subagent_model`` (the
+  documented fallback resolver) which returns a deterministic model
+  for every subagent type the registry recognises and a
+  ``(haiku, opus)`` bracket for any unknown custom subagent. A
+  bracketed dispatch's tokens contribute to per-bound cost sums
+  rather than a single point figure.
 
-A ``model_token_distribution`` map is exposed on ``CostAttribution``
-so a reader can see how token volume splits across models without
+The cost output mirrors that branch: when no dispatch in the scope
+was bracketed, ``CostAttribution.cost_usd`` is a single number and
+the bound fields are ``None``. When at least one dispatch was
+bracketed, ``cost_usd`` is ``None`` and the bound fields carry the
+range (every non-bracketed dispatch contributes its certain price to
+both bounds; bracketed dispatches contribute haiku-to-opus
+uncertainty). A ``model_token_distribution`` map is exposed so a
+reader can see how token volume splits across models without
 re-walking the records.
 """
 
@@ -57,32 +66,81 @@ from ..schema import (
     Record,
     SYNTHETIC_MODEL_MARKER,
 )
+from ..subagents import resolve_unindexed_subagent_model
 
 AGENT_TOOL_NAME = "Agent"
+
+
+@dataclass(frozen=True)
+class _DispatchContext:
+    """Context for one Agent dispatch needed by the unindexed-model resolver.
+
+    Attributes:
+        subagent_type: ``input.subagent_type`` on the dispatch's
+            tool_use block, or ``None`` when the field was omitted.
+        input_model: ``input.model`` on the dispatch's tool_use
+            block, or ``None`` when the field was not set.
+        parent_main_model: The ``message.model`` of the assistant
+            record that emitted the dispatch.
+    """
+
+    subagent_type: str | None
+    input_model: str | None
+    parent_main_model: str
 
 
 @dataclass(frozen=True)
 class CostAttribution:
     """Per-call cost figures plus the per-model token volume.
 
+    Cost is reported either as a single ``cost_usd`` figure (when
+    every delegated dispatch in the scope was priced
+    deterministically) or as a ``cost_usd_lower_bound`` /
+    ``cost_usd_upper_bound`` pair (when at least one dispatch was
+    bracketed by the unindexed-model resolver). Exactly one of the
+    two shapes is populated for any given attribution.
+
     Attributes:
-        main_cost_usd: Sum across all main calls in the record subset
-            of (call's deduplicated usage) priced at (call's own
-            ``message.model``).
-        delegated_cost_usd: Sum across all ``Agent`` dispatches in the
-            record subset of (dispatch's rolled-up
-            ``toolUseResult.usage``) priced at the subagent's model
-            from the conversation's ``SubagentModelIndex``.
-        total_cost_usd: ``main_cost_usd + delegated_cost_usd``.
+        main_cost_usd: Sum across all main calls in the record
+            subset of (call's deduplicated usage) priced at (call's
+            own ``message.model``).
+        delegated_cost_usd: Sum across all ``Agent`` dispatches in
+            the record subset of (dispatch's rolled-up
+            ``toolUseResult.usage``) priced at the dispatch's
+            point-estimate model.
+        cost_usd: ``main_cost_usd + delegated_cost_usd`` when the
+            scope contains no bracketed dispatch; ``None`` when it
+            does.
+        cost_usd_lower_bound: Lower bound of the cost range when
+            the scope contains at least one bracketed dispatch.
+            Equal to main cost plus, per dispatch: the certain
+            price for non-bracketed dispatches and the
+            haiku-priced cost for bracketed ones. ``None`` when
+            no dispatch was bracketed.
+        cost_usd_upper_bound: Upper bound, defined symmetrically
+            with ``cost_usd_lower_bound`` but using the bracket's
+            opus rate for bracketed dispatches.
         model_token_distribution: ``model -> total billed tokens``
             (sum across the five categories) for every model that
-            contributed cost in either population.
+            contributed cost in either population. For bracketed
+            dispatches the point-estimate model is recorded.
+        dispatches_resolved_without_index: Count of dispatches whose
+            ``agentId`` was not in the index and which were priced
+            via ``resolve_unindexed_subagent_model``.
+        dispatches_bracketed: Subset of the above that hit the
+            bracket path (the resolver could not commit to a single
+            model). ``0`` when every resolved dispatch was
+            deterministic.
     """
 
     main_cost_usd: float
     delegated_cost_usd: float
-    total_cost_usd: float
+    cost_usd: float | None
+    cost_usd_lower_bound: float | None
+    cost_usd_upper_bound: float | None
     model_token_distribution: dict[str, int] = field(default_factory=dict)
+    dispatches_resolved_without_index: int = 0
+    dispatches_bracketed: int = 0
 
 
 def attribute_cost_for_records(
@@ -99,37 +157,75 @@ def attribute_cost_for_records(
             scopes.
         rate_table: The rate table to compute cost against.
         subagent_models_by_agent_id: ``agentId``-keyed map from the
-            session's merged ``SubagentModelIndex`` data. The
-            submission contract requires this to be populated for
-            every dispatch's ``agentId``; an unindexed ``agentId``
-            raises ``KeyError`` rather than falling back to an
-            approximation.
+            session's merged ``SubagentModelIndex`` data. Dispatches
+            whose ``agentId`` is in this map are priced from the
+            indexed model. Dispatches whose ``agentId`` is missing
+            (the case-study submission shipped without sibling
+            subagent files) are priced via
+            ``resolve_unindexed_subagent_model``.
 
     Returns:
-        A populated ``CostAttribution`` with both costs and the
-        per-model token distribution.
+        A populated ``CostAttribution`` with the per-model token
+        distribution and either a single ``cost_usd`` or a
+        ``cost_usd_lower_bound`` / ``cost_usd_upper_bound`` pair,
+        depending on whether any dispatch in the scope was
+        bracketed.
 
     Raises:
-        KeyError: When an ``Agent`` dispatch's ``agentId`` is not
-            present in ``subagent_models_by_agent_id``. Surfaces a
-            submission-contract violation (the sibling subagent
-            file was not shipped) at parse time.
         rates.RateTableError: When a resolved model is not present
             in ``rate_table.models``.
     """
     main_cost, main_dist = _cost_main_per_call(records, rate_table)
-    delegated_cost, delegated_dist = _cost_delegated_per_call(
-        records, rate_table, subagent_models_by_agent_id
-    )
+    delegated = _cost_delegated_per_call(records, rate_table, subagent_models_by_agent_id)
     distribution: dict[str, int] = dict(main_dist)
-    for model_id, tokens in delegated_dist.items():
+    for model_id, tokens in delegated.distribution.items():
         distribution[model_id] = distribution.get(model_id, 0) + tokens
+    if delegated.dispatches_bracketed > 0:
+        cost_usd: float | None = None
+        lower_bound: float | None = main_cost + delegated.cost_lower_bound
+        upper_bound: float | None = main_cost + delegated.cost_upper_bound
+    else:
+        cost_usd = main_cost + delegated.cost_point
+        lower_bound = None
+        upper_bound = None
     return CostAttribution(
         main_cost_usd=main_cost,
-        delegated_cost_usd=delegated_cost,
-        total_cost_usd=main_cost + delegated_cost,
+        delegated_cost_usd=delegated.cost_point,
+        cost_usd=cost_usd,
+        cost_usd_lower_bound=lower_bound,
+        cost_usd_upper_bound=upper_bound,
         model_token_distribution=distribution,
+        dispatches_resolved_without_index=delegated.dispatches_resolved_without_index,
+        dispatches_bracketed=delegated.dispatches_bracketed,
     )
+
+
+@dataclass(frozen=True)
+class _DelegatedSums:
+    """Internal per-bound delegated-cost sums and counters.
+
+    Attributes:
+        cost_point: Sum of every dispatch's point-estimate cost.
+        cost_lower_bound: Sum where each bracketed dispatch is
+            priced at the bracket's lower model and each
+            deterministic dispatch is priced at its point estimate.
+        cost_upper_bound: Symmetric with ``cost_lower_bound`` but
+            using the bracket's upper model for bracketed
+            dispatches.
+        distribution: ``model -> billed tokens`` aggregated over the
+            point-estimate model of every dispatch.
+        dispatches_resolved_without_index: Count of dispatches
+            handled by the unindexed-model resolver.
+        dispatches_bracketed: Subset of the above that hit the
+            bracket path.
+    """
+
+    cost_point: float
+    cost_lower_bound: float
+    cost_upper_bound: float
+    distribution: dict[str, int]
+    dispatches_resolved_without_index: int
+    dispatches_bracketed: int
 
 
 def _cost_main_per_call(
@@ -177,18 +273,29 @@ def _cost_delegated_per_call(
     records: list[Record],
     rate_table: RateTable,
     subagent_models_by_agent_id: dict[str, str],
-) -> tuple[float, dict[str, int]]:
-    """Sum delegated-dispatch cost, looking up each dispatch's subagent model.
+) -> _DelegatedSums:
+    """Sum delegated-dispatch cost and counters, looking up each dispatch's model.
 
-    Returns ``(cost_usd, model_token_distribution)``. Each dispatch's
-    ``agentId`` (read from ``toolUseResult.agentId``) must be present
-    in ``subagent_models_by_agent_id``; an unindexed id raises
-    ``KeyError`` so a missing sibling subagent file surfaces as a
-    contract violation rather than a silent attribution drift.
+    Each dispatch's ``agentId`` (read from ``toolUseResult.agentId``)
+    is first checked against ``subagent_models_by_agent_id``. When
+    the id is present, the indexed model is used and the dispatch
+    contributes to all three bound sums identically (point, lower,
+    upper) at that single rate. When the id is absent (the sibling
+    subagent file was not shipped) the dispatch is routed through
+    ``resolve_unindexed_subagent_model`` using the dispatch context
+    captured from the matching assistant tool_use; a deterministic
+    resolution again contributes a single rate, while a bracketed
+    resolution contributes three different rates (point, lower,
+    upper) so the eventual session-scope bounds frame the cost as
+    a range.
     """
-    agent_dispatch_tool_use_ids = _agent_dispatch_tool_use_ids(records)
-    cost = 0.0
+    contexts = _build_dispatch_contexts(records)
+    cost_point = 0.0
+    cost_lower = 0.0
+    cost_upper = 0.0
     distribution: dict[str, int] = {}
+    dispatches_resolved = 0
+    dispatches_bracketed = 0
     for record in records:
         if record.record_type != RECORD_TYPE_USER:
             continue
@@ -198,37 +305,70 @@ def _cost_delegated_per_call(
         usage = tool_use_result.get("usage")
         if not isinstance(usage, dict):
             continue
-        if not _matches_agent_dispatch(record, agent_dispatch_tool_use_ids):
+        matched_tool_use_id = _matched_dispatch_tool_use_id(record, contexts)
+        if matched_tool_use_id is None:
             continue
         agent_id = tool_use_result.get("agentId")
-        if not isinstance(agent_id, str):
-            raise KeyError(
-                "delegated dispatch user record has no string agentId on "
-                "toolUseResult; cannot resolve subagent model"
-            )
-        if agent_id not in subagent_models_by_agent_id:
-            raise KeyError(
-                f"agentId {agent_id!r} is not in the SubagentModelIndex; "
-                f"the submission must include the sibling subagents/ "
-                f"directory with agent-{agent_id}.jsonl"
-            )
-        resolved = subagent_models_by_agent_id[agent_id]
         sums = _token_sums_dict_from_usage(usage)
-        cost += cost_in_usd(rate_table, resolved, sums)
-        distribution[resolved] = distribution.get(resolved, 0) + sum(sums.values())
-    return cost, distribution
+        if isinstance(agent_id, str) and agent_id in subagent_models_by_agent_id:
+            indexed_model = subagent_models_by_agent_id[agent_id]
+            point_cost = cost_in_usd(rate_table, indexed_model, sums)
+            cost_point += point_cost
+            cost_lower += point_cost
+            cost_upper += point_cost
+            distribution[indexed_model] = (
+                distribution.get(indexed_model, 0) + sum(sums.values())
+            )
+            continue
+        context = contexts[matched_tool_use_id]
+        resolved = resolve_unindexed_subagent_model(
+            subagent_type=context.subagent_type,
+            input_model=context.input_model,
+            parent_main_model=context.parent_main_model,
+        )
+        dispatches_resolved += 1
+        point_cost = cost_in_usd(rate_table, resolved.canonical_model, sums)
+        cost_point += point_cost
+        if resolved.bracket is None:
+            cost_lower += point_cost
+            cost_upper += point_cost
+        else:
+            dispatches_bracketed += 1
+            lower_model, upper_model = resolved.bracket
+            cost_lower += cost_in_usd(rate_table, lower_model, sums)
+            cost_upper += cost_in_usd(rate_table, upper_model, sums)
+        distribution[resolved.canonical_model] = (
+            distribution.get(resolved.canonical_model, 0) + sum(sums.values())
+        )
+    return _DelegatedSums(
+        cost_point=cost_point,
+        cost_lower_bound=cost_lower,
+        cost_upper_bound=cost_upper,
+        distribution=distribution,
+        dispatches_resolved_without_index=dispatches_resolved,
+        dispatches_bracketed=dispatches_bracketed,
+    )
 
 
-def _agent_dispatch_tool_use_ids(records: list[Record]) -> set[str]:
-    """Return the set of ``Agent`` ``tool_use`` block ids across a record subset."""
-    ids: set[str] = set()
+def _build_dispatch_contexts(records: list[Record]) -> dict[str, _DispatchContext]:
+    """Build a tool_use_id -> dispatch context map from a record subset.
+
+    Walks non-synthetic assistant records, captures every ``Agent``
+    tool_use block's ``input.subagent_type`` and ``input.model``
+    along with the emitting record's ``message.model`` (the
+    parent's main model). The resulting map is the join input the
+    unindexed-model resolver consumes when an ``agentId`` is not
+    in the ``SubagentModelIndex``.
+    """
+    contexts: dict[str, _DispatchContext] = {}
     for record in records:
         if record.record_type != RECORD_TYPE_ASSISTANT:
             continue
         message = record.payload.get("message")
         if not isinstance(message, dict):
             continue
-        if message.get("model") == SYNTHETIC_MODEL_MARKER:
+        parent_model = message.get("model")
+        if not isinstance(parent_model, str) or parent_model == SYNTHETIC_MODEL_MARKER:
             continue
         for block in message.get("content", []):
             if not isinstance(block, dict):
@@ -238,31 +378,52 @@ def _agent_dispatch_tool_use_ids(records: list[Record]) -> set[str]:
             if block.get("name") != AGENT_TOOL_NAME:
                 continue
             tool_use_id = block.get("id")
-            if isinstance(tool_use_id, str):
-                ids.add(tool_use_id)
-    return ids
+            if not isinstance(tool_use_id, str):
+                continue
+            inputs = block.get("input")
+            if not isinstance(inputs, dict):
+                inputs = {}
+            subagent_type = inputs.get("subagent_type")
+            if not isinstance(subagent_type, str):
+                subagent_type = None
+            input_model = inputs.get("model")
+            if not isinstance(input_model, str):
+                input_model = None
+            contexts[tool_use_id] = _DispatchContext(
+                subagent_type=subagent_type,
+                input_model=input_model,
+                parent_main_model=parent_model,
+            )
+    return contexts
 
 
-def _matches_agent_dispatch(
+def _matched_dispatch_tool_use_id(
     user_record: Record,
-    agent_dispatch_tool_use_ids: set[str],
-) -> bool:
-    """Return ``True`` when a user record's tool_result references an Agent dispatch."""
+    contexts: dict[str, _DispatchContext],
+) -> str | None:
+    """Return the tool_use_id of the Agent dispatch this user record carries.
+
+    The user record carries one ``tool_result`` block per dispatched
+    tool call; this helper returns the first ``tool_use_id`` whose
+    matching assistant ``tool_use`` block was an ``Agent`` dispatch
+    (i.e. is keyed in ``contexts``). Returns ``None`` when the user
+    record is not an Agent-dispatch result.
+    """
     message = user_record.payload.get("message")
     if not isinstance(message, dict):
-        return False
+        return None
     content = message.get("content")
     if not isinstance(content, list):
-        return False
+        return None
     for block in content:
         if not isinstance(block, dict):
             continue
         if block.get("type") != CONTENT_BLOCK_TOOL_RESULT:
             continue
         tool_use_id = block.get("tool_use_id")
-        if isinstance(tool_use_id, str) and tool_use_id in agent_dispatch_tool_use_ids:
-            return True
-    return False
+        if isinstance(tool_use_id, str) and tool_use_id in contexts:
+            return tool_use_id
+    return None
 
 
 def _token_sums_dict_from_usage(usage: dict[str, Any]) -> dict[str, int]:
