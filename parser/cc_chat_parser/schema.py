@@ -226,35 +226,6 @@ def is_compact_summary_user(record: Record) -> bool:
     return record.payload.get("isCompactSummary") is True
 
 
-def is_genuine_user_prompt(record: Record) -> bool:
-    """Return ``True`` for user records that carry user-authored prompt text.
-
-    Distinguishes user-authored prompts from tool-result returns. A
-    user record is a tool-result return when its content is a list
-    that contains at least one ``tool_result`` block; it is a genuine
-    prompt when its content is a string, or a list with no
-    ``tool_result`` block. Compact-summary records are excluded
-    explicitly even though they meet the structural criterion of a
-    genuine prompt.
-    """
-    if record.record_type != RECORD_TYPE_USER:
-        return False
-    if is_compact_summary_user(record):
-        return False
-    message = record.payload.get("message")
-    if not isinstance(message, dict):
-        return False
-    content = message.get("content")
-    if isinstance(content, str):
-        return True
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == CONTENT_BLOCK_TOOL_RESULT:
-                return False
-        return True
-    return False
-
-
 def assistant_request_id(record: Record) -> str | None:
     """Return the ``requestId`` of an assistant record, or ``None``.
 

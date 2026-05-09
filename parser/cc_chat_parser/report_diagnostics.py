@@ -33,10 +33,15 @@ from .metrics.economic import compute_session_economic
 from .rates import RateTable
 from .schema import (
     SYNTHETIC_MODEL_MARKER,
-    is_genuine_user_prompt,
     user_prompt_text,
 )
 from .session import Session
+from .user_prompts import (
+    is_model_invoked_skill_rendering,
+    is_slash_command_marker,
+    is_slash_command_rendered_body,
+    is_user_authored_prompt,
+)
 
 EXPECTED_ENTRYPOINT = "cli"
 EXPECTED_AUTH_MODE = "external"
@@ -97,6 +102,7 @@ def build_diagnostics(
         view.conversation.subagent_model_index.files_seen
         for view in session.views
     )
+    slash_markers_dropped, model_invoked_skill_renderings = _slash_invocation_counts(session)
     subagent_files_without_model = sum(
         view.conversation.subagent_model_index.files_without_model
         for view in session.views
@@ -119,6 +125,8 @@ def build_diagnostics(
         "subagent_models_indexed": subagent_models_indexed,
         "subagent_dispatches_resolved_without_index": economic.dispatches_resolved_without_index,
         "subagent_dispatches_bracketed": economic.dispatches_bracketed,
+        "slash_command_markers_without_rendered_body": slash_markers_dropped,
+        "model_invoked_skill_renderings": model_invoked_skill_renderings,
         "model_token_distribution": economic.model_token_distribution,
         "tool_result_count": tool_result_total,
         "tool_error_count": tool_error_total,
@@ -359,9 +367,45 @@ def _unknown_commands(session: Session) -> list[str]:
     seen: set[str] = set()
     for view in session.views:
         for record in view.conversation.records:
-            if not is_genuine_user_prompt(record):
+            if not is_user_authored_prompt(record):
                 continue
             for command in extract_command_names(user_prompt_text(record)):
                 if not is_known_command(command):
                     seen.add(command)
     return sorted(seen)
+
+
+def _slash_invocation_counts(session: Session) -> tuple[int, int]:
+    """Return ``(slash_markers_without_rendered_body, model_invoked_skill_renderings)``.
+
+    A slash marker without a paired rendered body in the same
+    ``promptId`` group ran a local-only command or carried a typo;
+    the invocation never reached the model and is dropped from
+    turn-starting detection. Counting these renders the dropped
+    population visible at the diagnostics layer.
+
+    A model-invoked Skill rendering is identical in count to the
+    supplementary metric of the same name; it surfaces here for
+    parity with the other dispatch counters in this block.
+    """
+    markers_dropped = 0
+    model_invoked_renderings = 0
+    for view in session.views:
+        promptids_with_rendered_body: set[str] = set()
+        for record in view.conversation.records:
+            if is_slash_command_rendered_body(record):
+                promptid = record.payload.get("promptId")
+                if isinstance(promptid, str):
+                    promptids_with_rendered_body.add(promptid)
+            if is_model_invoked_skill_rendering(record):
+                model_invoked_renderings += 1
+        for record in view.conversation.records:
+            if not is_slash_command_marker(record):
+                continue
+            promptid = record.payload.get("promptId")
+            if not isinstance(promptid, str):
+                markers_dropped += 1
+                continue
+            if promptid not in promptids_with_rendered_body:
+                markers_dropped += 1
+    return markers_dropped, model_invoked_renderings

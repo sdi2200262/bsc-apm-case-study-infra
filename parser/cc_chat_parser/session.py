@@ -83,10 +83,10 @@ from .loader import (
 from .schema import (
     Record,
     SchemaError,
-    is_genuine_user_prompt,
     user_prompt_text,
 )
 from .turns import Turn, derive_turns
+from .user_prompts import is_user_authored_prompt
 
 
 @dataclass(frozen=True)
@@ -294,7 +294,7 @@ def _ratchet_phase_assignments(conversations: list[Conversation]) -> dict[str, s
     prompt_entries: list[tuple[Record, str]] = []
     for conversation in conversations:
         for record in conversation.records:
-            if not is_genuine_user_prompt(record):
+            if not is_user_authored_prompt(record):
                 continue
             if record.timestamp is None or record.uuid is None:
                 continue
@@ -341,7 +341,7 @@ def _phase_by_uuid_constant(records: tuple[Record, ...], phase: str) -> dict[str
     """Stamp every genuine user prompt record's uuid with the same phase label."""
     result: dict[str, str] = {}
     for record in records:
-        if not is_genuine_user_prompt(record):
+        if not is_user_authored_prompt(record):
             continue
         if record.uuid is None:
             continue
@@ -365,7 +365,7 @@ def _first_slash_command(conversation: Conversation) -> tuple[str, Record | None
     ``None`` are returned and the caller assigns the unassigned role.
     """
     for record in conversation.records:
-        if not is_genuine_user_prompt(record):
+        if not is_user_authored_prompt(record):
             continue
         for command in extract_command_names(user_prompt_text(record)):
             if is_known_command(command):

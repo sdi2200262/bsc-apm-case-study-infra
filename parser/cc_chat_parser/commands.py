@@ -19,14 +19,29 @@ classifier level. The set of recognised APM command names is kept here
 to drive the protocol-bucket classifier and to surface unknown
 ``apm-*`` commands in diagnostics.
 
-The Spec Kit framework defines eight slash commands. All but
-``speckit.implement`` are planning-side; ``speckit.implement`` is the
-sole implementation-side command. Phase assignment in Spec-kit is
-per-prompt and follows a forward-only ratchet with surgical exceptions:
-once a prompt advances the ratchet to ``implementation``, later
-``planning`` commands count themselves as planning but do not move the
-ratchet back. The command-to-phase table is consumed by the per-prompt
-classifier in the session assembler.
+The Spec Kit framework's commands are surfaced in Claude Code as slash
+commands by the spec-kit Claude integration. Spec-kit's own canonical
+names use dotted notation (``speckit.specify``, ``speckit.git.commit``);
+the integration installs them as Claude Code skills with dots replaced
+by hyphens (``/speckit-specify``, ``/speckit-git-commit``), and the
+integration's own hook note instructs the model to use the hyphenated
+form when constructing slash commands. The JSONL records this parser
+consumes therefore carry the hyphenated form, and the table below
+matches that form.
+
+Two installable surfaces ship: the core template set with nine commands
+(``analyze``, ``checklist``, ``clarify``, ``constitution``,
+``implement``, ``plan``, ``specify``, ``tasks``, ``taskstoissues``) and
+the git extension with five (``git-commit``, ``git-feature``,
+``git-initialize``, ``git-remote``, ``git-validate``). All but
+``speckit-implement``, ``speckit-git-commit``, and
+``speckit-git-validate`` are planning-side; the three exceptions sit on
+the implementation side. Phase assignment in Spec-kit is per-prompt and
+follows a forward-only ratchet with surgical exceptions: once a prompt
+advances the ratchet to ``implementation``, later ``planning`` commands
+count themselves as planning but do not move the ratchet back. The
+command-to-phase table is consumed by the per-prompt classifier in the
+session assembler.
 """
 
 from __future__ import annotations
@@ -76,14 +91,20 @@ APM_PHASE_BY_ROLE: dict[str, str] = {
 }
 
 SPECKIT_PHASE_BY_COMMAND: dict[str, str] = {
-    "speckit.constitution": PHASE_PLANNING,
-    "speckit.specify": PHASE_PLANNING,
-    "speckit.clarify": PHASE_PLANNING,
-    "speckit.checklist": PHASE_PLANNING,
-    "speckit.plan": PHASE_PLANNING,
-    "speckit.tasks": PHASE_PLANNING,
-    "speckit.analyze": PHASE_PLANNING,
-    "speckit.implement": PHASE_IMPLEMENTATION,
+    "speckit-analyze": PHASE_PLANNING,
+    "speckit-checklist": PHASE_PLANNING,
+    "speckit-clarify": PHASE_PLANNING,
+    "speckit-constitution": PHASE_PLANNING,
+    "speckit-plan": PHASE_PLANNING,
+    "speckit-specify": PHASE_PLANNING,
+    "speckit-tasks": PHASE_PLANNING,
+    "speckit-taskstoissues": PHASE_PLANNING,
+    "speckit-git-feature": PHASE_PLANNING,
+    "speckit-git-initialize": PHASE_PLANNING,
+    "speckit-git-remote": PHASE_PLANNING,
+    "speckit-implement": PHASE_IMPLEMENTATION,
+    "speckit-git-commit": PHASE_IMPLEMENTATION,
+    "speckit-git-validate": PHASE_IMPLEMENTATION,
 }
 
 SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset(SPECKIT_PHASE_BY_COMMAND.keys())
@@ -122,15 +143,16 @@ def classify_command(name: str) -> str:
 
     Args:
         name: A command name with the leading slash already stripped
-            (e.g. ``apm-1-initiate-planner`` or ``speckit.specify``).
+            (e.g. ``apm-1-initiate-planner`` or ``speckit-specify``).
 
     Returns:
-        ``FRAMEWORK_APM`` for ``apm-*`` names, ``FRAMEWORK_SPECKIT`` for
-        ``speckit.*`` names, the empty string otherwise.
+        ``FRAMEWORK_APM`` for ``apm-*`` names, ``FRAMEWORK_SPECKIT``
+        for ``speckit-*`` names (the hyphenated form Claude Code uses
+        for spec-kit slash commands), the empty string otherwise.
     """
     if name.startswith("apm-"):
         return FRAMEWORK_APM
-    if name.startswith("speckit."):
+    if name.startswith("speckit-"):
         return FRAMEWORK_SPECKIT
     return ""
 
@@ -159,8 +181,8 @@ def speckit_command_phase(name: str) -> str | None:
     Returns:
         ``PHASE_PLANNING`` or ``PHASE_IMPLEMENTATION`` for known
         Spec-kit commands; ``None`` for any name not in the Spec-kit
-        table (including ``apm-*`` names and unknown ``speckit.*``
-        names such as ``speckit.taskstoissues``).
+        table (including ``apm-*`` names and unknown ``speckit-*``
+        names from third-party extensions).
     """
     return SPECKIT_PHASE_BY_COMMAND.get(name)
 

@@ -186,7 +186,8 @@ def reliability_block(metrics: ReliabilityMetrics) -> dict[str, Any]:
 def supplementary_block(metrics: SupplementaryMetrics) -> dict[str, Any]:
     """Render a supplementary block with leaf triples."""
     return {
-        "subagent_count":        metric_leaf(metrics.subagent_count,        ANCHOR_SUPPLEMENTARY, False),
-        "subagent_tool_count":   metric_leaf(metrics.subagent_tool_count,   ANCHOR_SUPPLEMENTARY, False),
-        "reasoning_token_share": metric_leaf(round(metrics.reasoning_token_share, 6), ANCHOR_SUPPLEMENTARY, True),
+        "subagent_count":            metric_leaf(metrics.subagent_count,            ANCHOR_SUPPLEMENTARY, False),
+        "subagent_tool_count":       metric_leaf(metrics.subagent_tool_count,       ANCHOR_SUPPLEMENTARY, False),
+        "model_invoked_skill_count": metric_leaf(metrics.model_invoked_skill_count, ANCHOR_SUPPLEMENTARY, False),
+        "reasoning_token_share":     metric_leaf(round(metrics.reasoning_token_share, 6), ANCHOR_SUPPLEMENTARY, True),
     }

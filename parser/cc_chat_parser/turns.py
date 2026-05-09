@@ -11,16 +11,34 @@ conversational turn (one user prompt, one model response, possibly with
 tool work in the middle) spans many such records. This module groups
 records into ``Turn`` instances bounded by turn-starting user prompts.
 
-A user prompt is turn-starting if and only if it is not the result of a
-queue ``dequeue``. Queued-then-delivered prompts (steers) reach the
-model mid-turn; their delivery extends the ongoing turn rather than
-opening a new one. The set of delivered-steer enqueue records is
-provided by the caller (built by the loader's queue-lifecycle replay).
+Turn-starting prompts come in two shapes. A free-typed user record is
+turn-starting on its own. A user-driven slash invocation is turn-starting
+on the marker record (the ``<command-message>`` echo); its paired
+rendered body, which the platform writes in the same ``promptId`` group
+and delivers to the model, lives within the marker-anchored turn rather
+than opening a new one. The marker, not the rendered body, is the turn
+anchor: it carries the user's invocation including the command name and
+arguments and feeds the bucket classifier directly via the
+``<command-name>`` tag.
 
-Steers detected during a turn are recorded as engagement events on
-that turn. Compact-summary user records are excluded from
-turn-starting consideration: they are Claude Code's own context-rebuild
-artefact, not user-authored prompts.
+Three group-level guards keep platform bookkeeping out of the
+turn-starting set. A slash marker whose ``promptId`` group has no
+rendered body never reached the model: this covers local-only commands
+(``/model``, ``/effort``, ``/clear``) and typos that hit the local
+parser. A free-typed-shaped error string in a ``promptId`` group whose
+only sibling is a caveat is the ``Unknown command: ...`` line Claude
+Code emits for typos. A user record carrying ``sourceToolUseID`` is the
+rendering of a Skill the model itself invoked via the Skill tool, which
+is model-driven content rather than a user-authored prompt.
+
+Delivered steers are still handled as before: a queued-then-delivered
+prompt reaches the model mid-turn and extends the ongoing turn rather
+than opening a new one. The set of delivered-steer dequeue records is
+provided by the loader's queue-lifecycle replay.
+
+Compact-summary user records are excluded from turn-starting
+consideration: they are Claude Code's own context-rebuild artefact, not
+user-authored prompts.
 """
 
 from __future__ import annotations
@@ -34,10 +52,15 @@ from .schema import (
     QUEUE_OP_ENQUEUE,
     Record,
     is_compact_summary_user,
-    is_genuine_user_prompt,
     is_synthetic_assistant,
     is_user_authored_enqueue,
     queue_operation,
+)
+from .user_prompts import (
+    is_local_command_caveat,
+    is_slash_command_marker,
+    is_slash_command_rendered_body,
+    is_user_authored_prompt,
 )
 
 
@@ -80,14 +103,27 @@ def derive_turns(conversation: Conversation) -> tuple[Turn, ...]:
             already classified.
 
     Returns:
-        Turns in document order. Empty when the conversation contains
-        no genuine user prompt; this is rare but possible for files
-        that consist entirely of attachments and snapshots.
+        Turns in document order. Empty when the conversation
+        contains no user-authored turn-starting prompt; this is
+        rare but possible for files that consist entirely of
+        attachments and snapshots.
     """
     matched_dequeue_keys = _matched_dequeue_keys(conversation.steer_events)
+    promptids_with_rendered_body = _promptids_with_rendered_body(conversation.records)
+    promptids_with_failed_local_invocation = _promptids_with_failed_local_invocation(
+        conversation.records,
+        promptids_with_rendered_body,
+    )
     turn_starts: list[int] = []
     for index, record in enumerate(conversation.records):
-        if not _is_turn_starting(record, conversation.records, index, matched_dequeue_keys):
+        if not _is_turn_starting(
+            record,
+            conversation.records,
+            index,
+            matched_dequeue_keys,
+            promptids_with_rendered_body,
+            promptids_with_failed_local_invocation,
+        ):
             continue
         turn_starts.append(index)
     if not turn_starts:
@@ -121,31 +157,48 @@ def _is_turn_starting(
     all_records: tuple[Record, ...],
     index: int,
     matched_dequeue_keys: frozenset[tuple[str, int]],
+    promptids_with_rendered_body: frozenset[str],
+    promptids_with_failed_local_invocation: frozenset[str],
 ) -> bool:
     """Return ``True`` when ``record`` opens a new turn.
 
-    A user prompt is turn-starting when it is a genuine
-    user-content record, is not the post-compaction synthesised
-    summary, and is not the result of a matched queue ``dequeue``.
-    The closest preceding non-attachment, non-snapshot record is
-    inspected; when that record is a ``dequeue`` whose matching
-    enqueue was successfully resolved during the loader's
-    queue-lifecycle replay, the prompt is the synthesised payload
-    of that delivery and continues the ongoing turn rather than
-    opening a new one. An unmatched dequeue (recorded as a queue
-    lifecycle warning) does not disqualify the prompt: nothing was
-    actually delivered to absorb it into a previous turn.
+    The record must first satisfy ``is_user_authored_prompt``: the
+    user-authored shape predicate that excludes tool-results,
+    compact summaries, model-invoked Skill renderings, local-command
+    caveats, local-command stdout/stderr, and platform-rendered slash
+    bodies.
 
-    Queue-operation records carry no ``uuid`` field of their own,
-    so the matched-dequeue identity uses ``(source_file,
-    source_line_index)`` instead. Both fields are populated on
-    every parsed ``Record``, and the pair is unique within a
+    Two further conversation-level guards apply. A slash-command
+    marker is a turn-starter only when its ``promptId`` group
+    contains a rendered body; a marker without a paired rendering
+    covers local-only commands (which never reach the model) and
+    typos that hit the local parser. A free-typed-shaped record
+    whose ``promptId`` group is a failed local invocation (a caveat
+    with no rendered body) is the ``Unknown command: ...`` error
+    string Claude Code emits for a typo'd slash invocation.
+
+    Steer delivery preserves the existing semantics: when the
+    closest preceding non-attachment, non-snapshot record is a
+    ``dequeue`` whose matching enqueue was resolved by the loader's
+    queue-lifecycle replay, the prompt is the synthesised payload of
+    that delivery and continues the ongoing turn. An unmatched
+    dequeue does not disqualify the prompt: nothing was actually
+    delivered to absorb it into the previous turn. Queue-operation
+    records carry no ``uuid``; the matched-dequeue identity uses
+    ``(source_file, source_line_index)``, unique within a
     conversation.
     """
-    if not is_genuine_user_prompt(record):
+    if not is_user_authored_prompt(record):
         return False
-    if is_compact_summary_user(record):
-        return False
+    promptid = record.payload.get("promptId")
+    if is_slash_command_marker(record):
+        if not isinstance(promptid, str):
+            return False
+        if promptid not in promptids_with_rendered_body:
+            return False
+    else:
+        if isinstance(promptid, str) and promptid in promptids_with_failed_local_invocation:
+            return False
     preceding_index = index - 1
     while preceding_index >= 0:
         preceding = all_records[preceding_index]
@@ -162,6 +215,53 @@ def _is_turn_starting(
             return True
         break
     return True
+
+
+def _promptids_with_rendered_body(records: tuple[Record, ...]) -> frozenset[str]:
+    """Return ``promptId``s whose group contains a rendered slash body.
+
+    The presence of a rendered body proves the slash invocation
+    expanded into a prompt the platform delivered to the model. A
+    marker whose group has no rendered body either ran a local-only
+    command or was a typo the local parser refused.
+    """
+    promptids: set[str] = set()
+    for record in records:
+        if not is_slash_command_rendered_body(record):
+            continue
+        promptid = record.payload.get("promptId")
+        if isinstance(promptid, str):
+            promptids.add(promptid)
+    return frozenset(promptids)
+
+
+def _promptids_with_failed_local_invocation(
+    records: tuple[Record, ...],
+    promptids_with_rendered_body: frozenset[str],
+) -> frozenset[str]:
+    """Return ``promptId``s of caveat-only groups that produced no rendered body.
+
+    Local-only slash commands and typos both write a caveat record
+    into the conversation. A typo additionally writes a free-typed-
+    shaped error string (``Unknown command: ...``) into the same
+    ``promptId`` group; that string would otherwise pass
+    ``is_user_authored_prompt``. A local-only command writes a
+    marker and a stdout record into the same group; the marker is
+    already filtered by the absence of a rendered body. Free-typed
+    records in the returned set are dropped at the turn-starting
+    decision.
+    """
+    promptids: set[str] = set()
+    for record in records:
+        if not is_local_command_caveat(record):
+            continue
+        promptid = record.payload.get("promptId")
+        if not isinstance(promptid, str):
+            continue
+        if promptid in promptids_with_rendered_body:
+            continue
+        promptids.add(promptid)
+    return frozenset(promptids)
 
 
 def _matched_dequeue_keys(

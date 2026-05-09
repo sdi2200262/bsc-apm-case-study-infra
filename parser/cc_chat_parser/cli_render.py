@@ -38,11 +38,11 @@ from .rates import (
 )
 from .schema import (
     is_compact_summary_user,
-    is_genuine_user_prompt,
     is_synthetic_assistant,
     queue_operation,
 )
 from .session import Session
+from .user_prompts import is_user_authored_prompt
 
 
 def print_inspection(session: Session) -> None:
@@ -84,7 +84,7 @@ def print_inspection(session: Session) -> None:
             if op:
                 per_file_queue[op] += 1
                 queue_op_counts[op] += 1
-            if is_genuine_user_prompt(record):
+            if is_user_authored_prompt(record):
                 per_file_user_prompts += 1
                 genuine_user_prompts += 1
             if is_compact_summary_user(record):

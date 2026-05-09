@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-Supplementary metrics: subagent activity and reasoning-token share.
+Supplementary metrics: subagent activity, model-driven Skill use, reasoning share.
 
 Subagent metrics describe how often the calling agent delegates
 work to a dispatched subagent and how much tool work those
@@ -11,6 +11,17 @@ group because the unit of comparison for the case study is
 framework against framework rather than agent against subagent;
 the subagent metrics characterise behaviour but are not
 hypothesis-tested.
+
+The model-invoked Skill count records how many times the main
+agent itself reached for a Skill via the Skill tool. The platform
+renders the invoked Skill body and injects it into the
+conversation as a user-side record carrying ``sourceToolUseID``;
+those renderings are not user-authored prompts (the user did not
+type the slash) and are filtered out of turn-starting detection,
+so without a dedicated count their occurrence would otherwise be
+invisible at the metric layer. The count is supplementary because
+self-invocation rates are an agent-behaviour signal rather than a
+framework-comparison primary.
 
 Reasoning-token share approximates the fraction of the model's
 output tokens spent on explicit ``thinking`` deliberation. The
@@ -43,6 +54,7 @@ from ..schema import (
     assistant_content_blocks,
     is_synthetic_assistant,
 )
+from ..user_prompts import is_model_invoked_skill_rendering
 
 AGENT_TOOL_NAME = "Agent"
 
@@ -58,6 +70,9 @@ class SupplementaryMetrics:
             across user records that returned a populated subagent
             result. Dispatches whose result lacked the field
             contribute zero.
+        model_invoked_skill_count: Number of user-side records in
+            scope that are platform-rendered Skill bodies the model
+            itself caused to be injected via the Skill tool.
         reasoning_token_share: Approximate share of output tokens
             spent on ``thinking`` deliberation, computed as the
             ratio of ``thinking`` block characters to the total
@@ -68,6 +83,7 @@ class SupplementaryMetrics:
 
     subagent_count: int
     subagent_tool_count: int
+    model_invoked_skill_count: int
     reasoning_token_share: float
 
 
@@ -82,6 +98,7 @@ def compute_supplementary_metrics(records: Iterable[Record]) -> SupplementaryMet
     """
     subagent_count = 0
     subagent_tool_count = 0
+    model_invoked_skill_count = 0
     thinking_chars = 0
     total_output_chars = 0
     for record in records:
@@ -102,10 +119,13 @@ def compute_supplementary_metrics(records: Iterable[Record]) -> SupplementaryMet
                 total = tool_use_result.get("totalToolUseCount")
                 if isinstance(total, int):
                     subagent_tool_count += total
+            if is_model_invoked_skill_rendering(record):
+                model_invoked_skill_count += 1
     share = (thinking_chars / total_output_chars) if total_output_chars > 0 else 0.0
     return SupplementaryMetrics(
         subagent_count=subagent_count,
         subagent_tool_count=subagent_tool_count,
+        model_invoked_skill_count=model_invoked_skill_count,
         reasoning_token_share=share,
     )
 
