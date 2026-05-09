@@ -148,8 +148,6 @@ def build_diagnostics(
             "delegated dispatch was priced deterministically, a "
             "(cost_usd_lower_bound, cost_usd_upper_bound) pair when at least "
             "one dispatch was bracketed by the resolver.",
-            "reasoning_token_share is approximated from character counts because "
-            "message.usage.output_tokens does not split by content block type.",
         ],
     }
 

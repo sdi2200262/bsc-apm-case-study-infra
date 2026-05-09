@@ -299,8 +299,7 @@ Column families, in order:
   `all_inputs_share_protocol`, `all_inputs_share_short`,
   `all_inputs_share_standard`.
 - **Reliability** (1): `tool_success_rate`.
-- **Supplementary** (3): `subagent_count`, `subagent_tool_count`,
-  `reasoning_token_share`.
+- **Supplementary** (2): `subagent_count`, `subagent_tool_count`.
 - **Diagnostics** (7): `compaction_events_total`,
   `cost_excludes_compaction_synthesis`,
   `synthetic_assistant_records_excluded`,

@@ -189,5 +189,4 @@ def supplementary_block(metrics: SupplementaryMetrics) -> dict[str, Any]:
         "subagent_count":            metric_leaf(metrics.subagent_count,            ANCHOR_SUPPLEMENTARY, False),
         "subagent_tool_count":       metric_leaf(metrics.subagent_tool_count,       ANCHOR_SUPPLEMENTARY, False),
         "model_invoked_skill_count": metric_leaf(metrics.model_invoked_skill_count, ANCHOR_SUPPLEMENTARY, False),
-        "reasoning_token_share":     metric_leaf(round(metrics.reasoning_token_share, 6), ANCHOR_SUPPLEMENTARY, True),
     }

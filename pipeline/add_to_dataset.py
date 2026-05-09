@@ -115,7 +115,6 @@ CSV_COLUMNS: tuple[str, ...] = (
     # Supplementary
     "subagent_count",
     "subagent_tool_count",
-    "reasoning_token_share",
     # Diagnostics
     "compaction_events_total",
     "cost_excludes_compaction_synthesis",
@@ -329,7 +328,6 @@ def _build_row(combined: dict[str, Any], manifest_key: str) -> dict[str, Any]:
             "tool_success_rate": _leaf_value(reliability, "tool_success_rate"),
             "subagent_count": _leaf_value(supplementary, "subagent_count"),
             "subagent_tool_count": _leaf_value(supplementary, "subagent_tool_count"),
-            "reasoning_token_share": _leaf_value(supplementary, "reasoning_token_share"),
             "compaction_events_total": diagnostics["compaction_events_total"],
             "cost_excludes_compaction_synthesis": diagnostics["cost_excludes_compaction_synthesis"],
             "synthetic_assistant_records_excluded": diagnostics["synthetic_assistant_records_excluded"],
