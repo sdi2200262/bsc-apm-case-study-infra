@@ -19,6 +19,14 @@ modification. Downstream consumers reach into
 ``metrics.session.economic.cost_usd.value`` etc. when they want
 specific measurements; the combined artifact does not flatten or
 rename any parser-side key.
+
+When the per-participant directory carries a ``metrics_notes.yaml``
+sidecar, its entry list is embedded under ``metrics_notes``. The
+sidecar is hand-curated through ``python -m cc_chat_parser.notes``
+and survives parser re-runs because the parser does not touch it.
+The manifest's combine entry records the sidecar's checksum when
+present so a downstream reader can detect edits between combine
+runs.
 """
 
 from __future__ import annotations
@@ -28,6 +36,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from .config import resolve_config
 from .errors import (
@@ -54,6 +64,7 @@ from .submissions import (
 RESULTS_FILENAME = "results.json"
 METRICS_FILENAME = "metrics.json"
 COMBINED_FILENAME = "combined.json"
+NOTES_FILENAME = "metrics_notes.yaml"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -84,17 +95,30 @@ def main(argv: list[str] | None = None) -> int:
         _verify_upstream_checksums(manifest, submission, results_path, metrics_path)
         results_payload = read_json(results_path)
         metrics_payload = read_json(metrics_path)
-        combined = _build_combined(submission, results_payload, metrics_payload)
+        notes_path = target_dir / NOTES_FILENAME
+        notes_payload = _load_metrics_notes(notes_path) if notes_path.is_file() else None
+        combined = _build_combined(
+            submission, results_payload, metrics_payload, notes_payload
+        )
         combined_path = target_dir / COMBINED_FILENAME
         write_json(combined, combined_path)
+        manifest_fields: dict[str, Any] = {
+            "input_files": [RESULTS_FILENAME, METRICS_FILENAME],
+            "output_combined": str(combined_path.relative_to(config.output_root)),
+            "output_checksum": compute_checksum(combined_path),
+        }
+        if notes_payload is not None:
+            manifest_fields["notes_sidecar"] = str(
+                notes_path.relative_to(config.output_root)
+            )
+            manifest_fields["notes_sidecar_checksum"] = compute_checksum(notes_path)
+            manifest_fields["notes_count"] = len(notes_payload)
         manifest = add_stage(
             manifest,
             submission.manifest_key,
             STAGE_COMBINE,
             STATUS_SUCCESS,
-            input_files=[RESULTS_FILENAME, METRICS_FILENAME],
-            output_combined=str(combined_path.relative_to(config.output_root)),
-            output_checksum=compute_checksum(combined_path),
+            **manifest_fields,
         )
         save_manifest(manifest)
     except StageInputError as error:
@@ -199,17 +223,24 @@ def _build_combined(
     submission: SubmissionName,
     results_payload: Any,
     metrics_payload: Any,
+    notes_payload: list[dict[str, str]] | None,
 ) -> dict[str, Any]:
     """Assemble the combined-artifact wrapper.
 
     Identifiers go on the wrapper; the grader's score breakdown is
     flattened into a small ``grading`` block; the parser's metrics
     artifact is nested under ``metrics`` verbatim. The processing
-    timestamp is the wall-clock time the combine stage ran; it
-    does not match either upstream stage's timestamp.
+    timestamp is the wall-clock time the combine stage ran; it does
+    not match either upstream stage's timestamp.
+
+    When ``notes_payload`` is non-``None``, its entry list is
+    embedded under ``metrics_notes``. The key is omitted entirely
+    when no sidecar is present so absence is distinguishable from an
+    empty list, and downstream readers can branch on the field's
+    presence.
     """
     grading = _extract_grading(results_payload, submission.manifest_key)
-    return {
+    combined: dict[str, Any] = {
         "participant_id": submission.pid,
         "session": submission.session,
         "framework": submission.framework,
@@ -217,6 +248,67 @@ def _build_combined(
         "grading": grading,
         "metrics": metrics_payload,
     }
+    if notes_payload is not None:
+        combined["metrics_notes"] = notes_payload
+    return combined
+
+
+def _load_metrics_notes(path: Path) -> list[dict[str, str]]:
+    """Read the metrics-notes sidecar and return its entry list.
+
+    The sidecar's canonical writer is ``cc_chat_parser.notes``;
+    pipeline.combine reads the YAML directly to keep the pipeline
+    package free of in-process dependencies on the parser package.
+    Each entry must carry a non-empty ``path`` string and a non-empty
+    ``note`` string.
+
+    Args:
+        path: Path to ``metrics_notes.yaml``.
+
+    Returns:
+        The ordered entry list as ``[{"path": ..., "note": ...}, ...]``.
+
+    Raises:
+        StageExecutionError: When the sidecar is malformed.
+    """
+    with path.open("r", encoding="utf-8") as source:
+        try:
+            payload = yaml.safe_load(source) or {}
+        except yaml.YAMLError as error:
+            raise StageExecutionError(
+                f"combine: notes sidecar at {path} is not valid YAML: {error}"
+            ) from error
+    if not isinstance(payload, dict):
+        raise StageExecutionError(
+            f"combine: notes sidecar at {path} top level must be a YAML mapping"
+        )
+    notes = payload.get("notes", [])
+    if notes is None:
+        return []
+    if not isinstance(notes, list):
+        raise StageExecutionError(
+            f"combine: notes sidecar at {path} 'notes' must be a list"
+        )
+    out: list[dict[str, str]] = []
+    for index, entry in enumerate(notes):
+        if not isinstance(entry, dict):
+            raise StageExecutionError(
+                f"combine: notes sidecar at {path} entry {index} must be a mapping"
+            )
+        path_value = entry.get("path")
+        note_value = entry.get("note")
+        if not isinstance(path_value, str) or not path_value:
+            raise StageExecutionError(
+                f"combine: notes sidecar at {path} entry {index} 'path' "
+                f"must be a non-empty string"
+            )
+        if not isinstance(note_value, str) or not note_value.strip():
+            raise StageExecutionError(
+                f"combine: notes sidecar at {path} entry {index} 'note' "
+                f"must be a non-empty string"
+            )
+        out.append({"path": path_value, "note": note_value.rstrip()})
+    return out
 
 
 def _extract_grading(results_payload: Any, manifest_key: str) -> dict[str, Any]:

@@ -149,6 +149,7 @@ promoted artifacts.
     ├── S1_apm/
     │   ├── results.json
     │   ├── metrics.json
+    │   ├── metrics_notes.yaml      (optional, hand-curated)
     │   ├── combined.json
     │   └── sanitized_transcripts/
     │       ├── sanitized_<sessionId>.json
@@ -158,6 +159,17 @@ promoted artifacts.
     └── S2_speckit/
         └── ...
 ```
+
+`metrics_notes.yaml` is an author-curated sidecar that attaches free
+prose to specific metric paths (one note per ``{path, note}`` entry
+under a top-level ``notes:`` list). The parser does not write or
+read it; running ``pipeline.parse`` again does not perturb the file.
+Notes are added, listed, and removed through ``python -m
+cc_chat_parser.notes`` with subcommands ``add``, ``list``, and
+``remove``. The combine stage embeds the entry list verbatim in
+``combined.json`` under ``metrics_notes`` when the sidecar is
+present and records the sidecar's path, checksum, and entry count
+in the manifest's combine entry.
 
 The dataset directory has no opinion on where it lives; it can be
 a clone of `bsc-apm-case-study-data/`, a working directory, or a
@@ -216,7 +228,10 @@ fields.
         "status": "success",
         "input_files": ["results.json", "metrics.json"],
         "output_combined": "P001/S1_apm/combined.json",
-        "output_checksum": "sha256:..."
+        "output_checksum": "sha256:...",
+        "notes_sidecar": "P001/S1_apm/metrics_notes.yaml",
+        "notes_sidecar_checksum": "sha256:...",
+        "notes_count": 1
       },
       "add_to_dataset": {
         "timestamp": "...",
@@ -239,6 +254,13 @@ manifest uses fcntl-based locking and atomic-write semantics so
 concurrent operators serialise on writes and concurrent readers
 never see a partial write.
 
+The `combine` entry's `notes_sidecar`, `notes_sidecar_checksum`,
+and `notes_count` fields appear only when the per-submission
+directory carried a `metrics_notes.yaml` at combine time. The
+checksum lets a reviewer detect whether the sidecar was edited
+between combine runs without the entry list itself living in the
+manifest.
+
 ## Combined artifact schema
 
 The per-submission `combined.json` wraps grader and parser outputs
@@ -256,13 +278,26 @@ with submission identifiers:
     "python_feature":  {"score": 31, "max": 36},
     "c_replica":       {"score": 44, "max": 52}
   },
-  "metrics": "<the entire cc_chat_parser metrics artifact, unmodified>"
+  "metrics": "<the entire cc_chat_parser metrics artifact, unmodified>",
+  "metrics_notes": [
+    {"path": "session.process.user_input.turn_prompts_magnitude_by_bucket.standard",
+     "note": "Free prose attached by the author through the notes CLI.\n"}
+  ]
 }
 ```
 
 The `metrics` block is the parser's scope-nested artifact verbatim;
 downstream analyses reach into `metrics.session.economic.cost_usd.value`
 and similar without the pipeline re-deriving anything.
+
+The `metrics_notes` field is present only when the per-submission
+directory carried a `metrics_notes.yaml` sidecar at combine time;
+the field is omitted entirely otherwise so absence is
+distinguishable from an empty list. Each entry is a dotted metric
+path (object keys joined with `.`, array elements as `[N]`) and a
+free-prose note. Downstream consumers branching on the field's
+presence can attach annotations to plotted metrics or surface them
+in qualitative analysis.
 
 ## Dataset CSV schema
 
