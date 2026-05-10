@@ -172,9 +172,11 @@ def _evaluate_invariants(
     the prompt-token composition, the steer accounting, and the
     bucket share sums. Records partition is also checked: phase
     and role aggregations should sum to the session totals for
-    every economic category and every supplementary count. Each
-    check returns ``{"status": "ok"}`` when within tolerance and
-    a residual block otherwise.
+    every economic category, every supplementary count, and the
+    five additive process counts (turn count, turn-prompt count,
+    and the three steer counts). Each check returns
+    ``{"status": "ok"}`` when within tolerance and a residual
+    block otherwise.
 
     Cost is no longer cross-checked against a single-rate
     arithmetic identity. With per-call pricing each call is priced
@@ -263,6 +265,30 @@ def _evaluate_invariants(
             phase_sum,
             0,
         )
+    # Process counts that partition cleanly: each turn, prompt, or
+    # steer event belongs to exactly one phase (and one role for the
+    # all-real-roles case). Wall-clock measures (duration,
+    # inter_turn_time) and turn-time aggregates do not partition by
+    # the same identity because cross-conversation overlaps are real
+    # at the session level; those carry their own decomposition
+    # invariants instead.
+    session_process = artifact["session"]["process"]
+    for subblock, field in (
+        ("time", "turn_count"),
+        ("user_input", "turn_prompt_count"),
+        ("user_input", "steer_attempted_count"),
+        ("user_input", "steer_delivered_count"),
+        ("user_input", "steer_abandoned_count"),
+    ):
+        phase_sum = sum(
+            artifact["phases"][phase]["process"][subblock][field]["value"]
+            for phase in artifact["phases"]
+        )
+        checks[f"phase_partition_{field}"] = _check_close(
+            session_process[subblock][field]["value"],
+            phase_sum,
+            0,
+        )
     # Role partition only holds when every conversation in the
     # session has a real APM role. Sessions with one or more
     # ``unassigned-N`` conversations contribute tokens to the
@@ -286,6 +312,22 @@ def _evaluate_invariants(
             )
             checks[f"role_partition_{field}"] = _check_close(
                 session_supplementary[field]["value"],
+                role_sum,
+                0,
+            )
+        for subblock, field in (
+            ("time", "turn_count"),
+            ("user_input", "turn_prompt_count"),
+            ("user_input", "steer_attempted_count"),
+            ("user_input", "steer_delivered_count"),
+            ("user_input", "steer_abandoned_count"),
+        ):
+            role_sum = sum(
+                artifact["roles"][role]["process"][subblock][field]["value"]
+                for role in artifact["roles"]
+            )
+            checks[f"role_partition_{field}"] = _check_close(
+                session_process[subblock][field]["value"],
                 role_sum,
                 0,
             )
