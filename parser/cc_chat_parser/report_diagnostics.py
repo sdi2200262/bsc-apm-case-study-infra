@@ -171,9 +171,10 @@ def _evaluate_invariants(
     per-category token composition (main + delegated == total),
     the prompt-token composition, the steer accounting, and the
     bucket share sums. Records partition is also checked: phase
-    tokens and role tokens should sum to the session totals for
-    each category. Each check returns ``{"status": "ok"}`` when
-    within tolerance and a residual block otherwise.
+    and role aggregations should sum to the session totals for
+    every economic category and every supplementary count. Each
+    check returns ``{"status": "ok"}`` when within tolerance and
+    a residual block otherwise.
 
     Cost is no longer cross-checked against a single-rate
     arithmetic identity. With per-call pricing each call is priced
@@ -251,6 +252,17 @@ def _evaluate_invariants(
             phase_sum,
             INVARIANT_TOLERANCE_TOKENS,
         )
+    session_supplementary = artifact["session"]["supplementary"]
+    for field in ("subagent_count", "subagent_tool_count", "model_invoked_skill_count"):
+        phase_sum = sum(
+            artifact["phases"][phase]["supplementary"][field]["value"]
+            for phase in artifact["phases"]
+        )
+        checks[f"phase_partition_{field}"] = _check_close(
+            session_supplementary[field]["value"],
+            phase_sum,
+            0,
+        )
     # Role partition only holds when every conversation in the
     # session has a real APM role. Sessions with one or more
     # ``unassigned-N`` conversations contribute tokens to the
@@ -266,6 +278,16 @@ def _evaluate_invariants(
                 session_economic[f"total_{category}_tokens"]["value"],
                 role_sum,
                 INVARIANT_TOLERANCE_TOKENS,
+            )
+        for field in ("subagent_count", "subagent_tool_count", "model_invoked_skill_count"):
+            role_sum = sum(
+                artifact["roles"][role]["supplementary"][field]["value"]
+                for role in artifact["roles"]
+            )
+            checks[f"role_partition_{field}"] = _check_close(
+                session_supplementary[field]["value"],
+                role_sum,
+                0,
             )
     return checks
 
