@@ -86,6 +86,10 @@ python -m grader /path/to/solution.patch \
 # Browse a results JSON in the terminal
 ./inspect.py /path/to/results.json
 
+# Attach a free-prose note to a graded submission
+python -m grader.notes add /path/to/results-dir \
+    --test-id C.5.2 --note "context for the next reader"
+
 # Full options
 python -m grader --help
 ```
@@ -164,6 +168,7 @@ grader/
 ├── __init__.py
 ├── __main__.py                       # CLI entry: python -m grader
 ├── inspect.py                        # results browser
+├── notes.py                          # CLI entry: python -m grader.notes
 ├── Makefile                          # seed-mirror sync targets
 ├── README.md
 ├── seed.yaml                         # pinned mirror of the testing env's seed
