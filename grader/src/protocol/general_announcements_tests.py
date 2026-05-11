@@ -17,14 +17,18 @@ asserts:
 * the seed-derived ``Found N announcement(s):`` count preamble,
 * the verbatim body of every in-scope announcement (admin entries
   plus enrolled-course entries within the 30-day backend floor),
-* ``Source: System`` is rendered for the admin entries, and
-* at least two distinct enrolled-course attributions appear.
+  and
+* the source-attribution distribution: the count of
+  ``Source: <value>`` lines per attribution value matches the
+  expected count derived from the seed, which forces one
+  attribution line per entry (PRD §2.2) and the right attribution
+  on each entry (admin → ``System``; course entry → that course's
+  code).
 
-The PRD requires source attribution on every non-empty response,
-so the source-attribution checks apply at every window probe rather
-than only the default-window anchor; the anchor (P.3.6 / C.4.6)
-keeps its higher point weight because it covers the default path
-with the largest expected count.
+The anchor (P.3.6 / C.4.6) carries higher point weight than the
+implementation-tier rows because the default-window probe has
+the largest expected count. Every implementation-tier and
+anchor-tier row asserts the same shape.
 """
 
 from __future__ import annotations
@@ -34,9 +38,10 @@ from pathlib import Path
 
 from ..seed import SEED, general_announcements_in_window
 from ._announcements_assertions import (
-    SOURCE_SYSTEM,
     assert_count_and_bodies,
-    distinct_course_sources,
+    attribution_counts,
+    expected_attribution_counts,
+    source_attributions,
 )
 from .runner import (
     call_tool,
@@ -48,7 +53,6 @@ from .runner import (
 
 TOOL_NAME = "get_general_announcements"
 DEFAULT_DAYS_BACK = 30
-MIN_DISTINCT_COURSE_SOURCES = 2
 
 ERR_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
 ERR_BAD_DAYS = "Error: days_back must be a non-negative integer."
@@ -143,10 +147,12 @@ def _impl_window_test(
     """Drive a general-endpoint window assertion at one ``days_back`` value.
 
     Asserts the count preamble, every in-scope body verbatim, and
-    the source-attribution requirements PRD §5 makes hard on every
-    non-empty response: ``Source: System`` is rendered for the
-    admin entries and at least two distinct enrolled-course
-    attributions appear.
+    the source-attribution distribution PRD §2.2 makes hard on every
+    non-empty response: one ``Source: <value>`` line per entry,
+    admin entries attributed to ``System``, course entries
+    attributed to that course's code. The expected per-attribution
+    counts derive from the seeded in-scope set and are compared as
+    a single equality.
     """
     with spawn_server(impl, eclass_dir, mock_root, debug) as server:
         if server is None:
@@ -164,20 +170,18 @@ def _impl_window_test(
         ok, message = assert_count_and_bodies(text, expected)
         if not ok:
             return False, message, text
-        if SOURCE_SYSTEM not in text:
-            return False, f"missing '{SOURCE_SYSTEM}' attribution", text
-        course_sources = distinct_course_sources(text)
-        if len(course_sources) < MIN_DISTINCT_COURSE_SOURCES:
+        actual_attribution = attribution_counts(source_attributions(text))
+        expected_attribution = expected_attribution_counts(expected)
+        if actual_attribution != expected_attribution:
             return (
                 False,
-                f"only {len(course_sources)} distinct course-source attribution(s); "
-                f"expected at least {MIN_DISTINCT_COURSE_SOURCES}",
+                "source attribution mismatch: "
+                f"expected {expected_attribution}, got {actual_attribution}",
                 text,
             )
         return (
             True,
-            f"preamble, {len(expected)} bodies, system source, "
-            f"{len(course_sources)} distinct course sources",
+            f"preamble, {len(expected)} bodies, per-entry source attribution",
             text,
         )
 

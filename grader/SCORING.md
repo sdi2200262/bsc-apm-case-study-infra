@@ -35,7 +35,7 @@ four pre-existing tools' behaviour against the seeded user
 | P.1.4 | 1 | Login with empty credentials reports the missing-credentials error |
 | P.1.5 | 1 | Logout while authenticated succeeds |
 | P.1.6 | 1 | Logout without prior login is a no-op |
-| P.1.7 | 1 | `get_courses` while authenticated returns the three enrolled courses |
+| P.1.7 | 1 | `get_courses` while authenticated returns the enrolled courses |
 | P.1.8 | 1 | `get_courses` without authentication reports not-logged-in |
 | P.1.9 | 1 | `authstatus` while authenticated reports logged-in with the username |
 | P.1.10 | 1 | `authstatus` without authentication reports not-logged-in |
@@ -77,11 +77,27 @@ announcements (one admin + one `CS101` + one `PHYS150`), so the expected
 count grows by three per step.
 
 Every implementation-tier and anchor-tier row asserts the count
-preamble, every in-scope body verbatim, that `Source: System` is
-rendered for the admin entries, and that at least two distinct
-enrolled-course attributions appear. The anchor's higher point
-weight reflects coverage of the default `days_back` path with the
-largest expected count, not a stricter assertion shape.
+preamble, every in-scope body verbatim, and the per-attribution
+count distribution derived from the seed: the response must
+carry one `Source: <value>` line per entry, with the value being
+`System` for admin entries and the course code (`CS101`,
+`PHYS150`) for course entries. The expected per-attribution
+counts at the three window probes are 1/1/1, 2/2/2, and 3/3/3
+for `System`/`CS101`/`PHYS150` respectively. The anchor's higher
+point weight reflects coverage of the default `days_back` path
+with the largest expected count.
+
+PRD §5 documents `"No announcements found."` as the response when
+the window is empty. The seed places at least one entry in each
+of admin, `CS101`, and `PHYS150` at `days_ago=0`, so any
+`days_back ∈ [0, 30]` returns at least three entries and the
+empty-window path is unreachable for the general endpoint through
+the seeded mock. The per-course endpoint exercises the same
+constant string via `MATH201` (P.2.4 / C.3.4) through the
+participant's shared empty-response emit path, so the string is
+verified end-to-end; the general endpoint's specific reachability
+gap is acknowledged here rather than worked around by reshaping
+the seed.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -123,7 +139,7 @@ behaviour, executed against the C binary instead of the Python server.
 | C.2.4 | 1 | Login with empty credentials reports the missing-credentials error |
 | C.2.5 | 1 | Logout while authenticated succeeds |
 | C.2.6 | 1 | Logout without prior login is a no-op |
-| C.2.7 | 1 | `get_courses` while authenticated returns the three enrolled courses |
+| C.2.7 | 1 | `get_courses` while authenticated returns the enrolled courses |
 | C.2.8 | 1 | `get_courses` without authentication reports not-logged-in |
 | C.2.9 | 1 | `authstatus` while authenticated reports logged-in with the username |
 | C.2.10 | 1 | `authstatus` without authentication reports not-logged-in |
@@ -150,7 +166,9 @@ difference is which executable serves the JSON-RPC.
 Mirror of P.3 against the C binary. Seed values, the backend's 30-day
 floor, the enrollment filter, and the assertion style match the Python
 feature section above; every implementation-tier and anchor-tier row
-asserts source attribution.
+asserts the per-attribution count distribution described under the
+Python feature section. The same empty-window reachability gap on the
+general endpoint applies here.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -172,6 +190,13 @@ allocations across argument variations on each feature tool, and
 inter-tool state across a realistic full-session sequence; the
 integration scenario carries anchor weight because it exercises the
 largest cross-tool surface.
+
+Each scenario names the feature rows whose call shapes it
+exercises and is run only when every named row has already
+passed. A scenario whose feature gates have not all passed
+records as a zero-point skip with a message naming the missing
+rows, rather than driving valgrind on a path that short-circuits
+through the participant's error handling on a broken feature.
 
 | ID | Points | Description |
 |----|--------|-------------|

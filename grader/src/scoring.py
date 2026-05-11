@@ -70,7 +70,7 @@ PYTHON_BASELINE_TESTS: tuple[TestDefinition, ...] = (
 PYTHON_COURSE_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("P.2.1", 1, "course", "python", "course tool without login returns not-logged-in", "feature"),
     TestDefinition("P.2.2", 1, "course", "python", "unparseable course_url returns extract-code error", "feature"),
-    TestDefinition("P.2.3", 1, "course", "python", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("P.2.3", 1, "course", "python", "negative days_back returns the non-negative-integer error", "feature"),
     TestDefinition("P.2.4", 1, "course", "python", "empty course returns no-announcements message", "feature"),
     TestDefinition("P.2.5", 3, "course", "python", "days_back=0 returns the day-zero announcement", "feature"),
     TestDefinition("P.2.6", 3, "course", "python", "days_back=15 returns the two in-scope announcements", "feature"),
@@ -80,7 +80,7 @@ PYTHON_COURSE_TESTS: tuple[TestDefinition, ...] = (
 
 PYTHON_GENERAL_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("P.3.1", 1, "general", "python", "general tool without login returns not-logged-in", "feature"),
-    TestDefinition("P.3.2", 1, "general", "python", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("P.3.2", 1, "general", "python", "negative days_back returns the non-negative-integer error", "feature"),
     TestDefinition("P.3.3", 1, "general", "python", "days_back=31 returns older-than-30-days error", "feature"),
     TestDefinition("P.3.4", 3, "general", "python", "days_back=0 returns the three day-zero announcements", "feature"),
     TestDefinition("P.3.5", 3, "general", "python", "days_back=15 returns the six in-scope announcements", "feature"),
@@ -108,7 +108,7 @@ C_BASELINE_TESTS: tuple[TestDefinition, ...] = (
 C_COURSE_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.3.1", 1, "course", "c", "course tool without login returns not-logged-in", "feature"),
     TestDefinition("C.3.2", 1, "course", "c", "unparseable course_url returns extract-code error", "feature"),
-    TestDefinition("C.3.3", 1, "course", "c", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("C.3.3", 1, "course", "c", "negative days_back returns the non-negative-integer error", "feature"),
     TestDefinition("C.3.4", 1, "course", "c", "empty course returns no-announcements message", "feature"),
     TestDefinition("C.3.5", 3, "course", "c", "days_back=0 returns the day-zero announcement", "feature"),
     TestDefinition("C.3.6", 3, "course", "c", "days_back=15 returns the two in-scope announcements", "feature"),
@@ -118,7 +118,7 @@ C_COURSE_TESTS: tuple[TestDefinition, ...] = (
 
 C_GENERAL_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.4.1", 1, "general", "c", "general tool without login returns not-logged-in", "feature"),
-    TestDefinition("C.4.2", 1, "general", "c", "negative days_back returns positive-integer error", "feature"),
+    TestDefinition("C.4.2", 1, "general", "c", "negative days_back returns the non-negative-integer error", "feature"),
     TestDefinition("C.4.3", 1, "general", "c", "days_back=31 returns older-than-30-days error", "feature"),
     TestDefinition("C.4.4", 3, "general", "c", "days_back=0 returns the three day-zero announcements", "feature"),
     TestDefinition("C.4.5", 3, "general", "c", "days_back=15 returns the six in-scope announcements", "feature"),

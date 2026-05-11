@@ -181,7 +181,15 @@ def _run_c_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run C compile, tech-stack, then the four C protocol phases."""
+    """Run C compile, tech-stack, then the four C protocol phases.
+
+    The memory phase runs after the C feature phases so the scorer
+    already carries the C.2/C.3/C.4 results that each memory
+    scenario's ``gates_on`` consults. A memory scenario whose
+    feature paths did not pass is recorded as a zero-point skip
+    rather than driven under valgrind on a short-circuited error
+    path.
+    """
     print("c compile: make c-server")
     compile_ok, compile_summary, compile_detail = build_c.compile_c_replica(eclass_root)
     scorer.record("C.1.1", compile_ok, compile_summary, compile_detail)
@@ -202,7 +210,15 @@ def _run_c_phases(
     _record_phase(scorer, "c baseline", c_baseline.run, eclass_root, mock_root, debug)
     _record_phase(scorer, "c course", c_course_announcements.run, eclass_root, mock_root, debug)
     _record_phase(scorer, "c general", c_general_announcements.run, eclass_root, mock_root, debug)
-    _record_phase(scorer, "c memory", c_memory.run, eclass_root, mock_root, debug)
+
+    print("c memory phase")
+    passed_tests = frozenset(
+        test_id for test_id, result in scorer.results.items() if result.passed
+    )
+    for test_id, result in c_memory.run(
+        eclass_root, mock_root, debug, passed_tests
+    ).items():
+        scorer.record(test_id, result[0], result[1], result[2])
 
 
 PhaseRunner = Callable[[Path, Path, bool], dict[str, tuple[bool, str, str]]]

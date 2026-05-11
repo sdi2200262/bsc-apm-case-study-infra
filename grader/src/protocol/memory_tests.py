@@ -17,6 +17,14 @@ course-announcement tool across argument variations, the general-
 announcement tool across argument variations, and a full-session
 integration that exercises both feature tools across two login
 sessions.
+
+Each scenario carries a ``gates_on`` tuple naming the rubric
+rows whose call shapes it exercises. The phase aggregator
+(``c_memory.run``) skips a scenario whose gates have not all
+passed when the memory phase runs, because valgrind on a feature
+path the participant did not implement correctly verifies leaks
+on a short-circuited error path rather than on the path the
+rubric awards points for.
 """
 
 from __future__ import annotations
@@ -54,11 +62,17 @@ class MemoryScenario:
         description: Short description for the report writer.
         calls: Ordered tool-call sequence the scenario drives,
             after the initialize and initialized handshake.
+        gates_on: Rubric identifiers whose call shapes the
+            scenario exercises. The phase aggregator skips the
+            scenario unless every named row passed; a scenario
+            whose gates are not met records as a zero-point skip
+            with a structured message naming the missing rows.
     """
 
     scenario_id: str
     description: str
     calls: tuple[ToolCall, ...]
+    gates_on: tuple[str, ...]
 
 
 SCENARIOS: tuple[MemoryScenario, ...] = (
@@ -73,6 +87,7 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("login", {}),
             ("logout", {}),
         ),
+        gates_on=("C.2.2", "C.2.3", "C.2.5", "C.2.6"),
     ),
     MemoryScenario(
         scenario_id="C.5.2",
@@ -86,6 +101,7 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("get_course_announcements", {"course_url": course_url("CS101"), "days_back": 60}),
             ("logout", {}),
         ),
+        gates_on=("C.2.2", "C.2.5", "C.2.7", "C.3.4", "C.3.5", "C.3.7", "C.3.8"),
     ),
     MemoryScenario(
         scenario_id="C.5.3",
@@ -98,6 +114,7 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("get_general_announcements", {"days_back": 15}),
             ("logout", {}),
         ),
+        gates_on=("C.2.2", "C.2.5", "C.2.7", "C.4.4", "C.4.5", "C.4.6"),
     ),
     MemoryScenario(
         scenario_id="C.5.4",
@@ -117,6 +134,19 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("get_course_announcements", {"course_url": course_url("CS101"), "days_back": 0}),
             ("get_general_announcements", {"days_back": 15}),
             ("logout", {}),
+        ),
+        gates_on=(
+            "C.2.2",
+            "C.2.5",
+            "C.2.7",
+            "C.2.9",
+            "C.3.4",
+            "C.3.5",
+            "C.3.7",
+            "C.3.8",
+            "C.4.4",
+            "C.4.5",
+            "C.4.6",
         ),
     ),
 )

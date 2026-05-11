@@ -19,6 +19,15 @@ the assertion modules depend on:
 - ``initialize_server``, ``call_tool``, ``extract_text``,
   ``tool_exists``: small helpers the assertion bodies share.
 
+For the C implementation, ``call_tool`` additionally validates
+``tools/call`` arguments against the participant's advertised
+``inputSchema`` before the binary receives the call. The Python
+implementation routes through the MCP SDK, which performs the same
+validation internally; the C replica is participant-written and
+runs no such gate without this enforcement, which would let a
+participant whose schema and handler disagree pass C feature tests
+that the Python SDK would correctly reject.
+
 Seed values (username, password, enrolled course codes,
 announcement bodies) live in ``grader.src.seed`` and are read from
 there rather than redeclared here.
@@ -35,6 +44,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
+
+import jsonschema
 
 from ..seed import SEED
 
@@ -74,7 +85,21 @@ class TestContext:
 
 
 class ServerProcess:
-    """JSON-RPC stdio wrapper around a participant MCP server subprocess."""
+    """JSON-RPC stdio wrapper around a participant MCP server subprocess.
+
+    Attributes:
+        ctx: Per-test settings carried through to the subprocess
+            (implementation, eclass directory, environment overrides).
+        proc: The underlying ``Popen`` object once the subprocess
+            is running, or ``None`` before ``start()`` and after
+            ``stop()``.
+        _advertised_tools: Cache of the participant's
+            ``tools/list`` response, keyed by tool name with the
+            tool's ``inputSchema`` as the value (or ``None`` when
+            the participant declared no schema for that tool).
+            Populated lazily on first call to
+            :meth:`get_advertised_tools`.
+    """
 
     def __init__(self, ctx: TestContext) -> None:
         """Initialise with a populated ``TestContext``.
@@ -85,6 +110,7 @@ class ServerProcess:
         """
         self.ctx = ctx
         self.proc: subprocess.Popen | None = None
+        self._advertised_tools: dict[str, dict | None] | None = None
 
     def start(self) -> bool:
         """Spawn the server subprocess.
@@ -185,6 +211,49 @@ class ServerProcess:
         except OSError:
             pass
 
+    def get_advertised_tools(self) -> dict[str, dict | None]:
+        """Return the tools the server advertises in ``tools/list``.
+
+        The full ``tools/list`` response is fetched once on the
+        first call and cached for the server's lifetime. Each
+        entry's value is the tool's ``inputSchema`` if the
+        participant declared one and it parses as a mapping;
+        ``None`` otherwise.
+
+        Returns:
+            Mapping from tool name to advertised ``inputSchema``
+            (or ``None``). Empty when the ``tools/list`` request
+            failed or returned no tools.
+        """
+        if self._advertised_tools is None:
+            self._advertised_tools = self._fetch_advertised_tools()
+        return self._advertised_tools
+
+    def _fetch_advertised_tools(self) -> dict[str, dict | None]:
+        """Send ``tools/list`` and build the advertised-tools cache.
+
+        Returns:
+            Mapping from tool name to advertised ``inputSchema``
+            (or ``None`` when the participant did not include a
+            usable ``inputSchema`` for that tool).
+        """
+        response = self.send_request({
+            "jsonrpc": "2.0",
+            "id": 50,
+            "method": "tools/list",
+            "params": {},
+        })
+        if not response or "result" not in response:
+            return {}
+        advertised: dict[str, dict | None] = {}
+        for tool in response["result"].get("tools", []):
+            name = tool.get("name")
+            if not isinstance(name, str):
+                continue
+            schema = tool.get("inputSchema")
+            advertised[name] = schema if isinstance(schema, dict) else None
+        return advertised
+
 
 def mcp_server_env(mock_root: Path) -> dict[str, str]:
     """Return the environment variables a participant MCP server expects.
@@ -272,10 +341,28 @@ def call_tool(server: ServerProcess, tool: str, args: dict) -> dict | None:
 
     Baseline tools accept a dummy ``random_string`` parameter; this
     helper injects it when the caller did not provide one so the
-    assertion bodies do not have to.
+    assertion bodies do not have to. Injection runs before schema
+    validation so a participant who correctly declares
+    ``random_string`` as required on a baseline tool's
+    ``inputSchema`` still sees a valid call.
+
+    On the C implementation, after injection, arguments are
+    validated against the participant's advertised ``inputSchema``
+    for the tool. The Python implementation routes through the MCP
+    SDK, which validates internally; the C replica runs no such
+    gate without this check. When validation fails, this helper
+    returns a synthesised response shaped like the SDK's
+    validation-error response so the strict-tier assertions see
+    the same response shape across implementations.
     """
     if tool in BASELINE_TOOL_NAMES and "random_string" not in args:
         args = {**args, "random_string": "test"}
+    if server.ctx.impl == "c":
+        schema = server.get_advertised_tools().get(tool)
+        if schema is not None:
+            error_response = _validate_against_schema(args, schema)
+            if error_response is not None:
+                return error_response
     return server.send_request({
         "jsonrpc": "2.0",
         "id": 99,
@@ -296,16 +383,48 @@ def extract_text(response: dict | None) -> str:
 
 def tool_exists(server: ServerProcess, tool_name: str) -> bool:
     """Return ``True`` when the named tool appears in ``tools/list``."""
-    response = server.send_request({
-        "jsonrpc": "2.0",
-        "id": 50,
-        "method": "tools/list",
-        "params": {},
-    })
-    if not response or "result" not in response:
-        return False
-    tools = response["result"].get("tools", [])
-    return any(tool.get("name") == tool_name for tool in tools)
+    return tool_name in server.get_advertised_tools()
+
+
+def _validate_against_schema(args: dict, schema: dict) -> dict | None:
+    """Validate ``args`` against ``schema``; return a synthesised error or None.
+
+    Args:
+        args: The arguments the caller is about to send.
+        schema: The participant's advertised ``inputSchema`` for
+            the target tool.
+
+    Returns:
+        ``None`` when ``args`` validate against ``schema``, or
+        when ``schema`` itself is malformed (a malformed schema
+        means the gate cannot run; the call passes through
+        unvalidated rather than failing the participant on a
+        schema-shape issue this helper cannot adjudicate). A
+        JSON-RPC response dict shaped like the MCP Python SDK's
+        validation-error response otherwise: ``result.content``
+        carries a single text block whose text begins with
+        ``"Input validation error: "`` followed by the
+        jsonschema-derived message; ``result.isError`` is true.
+    """
+    try:
+        jsonschema.validate(args, schema)
+    except jsonschema.ValidationError as error:
+        return {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Input validation error: {error.message}",
+                    }
+                ],
+                "isError": True,
+            },
+        }
+    except jsonschema.SchemaError:
+        pass
+    return None
 
 
 def _read_with_timeout(stream, timeout: float, debug: bool) -> str:

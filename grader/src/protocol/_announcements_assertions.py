@@ -11,11 +11,15 @@ scope announcement's body string is present verbatim in the
 response. The helpers here implement that pattern in one place
 so the two assertion modules read as straight tabular tests.
 
-The general-announcement anchor additionally checks that source
-attribution is rendered (``Source: System`` for admin entries,
-``Source: <code>`` for course entries); the helper for that lives
-here so the regex used to count distinct course-source
-attributions is shared.
+The general-announcement assertions additionally check source
+attribution. PRD §2.2 requires every entry in the response to
+carry a ``Source: <attribution>`` line: admin entries are
+attributed to ``System`` and course entries are attributed to
+the course code as exposed by ``get_courses``. The helpers
+below extract those attribution values and tabulate the
+expected per-source counts for a given announcement set so the
+assertion module can compare actual against expected as a
+single equality check.
 """
 
 from __future__ import annotations
@@ -23,14 +27,11 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from ..seed import SEED, Announcement
+from ..seed import Announcement
 
 ECLASS_BASE_URL = "http://localhost"
-SOURCE_SYSTEM = "Source: System"
 
-_COURSE_SOURCE_PATTERN = re.compile(
-    r"Source: (" + "|".join(re.escape(c) for c in SEED.enrolled_course_codes) + r")"
-)
+_SOURCE_LINE_PATTERN = re.compile(r"Source: (\S+)")
 
 
 def course_url(code: str) -> str:
@@ -72,6 +73,42 @@ def assert_count_and_bodies(
     return True, f"preamble and {len(expected_list)} bodies present"
 
 
-def distinct_course_sources(text: str) -> set[str]:
-    """Return the set of enrolled course codes attributed via ``Source:``."""
-    return {match.group(1) for match in _COURSE_SOURCE_PATTERN.finditer(text)}
+def source_attributions(text: str) -> tuple[str, ...]:
+    """Return the captured value of every ``Source: <value>`` line.
+
+    Each match captures the first whitespace-delimited token after
+    the ``Source: `` prefix, in the order the lines appear in
+    ``text``. The PRD's response template indents these lines with
+    four spaces, but the helper matches the prefix anywhere in the
+    text so a participant's exact whitespace handling is not
+    over-constrained.
+    """
+    return tuple(match.group(1) for match in _SOURCE_LINE_PATTERN.finditer(text))
+
+
+def expected_attribution_counts(
+    announcements: Iterable[Announcement],
+) -> dict[str, int]:
+    """Return the expected per-attribution count for an announcement set.
+
+    Admin entries (``course_code`` is ``None``) are attributed to
+    ``System``; course entries are attributed to their course
+    code. The result is the count of entries per attribution value.
+    """
+    counts: dict[str, int] = {}
+    for announcement in announcements:
+        key = (
+            announcement.course_code
+            if announcement.course_code is not None
+            else "System"
+        )
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def attribution_counts(values: Iterable[str]) -> dict[str, int]:
+    """Return the count of each value in ``values``."""
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return counts
