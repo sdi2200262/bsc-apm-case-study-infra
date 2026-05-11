@@ -43,18 +43,19 @@ derived from its install prefix.
 - `valgrind`.
 - `make`.
 
-Ubuntu install line:
+Ubuntu install lines:
 
 ```bash
-sudo apt-get install -y python3 git docker.io docker-compose-plugin \
-    build-essential libcurl4-openssl-dev libxml2-dev valgrind
-```
-
-Install `uv` if not already present:
-
-```bash
+sudo apt-get install -y python3 git build-essential \
+    libcurl4-openssl-dev libxml2-dev valgrind
+curl -fsSL https://get.docker.com | sudo sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+The Docker convenience script matches what the participant
+package recommends to participants; the apt line covers the
+remaining system dependencies. On non-Ubuntu hosts substitute the
+equivalent package set.
 
 ## Testing environment
 
@@ -210,6 +211,6 @@ grader/
 - [../pipeline/](../pipeline/): submission processing pipeline
   that orchestrates validation, grading, parsing, and dataset
   aggregation.
-- [Task specification](../participant/task/): the PRD and prompt
-  participants implement against.
+- [Task specification](https://github.com/sdi2200262/bsc-apm-case-study-task/tree/main/participant/task):
+  the PRD and prompt participants implement against.
 - [SCORING.md](SCORING.md): rubric the grader implements against.

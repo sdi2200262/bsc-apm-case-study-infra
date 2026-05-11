@@ -72,11 +72,11 @@ Two entries at the zip's root:
 Participants produce this layout by following the guide's wrap-up
 step: from inside the workspace directory, `zip -r
 {PID}_S{1|2}_{apm|speckit}.zip solution.patch transcripts/`. The
-participant package's `collect-chats.py` helper copies each
-selected main transcript alongside its sibling subdirectory
-recursively. The validate stage extracts the contents into the
-manifest-keyed staging directory at
-`<output-root>/_staging/<manifest_key>/`.
+participant copies each selected main transcript alongside its
+sibling subdirectory recursively before zipping, using the shell
+commands the participant guide and helper skill spell out. The
+validate stage extracts the contents into the manifest-keyed
+staging directory at `<output-root>/_staging/<manifest_key>/`.
 
 The validate stage enforces the structural shape (top-level
 `.jsonl` files, `<sessionId>/` subdirectories with matching main
