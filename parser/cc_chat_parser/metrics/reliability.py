@@ -23,7 +23,10 @@ metric reflects reliability at the surface visible to the calling
 agent. The thesis methodology declares this measurement boundary:
 internal recoveries within a delegated subagent dispatch are
 attributed to whatever ``is_error`` flag the parent ``Agent`` tool
-result carries.
+result carries. The rate is reported as a supplementary descriptor:
+its value is dominated by the underlying model's tool-use
+capability rather than by framework choice, so it is not entered
+into the paired hypothesis testing.
 """
 
 from __future__ import annotations

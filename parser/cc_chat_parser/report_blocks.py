@@ -179,7 +179,7 @@ def reliability_block(metrics: ReliabilityMetrics) -> dict[str, Any]:
     hypothesis-test candidates.
     """
     return {
-        "tool_success_rate": metric_leaf(metrics.tool_success_rate, ANCHOR_PRIMARY, False),
+        "tool_success_rate": metric_leaf(metrics.tool_success_rate, ANCHOR_SUPPLEMENTARY, False),
     }
 
 
