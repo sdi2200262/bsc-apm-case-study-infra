@@ -107,7 +107,10 @@ zip ──► validate ──► grade ──► parse ──► combine ──�
 2. **grade** subprocesses `python -m grader` against the staged
    patch, the configured eclass checkout, and the testing-
    environment install; the grader's results JSON is promoted to
-   the per-participant directory.
+   the per-participant directory. The grader requires `<mock-root>`
+   to be an installed testing environment carrying its own `.env`
+   and `certs/`, which the grader copies verbatim into the checkout
+   to replicate the documented dev wiring.
 3. **parse** subprocesses `cc_chat_parser` against the staged
    transcripts directory; the canonical metrics artifact is
    promoted alongside sealed sidecar copies of the raw transcripts.

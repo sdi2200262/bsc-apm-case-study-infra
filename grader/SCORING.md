@@ -6,12 +6,12 @@ The grader is a JSON-RPC black box: it observes only the `text` content of
 each tool response and scores against the assertions tabulated below.
 Strict tests assert exact equality with the response text. Implementation
 tests assert the `Found N announcement(s):` substring with a seed-derived
-`N` plus the verbatim body string of every in-scope announcement. Anchor
-tests add multi-attribute checks (source attribution; multi-probe
-differentials). Across all implementation tests, `days_back=N` is
-interpreted inclusively against a calendar-based cutoff at midnight of
-`(today − N days)`: an announcement whose timestamp falls at or after
-that cutoff is in scope.
+`N` plus the verbatim body string of every in-scope announcement; the
+general-announcement implementation rows additionally assert the
+per-source attribution distribution. Across all implementation tests,
+`days_back=N` is interpreted inclusively against a calendar-based cutoff
+at midnight of `(today - N days)`: an announcement whose timestamp falls
+at or after that cutoff is in scope.
 
 ## Python Implementation (41 points)
 
@@ -59,7 +59,7 @@ monotonically with `days_back`.
 | P.2.4 | 1 | Strict: MATH201 with default `days_back` returns `"No announcements found."` |
 | P.2.5 | 3 | Implementation: `days_back=0` returns the day-zero announcement only (count = 1) |
 | P.2.6 | 3 | Implementation: `days_back=15` returns the two in-scope announcements (count = 2) |
-| P.2.7 | 4 | Anchor: default `days_back=30` returns the three in-scope announcements (count = 3) |
+| P.2.7 | 4 | Implementation: default `days_back=30` returns the three in-scope announcements (count = 3) |
 | P.2.8 | 3 | Implementation: `days_back=60` returns all four announcements (count = 4); catches reliance on a backend cap that the per-course endpoint does not enforce |
 
 ### Feature: General Announcements (14 points)
@@ -76,16 +76,17 @@ three `CS101` announcements (0, 15, 30), and three `PHYS150` announcements
 announcements (one admin + one `CS101` + one `PHYS150`), so the expected
 count grows by three per step.
 
-Every implementation-tier and anchor-tier row asserts the count
-preamble, every in-scope body verbatim, and the per-attribution
-count distribution derived from the seed: the response must
-carry one `Source: <value>` line per entry, with the value being
-`System` for admin entries and the course code (`CS101`,
-`PHYS150`) for course entries. The expected per-attribution
-counts at the three window probes are 1/1/1, 2/2/2, and 3/3/3
-for `System`/`CS101`/`PHYS150` respectively. The anchor's higher
-point weight reflects coverage of the default `days_back` path
-with the largest expected count.
+Every implementation-tier row asserts the count preamble, every
+in-scope body verbatim, and the per-attribution count
+distribution derived from the seed: the response must carry one
+`Source: <value>` line per entry, with the value being `System`
+for admin entries and the course code (`CS101`, `PHYS150`) for
+course entries. The expected per-attribution counts at the three
+window probes are 1/1/1, 2/2/2, and 3/3/3 for
+`System`/`CS101`/`PHYS150` respectively. The Python
+default-`days_back` row (`P.3.6`) carries the largest point weight
+in its tier, reflecting coverage of the path with the largest
+expected count; the C general rows are weighted equally.
 
 PRD §5 documents `"No announcements found."` as the response when
 the window is empty. The seed places at least one entry in each
@@ -106,11 +107,11 @@ the seed.
 | P.3.3 | 1 | Strict: `days_back=31` returns `"Error: Cannot retrieve announcements older than 30 days."` |
 | P.3.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements (count = 3) with source attribution |
 | P.3.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements (count = 6) with source attribution |
-| P.3.6 | 5 | Anchor: default `days_back=30` returns the nine in-scope announcements (count = 9) with source attribution |
+| P.3.6 | 5 | Implementation: default `days_back=30` returns the nine in-scope announcements (count = 9) with source attribution |
 
 ## C Replica Implementation (59 points)
 
-### Build and Technical Stack (5 points)
+### Build, Technical Stack, and Configuration Surfaces (10 points)
 
 The C implementation is a separate program living under
 `eclass-mcp-server/c-replica/`. It is built by a participant-supplied
@@ -120,10 +121,32 @@ library is permitted; the participant parses JSON-RPC manually. Standard
 system runtime libraries and the transitive system dependencies of
 `libcurl` and `libxml2` are unrestricted.
 
+A participant server reads its configuration from one of two surfaces:
+the documented `.env` at the eclass package root, or the `ECLASS_*`
+process environment variables. C.1.3 and C.1.4 award each surface
+independently. C.1.3 (env-var surface) spawns the server with no `.env`
+on disk and the `ECLASS_*` values injected into the environment; the
+grader-side TLS trust-anchor variables are also present as transport
+plumbing. C.1.4 (verbatim documented `.env` surface) copies that same
+`.env` and the testing environment's `certs/` directory verbatim into
+the package root and passes no `ECLASS_*` or TLS variables: the copied
+`.env` carries the relative cert paths and the copied `certs/` makes
+them resolve. Each probe additionally drives one authenticated `login`,
+because a bare `initialize` does not exercise configuration.
+
+C.1.3 and C.1.4 are decoupled from the functional and memory suites: a
+server that fails either probe still has C.2 through C.5 attempted under
+a dual-provisioned environment (verbatim `.env` and `certs/` on disk
+plus `ECLASS_*`-and-TLS per spawn), so the implementation is measured
+regardless of which surface it reads. Only a C.1.1 compile failure
+cascade-skips the dependent C rows.
+
 | ID | Points | Description |
 |----|--------|-------------|
 | C.1.1 | 3 | `make c-server` exits 0 and produces the `server` binary |
 | C.1.2 | 2 | `ldd server` lists `libcurl.so` and `libxml2.so` among its dependencies, and lists no library whose SO name matches the forbidden JSON-parsing patterns: any name beginning with `libjson`, `libcjson`, `libjansson`, `libyajl`, `libjq`, or `libparson` |
+| C.1.3 | 3 | Env-var configuration surface: the server completes the JSON-RPC `initialize` handshake and authenticates with the seeded credentials when configured purely via `ECLASS_*` environment variables with no `.env` file present |
+| C.1.4 | 2 | Verbatim documented `.env` surface: the server completes the handshake and authenticates with the testing environment's own `.env` and `certs/` copied verbatim into the package root and no `ECLASS_*` or TLS environment variables present |
 
 ### Baseline (10 points)
 
@@ -144,7 +167,7 @@ behaviour, executed against the C binary instead of the Python server.
 | C.2.9 | 1 | `authstatus` while authenticated reports logged-in with the username |
 | C.2.10 | 1 | `authstatus` without authentication reports not-logged-in |
 
-### Feature: Course Announcements (17 points)
+### Feature: Course Announcements (15 points)
 
 Mirror of P.2 against the C binary. The seed values, boundary semantics,
 and assertion style match the Python feature section above; the only
@@ -158,17 +181,17 @@ difference is which executable serves the JSON-RPC.
 | C.3.4 | 1 | Strict: MATH201 with default `days_back` returns the no-announcements message |
 | C.3.5 | 3 | Implementation: `days_back=0` returns the day-zero announcement only |
 | C.3.6 | 3 | Implementation: `days_back=15` returns the two in-scope announcements |
-| C.3.7 | 4 | Anchor: default `days_back=30` returns the three in-scope announcements |
-| C.3.8 | 3 | Implementation: `days_back=60` returns all four announcements |
+| C.3.7 | 3 | Implementation: default `days_back=30` returns the three in-scope announcements |
+| C.3.8 | 2 | Implementation: `days_back=60` returns all four announcements |
 
-### Feature: General Announcements (14 points)
+### Feature: General Announcements (12 points)
 
 Mirror of P.3 against the C binary. Seed values, the backend's 30-day
 floor, the enrollment filter, and the assertion style match the Python
-feature section above; every implementation-tier and anchor-tier row
-asserts the per-attribution count distribution described under the
-Python feature section. The same empty-window reachability gap on the
-general endpoint applies here.
+feature section above; every implementation-tier row asserts the
+per-attribution count distribution described under the Python feature
+section. The same empty-window reachability gap on the general endpoint
+applies here.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -177,9 +200,9 @@ general endpoint applies here.
 | C.4.3 | 1 | Strict: `days_back=31` returns the older-than-30-days error |
 | C.4.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements with source attribution |
 | C.4.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements with source attribution |
-| C.4.6 | 5 | Anchor: default `days_back=30` returns the nine in-scope announcements with source attribution |
+| C.4.6 | 3 | Implementation: default `days_back=30` returns the nine in-scope announcements with source attribution |
 
-### Memory (13 points)
+### Memory (12 points)
 
 Each scenario runs the C binary under
 `valgrind --leak-check=full --error-exitcode=99` driven by a scripted
@@ -187,9 +210,8 @@ JSON-RPC client. A scenario passes when the run finishes with zero
 definitely-lost bytes, zero indirectly-lost bytes, and exit 0. The
 scenarios cover, in order, session-state allocations, per-tool
 allocations across argument variations on each feature tool, and
-inter-tool state across a realistic full-session sequence; the
-integration scenario carries anchor weight because it exercises the
-largest cross-tool surface.
+inter-tool state across a realistic full-session sequence; the four
+scenarios carry equal weight.
 
 Each scenario names the feature rows whose call shapes it
 exercises and is run only when every named row has already
@@ -200,10 +222,10 @@ through the participant's error handling on a broken feature.
 
 | ID | Points | Description |
 |----|--------|-------------|
-| C.5.1 | 3 | Login lifecycle: login → login (already-logged-in) → logout → logout (no-op) → login → logout |
-| C.5.2 | 3 | Course-announcement variations: login → get_courses → four `get_course_announcements` calls (CS101 default, MATH201 default, CS101 `days_back=0`, CS101 `days_back=60`) → logout |
-| C.5.3 | 3 | General-announcement variations: login → get_courses → three `get_general_announcements` calls (default, `days_back=0`, `days_back=15`) → logout |
-| C.5.4 | 4 | Anchor: full lifecycle integration with both features. login → get_courses → get_course_announcements (CS101 default) → get_course_announcements (CS101 `days_back=60`) → get_course_announcements (MATH201 default) → get_general_announcements (default) → get_general_announcements (`days_back=15`) → get_general_announcements (`days_back=0`) → authstatus → logout → login → get_course_announcements (CS101 `days_back=0`) → get_general_announcements (`days_back=15`) → logout |
+| C.5.1 | 3 | Login lifecycle: login -> login (already-logged-in) -> logout -> logout (no-op) -> login -> logout |
+| C.5.2 | 3 | Course-announcement variations: login -> get_courses -> four `get_course_announcements` calls (CS101 default, MATH201 default, CS101 `days_back=0`, CS101 `days_back=60`) -> logout |
+| C.5.3 | 3 | General-announcement variations: login -> get_courses -> three `get_general_announcements` calls (default, `days_back=0`, `days_back=15`) -> logout |
+| C.5.4 | 3 | Full lifecycle integration with both features: login -> get_courses -> get_course_announcements (CS101 default) -> get_course_announcements (CS101 `days_back=60`) -> get_course_announcements (MATH201 default) -> get_general_announcements (default) -> get_general_announcements (`days_back=15`) -> get_general_announcements (`days_back=0`) -> authstatus -> logout -> login -> get_course_announcements (CS101 `days_back=0`) -> get_general_announcements (`days_back=15`) -> logout |
 
 ## Expected Scores
 

@@ -44,6 +44,18 @@ FORBIDDEN_LIBRARY_PATTERN = re.compile(
 )
 _LDD_LINE_PATTERN = re.compile(r"\s*([^\s/=]+\.so[^\s]*)")
 
+# Specific build-failure signatures. A naive substring such as
+# "curl" matches benign mentions in compiler notes or filenames and
+# misattributes unrelated failures; these patterns match the actual
+# missing-header and unresolved-symbol diagnostics the toolchain
+# emits so the attribution is only made when it is warranted.
+_LIBXML2_FAILURE_PATTERN = re.compile(
+    r"libxml/[\w.]+:\s*No such file or directory|cannot find -lxml2"
+)
+_LIBCURL_FAILURE_PATTERN = re.compile(
+    r"curl/curl\.h:\s*No such file or directory|cannot find -lcurl"
+)
+
 
 def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
     """Compile the C replica and verify the produced binary.
@@ -98,10 +110,9 @@ def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
         err = result.stderr or result.stdout
         if not versions_ok:
             err = f"{warning}\n{err}"
-        if "libxml" in err:
-            return False, "make c-server failed: missing libxml2-dev", err
-        if "curl" in err:
-            return False, "make c-server failed: missing libcurl-dev", err
+        attribution = _attribute_build_failure(err)
+        if attribution is not None:
+            return False, f"make c-server failed: {attribution}", err
         return False, f"make c-server failed: {err[:300]}", err
 
     server_binary = c_replica / "server"
@@ -196,9 +207,29 @@ def verify_stack(eclass_root: Path) -> tuple[bool, str, str]:
 
     return (
         True,
-        f"libcurl and libxml2 linked; no forbidden JSON-parser library present",
+        "libcurl and libxml2 linked; no forbidden JSON-parser library present",
         output,
     )
+
+
+def _attribute_build_failure(err: str) -> str | None:
+    """Attribute a build failure to a missing dev library when warranted.
+
+    Args:
+        err: Captured ``make c-server`` stderr or stdout.
+
+    Returns:
+        ``"missing libxml2-dev"`` or ``"missing libcurl-dev"`` when
+        the output carries the corresponding missing-header or
+        unresolved-library diagnostic; ``None`` when no specific
+        signature matched, so the caller falls through to the
+        generic truncated-output summary.
+    """
+    if _LIBXML2_FAILURE_PATTERN.search(err):
+        return "missing libxml2-dev"
+    if _LIBCURL_FAILURE_PATTERN.search(err):
+        return "missing libcurl-dev"
+    return None
 
 
 def _extract_so_names(ldd_output: str) -> list[str]:
@@ -244,12 +275,26 @@ def _check_library_versions() -> tuple[bool, str]:
     except subprocess.TimeoutExpired:
         return False, "pkg-config version check timed out"
 
-    if _version_lt(curl_version, MIN_LIBCURL_VERSION):
+    curl_cmp = _version_lt(curl_version, MIN_LIBCURL_VERSION)
+    if curl_cmp is None:
+        return (
+            False,
+            f"libcurl version {curl_version!r} is unparseable; "
+            f"skipping the minimum-version check (build is authoritative)",
+        )
+    if curl_cmp:
         return (
             False,
             f"libcurl version {curl_version} is below minimum required {MIN_LIBCURL_VERSION}",
         )
-    if _version_lt(xml2_version, MIN_LIBXML2_VERSION):
+    xml2_cmp = _version_lt(xml2_version, MIN_LIBXML2_VERSION)
+    if xml2_cmp is None:
+        return (
+            False,
+            f"libxml2 version {xml2_version!r} is unparseable; "
+            f"skipping the minimum-version check (build is authoritative)",
+        )
+    if xml2_cmp:
         return (
             False,
             f"libxml2 version {xml2_version} is below minimum required {MIN_LIBXML2_VERSION}",
@@ -260,11 +305,54 @@ def _check_library_versions() -> tuple[bool, str]:
     )
 
 
-def _version_lt(left: str, right: str) -> bool:
-    """Return ``True`` when version string ``left`` is below ``right``."""
-    left_parts = [int(p) for p in left.split(".")]
-    right_parts = [int(p) for p in right.split(".")]
+def _version_lt(left: str, right: str) -> bool | None:
+    """Return whether version ``left`` is below ``right``, defensively.
+
+    Distribution-packaged libraries report versions with non-numeric
+    suffixes (``7.81.0+dfsg``, ``2.9.13-1ubuntu1``); the leading
+    dotted-numeric prefix of each component is taken and the rest of
+    the component discarded. A component with no leading digits at
+    all makes the whole string unparseable.
+
+    Args:
+        left: The probed version string.
+        right: The documented minimum version string.
+
+    Returns:
+        ``True`` when ``left`` is strictly below ``right``,
+        ``False`` when it is at or above, or ``None`` when either
+        string carries no parseable leading-numeric component (the
+        caller turns ``None`` into a soft warning rather than an
+        uncaught error; the ``make`` outcome stays authoritative).
+    """
+    left_parts = _numeric_parts(left)
+    right_parts = _numeric_parts(right)
+    if left_parts is None or right_parts is None:
+        return None
     width = max(len(left_parts), len(right_parts))
     left_parts.extend([0] * (width - len(left_parts)))
     right_parts.extend([0] * (width - len(right_parts)))
     return left_parts < right_parts
+
+
+def _numeric_parts(version: str) -> list[int] | None:
+    """Return the dotted version's leading-numeric components, or ``None``.
+
+    Each dot-separated component contributes its leading run of
+    digits (``81`` from ``81+dfsg``); a component with no leading
+    digit aborts the parse and yields ``None``.
+
+    Args:
+        version: A version string, possibly with packaging suffixes.
+
+    Returns:
+        The parsed integer components, or ``None`` when no leading
+        numeric component could be extracted from the string.
+    """
+    parts: list[int] = []
+    for component in version.strip().split("."):
+        match = re.match(r"\d+", component.strip())
+        if match is None:
+            return None
+        parts.append(int(match.group(0)))
+    return parts if parts else None

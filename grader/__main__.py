@@ -15,19 +15,26 @@ Phase order, per implementation:
 - Python: dependency install (prerequisite, not scored), then
   P.1 baseline, P.2 course announcements, P.3 general
   announcements.
-- C: C.1.1 compile, C.1.2 tech stack, then C.2 baseline, C.3
-  course announcements, C.4 general announcements, C.5 memory
-  scenarios.
+- C: C.1.1 compile, C.1.2 tech stack, C.1.3/C.1.4 configuration
+  surfaces, then C.2 baseline, C.3 course announcements, C.4
+  general announcements, C.5 memory scenarios.
 
-Build prerequisite failures cause the dependent phases to be
-recorded as skipped against the rubric.
+A C compile failure cascade-skips every dependent C row, because a
+server that did not build cannot be exercised. A configuration
+surface failure (C.1.3 or C.1.4) does not cascade: the functional
+and memory suites still run, under a dual-provisioned environment
+(``ECLASS_*`` injected and the documented ``.env`` present), so the
+implementation is measured regardless of which surface the
+participant's server reads. The C.5 memory phase keeps its feature
+gate: a scenario whose named feature rows did not pass is recorded
+as a zero-point skip.
 
 Exit codes:
 
 - ``0`` on a clean run; phase-test failures are recorded in the
   report and do not change this exit code.
 - ``1`` on configuration errors, pre-flight failures, reset
-  failures, or patch-application failures.
+  failures, provisioning failures, or patch-application failures.
 - ``2`` on argument errors or a missing patch file.
 
 Invoke as ``python -m grader`` from a working directory that has
@@ -47,6 +54,7 @@ from .src import (
     build_python,
     patch,
     preflight,
+    provision,
     reporting,
     reset,
     scoring,
@@ -55,6 +63,7 @@ from .src.config import resolve_config, require_path
 from .src.errors import GraderError
 from .src.protocol import (
     c_baseline,
+    c_config,
     c_course_announcements,
     c_general_announcements,
     c_memory,
@@ -68,10 +77,11 @@ def main() -> int:
     """Parse arguments and run the grading sequence.
 
     Returns:
-        ``0`` on a clean run; ``2`` on argument error or missing
-        patch file; ``1`` on any ``GraderError`` raised during
-        the pre-grading sequence or on a patch-application
-        failure.
+        ``0`` on a clean run; ``2`` on an argparse usage error;
+        ``1`` on any ``GraderError`` raised during the pre-grading
+        sequence, on a missing or unappliable patch, or on a
+        provisioning failure. Missing-patch and patch-apply
+        failures share exit code ``1`` and the stderr channel.
     """
     parser = _build_parser()
     args = parser.parse_args()
@@ -97,7 +107,7 @@ def _run(args: argparse.Namespace) -> int:
     Returns:
         ``0`` on a clean run with the phase reports written;
         ``2`` when a supplied patch file does not exist on disk;
-        ``1`` when patch application fails.
+        ``1`` when patch application or provisioning fails.
 
     Raises:
         GraderError: When configuration is missing, pre-flight
@@ -124,8 +134,12 @@ def _run(args: argparse.Namespace) -> int:
     else:
         patch_path = Path(args.patch_file).resolve()
         if not patch_path.exists():
-            print(f"error: patch file not found: {patch_path}", file=sys.stderr)
-            return 2
+            print(
+                f"error: patch-apply failed: patch file not found: "
+                f"{patch_path}",
+                file=sys.stderr,
+            )
+            return 1
         patch_name = patch_path.stem
 
     scorer = scoring.Scorer()
@@ -135,16 +149,30 @@ def _run(args: argparse.Namespace) -> int:
         print(f"patch: applying {patch_path.name}")
         ok, summary, detail = patch.apply_patch(eclass_root, patch_path)
         if not ok:
-            print(f"patch: {summary}")
+            print(f"error: patch-apply failed: {summary}", file=sys.stderr)
             scorer.record("PATCH", False, summary, detail)
             _write_reports(paths, scorer, args.verbose)
             return 1
         print(f"patch: {summary}")
 
     try:
+        provision.provision(eclass_root, mock_root)
+        print(
+            "provision: testing environment .env and certs/ copied "
+            "verbatim into the checkout"
+        )
+    except provision.ProvisioningError as error:
+        print(f"error: provisioning failed: {error}", file=sys.stderr)
+        if patch_path is not None and not args.no_cleanup:
+            patch.cleanup(eclass_root)
+        provision.reset_provisioning(eclass_root)
+        return 1
+
+    try:
         _run_python_phases(scorer, eclass_root, mock_root, args.debug)
         _run_c_phases(scorer, eclass_root, mock_root, args.debug)
     finally:
+        provision.reset_provisioning(eclass_root)
         if patch_path is not None and not args.no_cleanup:
             print("patch: cleaning up test branch")
             patch.cleanup(eclass_root)
@@ -181,7 +209,15 @@ def _run_c_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run C compile, tech-stack, then the four C protocol phases.
+    """Run C compile, tech-stack, config surfaces, then the protocol phases.
+
+    A compile failure cascade-skips every dependent C row, because a
+    server that did not build cannot be exercised. The two
+    configuration-surface probes (C.1.3, C.1.4) run before the
+    functional suite but do not gate it: the ``c_config`` aggregator
+    restores the dual-provisioned environment after the probes so
+    C.2 through C.5 measure the implementation regardless of which
+    surface the server reads.
 
     The memory phase runs after the C feature phases so the scorer
     already carries the C.2/C.3/C.4 results that each memory
@@ -206,6 +242,8 @@ def _run_c_phases(
     stack_ok, stack_summary, stack_detail = build_c.verify_stack(eclass_root)
     scorer.record("C.1.2", stack_ok, stack_summary, stack_detail)
     print(f"c stack: {stack_summary}")
+
+    _record_phase(scorer, "c config", c_config.run, eclass_root, mock_root, debug)
 
     _record_phase(scorer, "c baseline", c_baseline.run, eclass_root, mock_root, debug)
     _record_phase(scorer, "c course", c_course_announcements.run, eclass_root, mock_root, debug)

@@ -42,6 +42,7 @@ from .errors import (
     PipelineError,
     StageExecutionError,
     StageInputError,
+    child_failure,
 )
 from .io import compute_checksum
 from .manifest import (
@@ -246,10 +247,7 @@ def _invoke_grader(
             f"grade: cannot invoke grader package at {grader_root}: {error}"
         ) from error
     if completed.returncode != 0:
-        stderr_tail = (completed.stderr or "").strip().splitlines()[-1:] or [""]
-        raise StageExecutionError(
-            f"grade: grader exited {completed.returncode}: {stderr_tail[0]}"
-        )
+        raise StageExecutionError(child_failure("grade: grader", completed))
 
 
 def _locate_results(eclass_root: Path, patch_path: Path) -> Path:

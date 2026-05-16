@@ -14,8 +14,8 @@ the assertion modules depend on:
 - ``spawn_server``: context manager that allocates a server, runs
   the assertion's body, and tears the server down.
 - ``mcp_server_env``: environment variables a participant's MCP
-  server expects, derived from the testing environment install
-  and the loaded seed credentials.
+  server expects, parsed from the testing environment's own
+  ``.env`` plus the grader-side TLS trust anchors.
 - ``initialize_server``, ``call_tool``, ``extract_text``,
   ``tool_exists``: small helpers the assertion bodies share.
 
@@ -28,9 +28,13 @@ runs no such gate without this enforcement, which would let a
 participant whose schema and handler disagree pass C feature tests
 that the Python SDK would correctly reject.
 
-Seed values (username, password, enrolled course codes,
-announcement bodies) live in ``grader.src.seed`` and are read from
-there rather than redeclared here.
+The ``ECLASS_*`` configuration values are not redeclared here:
+they are parsed from the testing environment's own ``.env`` at
+``<mock_root>/.env`` (the same file ``grader.src.provision`` copies
+verbatim into the checkout) so the environment-variable surface
+and the dotenv surface carry byte-identical values by
+construction. Seed values (username, password, enrolled course
+codes, announcement bodies) live in ``grader.src.seed``.
 """
 
 from __future__ import annotations
@@ -43,11 +47,12 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from collections.abc import Iterator
+from typing import IO
 
 import jsonschema
 
-from ..seed import SEED
+from ..env_file import parse_env_file
 
 REQUEST_TIMEOUT_SECONDS = 10.0
 SERVER_STARTUP_WAIT_SECONDS = 0.5
@@ -60,9 +65,8 @@ CLIENT_VERSION = "1.0.0"
 
 BASELINE_TOOL_NAMES = frozenset({"login", "logout", "get_courses", "authstatus"})
 
-ECLASS_BASE_URL = "http://localhost"
-SSO_DOMAIN = "172.17.0.1:18443"
-SSO_PROTOCOL = "https"
+DOTENV_FILENAME = ".env"
+ECLASS_KEY_PREFIX = "ECLASS_"
 
 
 @dataclass(frozen=True)
@@ -255,8 +259,67 @@ class ServerProcess:
         return advertised
 
 
+def eclass_config_pairs(mock_root: Path) -> dict[str, str]:
+    """Return the ``ECLASS_*`` configuration pairs from the mock's ``.env``.
+
+    The single source is ``<mock_root>/.env``, the testing
+    environment's own dotenv file written by its install step and
+    copied verbatim into the checkout by ``grader.src.provision``.
+    Parsing the same file here means the environment-variable
+    injection path and the dotenv provisioning path carry
+    byte-identical values by construction; neither surface is
+    hand-maintained. Only the ``ECLASS_*`` keys are returned; the
+    TLS trust-anchor keys are supplied separately by
+    :func:`tls_trust_env`.
+
+    Args:
+        mock_root: Resolved path to the testing environment install
+            whose ``.env`` is the single configuration source.
+
+    Returns:
+        Mapping of ``ECLASS_*`` configuration keys to values.
+    """
+    mock_root = Path(mock_root).resolve()
+    parsed = parse_env_file(mock_root / DOTENV_FILENAME)
+    return {
+        key: value
+        for key, value in parsed.items()
+        if key.startswith(ECLASS_KEY_PREFIX)
+    }
+
+
+def tls_trust_env(mock_root: Path) -> dict[str, str]:
+    """Return the TLS trust-anchor environment for the spawned server.
+
+    These keys point the participant server's HTTP client at the
+    grader mock's authoritative SSO certificate. They are grader-side
+    transport plumbing, not part of the participant-documented
+    configuration surface, so they are kept distinct from
+    :func:`eclass_config_pairs` and are never written into a ``.env``
+    file.
+
+    Args:
+        mock_root: Resolved path to the testing environment install,
+            used to anchor the SSL CA bundle.
+
+    Returns:
+        Mapping of TLS trust-anchor environment variables.
+    """
+    cert_path = str(mock_root / "certs" / "sso_cert.pem")
+    return {
+        "SSL_CERT_FILE": cert_path,
+        "REQUESTS_CA_BUNDLE": cert_path,
+        "CURL_CA_BUNDLE": cert_path,
+        "PYTHONHTTPSVERIFY": "0",
+    }
+
+
 def mcp_server_env(mock_root: Path) -> dict[str, str]:
     """Return the environment variables a participant MCP server expects.
+
+    The result merges the canonical ``ECLASS_*`` configuration pairs
+    with the TLS trust-anchor keys, so a server spawned with this
+    environment is fully configured via environment variables alone.
 
     Args:
         mock_root: Resolved path to the testing environment install,
@@ -264,20 +327,13 @@ def mcp_server_env(mock_root: Path) -> dict[str, str]:
 
     Returns:
         Mapping suitable for ``env_vars`` on a ``TestContext``. The
-        username and password are read from the loaded seed.
+        ``ECLASS_*`` values, credentials included, come from the
+        testing environment's own ``.env``; the TLS trust anchors
+        are appended by :func:`tls_trust_env`.
     """
-    cert_path = str(mock_root / "certs" / "sso_cert.pem")
-    return {
-        "ECLASS_URL": ECLASS_BASE_URL,
-        "ECLASS_USERNAME": SEED.username,
-        "ECLASS_PASSWORD": SEED.password,
-        "ECLASS_SSO_DOMAIN": SSO_DOMAIN,
-        "ECLASS_SSO_PROTOCOL": SSO_PROTOCOL,
-        "SSL_CERT_FILE": cert_path,
-        "REQUESTS_CA_BUNDLE": cert_path,
-        "CURL_CA_BUNDLE": cert_path,
-        "PYTHONHTTPSVERIFY": "0",
-    }
+    env = eclass_config_pairs(mock_root)
+    env.update(tls_trust_env(mock_root))
+    return env
 
 
 @contextmanager
@@ -427,7 +483,7 @@ def _validate_against_schema(args: dict, schema: dict) -> dict | None:
     return None
 
 
-def _read_with_timeout(stream, timeout: float, debug: bool) -> str:
+def _read_with_timeout(stream: IO[str], timeout: float, debug: bool) -> str:
     """Read a single line from ``stream`` with a ``select``-based timeout."""
     ready, _, _ = select.select([stream], [], [], timeout)
     if not ready:

@@ -40,6 +40,7 @@ from .errors import (
     PipelineError,
     StageExecutionError,
     StageInputError,
+    child_failure,
 )
 from .io import compute_checksum
 from .manifest import (
@@ -237,10 +238,8 @@ def _invoke_metrics(
         check=False,
     )
     if completed.returncode != 0:
-        stderr_tail = (completed.stderr or "").strip().splitlines()[-1:] or [""]
         raise StageExecutionError(
-            f"parse: parser metrics mode exited {completed.returncode}: "
-            f"{stderr_tail[0]}"
+            child_failure("parse: parser metrics mode", completed)
         )
     if not metrics_target.is_file():
         raise StageExecutionError(
@@ -283,10 +282,8 @@ def _invoke_sanitize_and_promote(
         check=False,
     )
     if completed.returncode != 0:
-        stderr_tail = (completed.stderr or "").strip().splitlines()[-1:] or [""]
         raise StageExecutionError(
-            f"parse: parser sanitise mode exited {completed.returncode}: "
-            f"{stderr_tail[0]}"
+            child_failure("parse: parser sanitise mode", completed)
         )
     promoted: list[str] = []
     candidates = list(transcripts_dir.glob(f"{SANITIZED_PREFIX}*.json")) + list(

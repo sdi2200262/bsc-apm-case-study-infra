@@ -192,12 +192,17 @@ class _Layout:
         self.warnings = warnings
 
 
-def _validate_layout(zip_path: Path, submission: SubmissionName) -> _Layout:
+def _validate_layout(zip_path: Path, _submission: SubmissionName) -> _Layout:
     """Inspect the zip's contents without extracting and confirm the contract.
+
+    The ``_submission`` parameter is part of the function's interface contract
+    for signature consistency with other validate helpers; the layout check
+    operates on the zip's contents only and does not inspect the parsed name.
 
     Args:
         zip_path: Path to the submission zip.
-        submission: Parsed submission identifiers.
+        _submission: Parsed submission identifiers (reserved for interface
+            consistency; not inspected by the layout check).
 
     Returns:
         A ``_Layout`` describing the validated transcript file

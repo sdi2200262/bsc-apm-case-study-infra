@@ -12,13 +12,14 @@ dataset.
 The grader scores a participant's submission against a 100-point
 rubric covering the Python implementation (41 points: 10 baseline,
 17 course announcements, 14 general announcements) and the C
-replica (59 points: 5 build and tech-stack, 10 baseline, 17 course
-announcements, 14 general announcements, 13 memory scenarios). The
-baseline score with no patch applied is 9/100, awarded for the
-nine Python baseline rows the upstream `eclass-mcp-server`
-reference already passes; P.1.1 (the `tools/list` registration
-check for all six tools) is the one baseline row that requires
-the patch's tool additions to pass. The participant testing environment is shipped
+replica (59 points: 10 build, tech-stack, and the two
+configuration surfaces; 10 baseline; 15 course announcements; 12
+general announcements; 12 memory scenarios). The baseline score
+with no patch applied is 9/100, awarded for the nine Python
+baseline rows the upstream `eclass-mcp-server` reference already
+passes; P.1.1 (the `tools/list` registration check for all six
+tools) is the one baseline row that requires the patch's tool
+additions to pass. The participant testing environment is shipped
 separately by the
 [`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task)
 repository; the grader probes its endpoints, invokes its reset script,
@@ -40,13 +41,14 @@ derived from its install prefix.
 - `gcc` (>= 9.0 for C11 support).
 - `libcurl4-openssl-dev` (libcurl >= 7.81.0).
 - `libxml2-dev` (libxml2 >= 2.9.13).
+- `pkg-config` (used to probe the libcurl and libxml2 versions).
 - `valgrind`.
 - `make`.
 
 Ubuntu install lines:
 
 ```bash
-sudo apt-get install -y python3 git build-essential \
+sudo apt-get install -y python3 git build-essential pkg-config \
     libcurl4-openssl-dev libxml2-dev valgrind
 curl -fsSL https://get.docker.com | sudo sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -104,16 +106,18 @@ for the mock CAS), invokes `<mock-root>/scripts/reset` to flush the
 seed back to its baseline, then sequences the phase modules:
 
 1. Apply the patch on a fresh test branch (or skip in `--no-patch` baseline mode).
-2. Python dependency install (`uv sync` against the participant's checkout) as a non-scored prerequisite. Failure skips every Python rubric row.
-3. Python baseline phase (P.1.1 through P.1.10).
-4. Python course-announcements phase (P.2.1 through P.2.8).
-5. Python general-announcements phase (P.3.1 through P.3.6).
-6. C compile (`make c-server`, scored as C.1.1).
-7. C tech-stack verification (`ldd` whitelist, scored as C.1.2).
-8. C baseline phase (C.2.1 through C.2.10).
-9. C course-announcements phase (C.3.1 through C.3.8).
-10. C general-announcements phase (C.4.1 through C.4.6).
-11. C memory phase (four valgrind scenarios, C.5.1 through C.5.4).
+2. Provision the dev environment: copy `<mock-root>/.env` and `<mock-root>/certs/` verbatim into the checkout, overwriting any `.env` or cert shipped inside the patch. A preflight verifies both source artefacts are present. Provisioning is reset per submission. See SCORING.md C.1.3/C.1.4 for how the two configuration-surface probes use this wiring.
+3. Python dependency install (`uv sync` against the participant's checkout) as a non-scored prerequisite. Failure skips every Python rubric row.
+4. Python baseline phase (P.1.1 through P.1.10).
+5. Python course-announcements phase (P.2.1 through P.2.8).
+6. Python general-announcements phase (P.3.1 through P.3.6).
+7. C compile (`make c-server`, scored as C.1.1).
+8. C tech-stack verification (`ldd` whitelist, scored as C.1.2).
+9. C configuration-surface probes (C.1.3 env-var surface, C.1.4 verbatim documented `.env` surface).
+10. C baseline phase (C.2.1 through C.2.10).
+11. C course-announcements phase (C.3.1 through C.3.8).
+12. C general-announcements phase (C.4.1 through C.4.6).
+13. C memory phase (four valgrind scenarios, C.5.1 through C.5.4).
 
 Each protocol test spawns the participant's MCP server as a
 subprocess (Python: `uv run python -m src.eclass_mcp_server.server`;
@@ -122,9 +126,16 @@ and asserts against the response's `text` content. Each memory
 scenario wraps the C-replica spawn in `valgrind` and verifies a
 clean exit with zero leaked bytes.
 
+`seed.yaml` and the `.env`/`certs/` provisioning are separate
+mechanisms: `seed.yaml` plus `make check-seed` guards that the
+rubric's expected data values still match the task seed; the
+`.env`/`certs/` copy guards that the participant server's wiring to
+the testing environment is the literal documented wiring.
+
 Phase failures are recorded in the results JSON without halting
-the run. Patch-apply failures, pre-flight failures, and reset
-failures terminate the run early.
+the run. Patch-apply failures, provisioning failures, pre-flight
+failures, and reset failures terminate the run early; every such
+failure prints one actionable line on stderr.
 
 ## Pinned references
 
@@ -180,6 +191,8 @@ grader/
     ├── preflight.py                  # HTTP probes against the testing environment
     ├── reset.py                      # subprocess invocation of scripts/reset
     ├── patch.py                      # git apply / cleanup
+    ├── env_file.py                   # single-source .env parser (provision + runner)
+    ├── provision.py                  # verbatim .env + certs/ provisioning from mock-root
     ├── build_python.py               # uv sync for the Python implementation
     ├── build_c.py                    # C.1.1 compile and C.1.2 stack verification
     ├── seed.py                       # seed.yaml loader and per-window helpers
@@ -187,16 +200,18 @@ grader/
     ├── reporting.py                  # JSON, text, and console writers
     └── protocol/
         ├── __init__.py
-        ├── runner.py                       # server spawn, JSON-RPC framing
+        ├── runner.py                       # server spawn, JSON-RPC framing, .env-sourced config
         ├── _announcements_assertions.py    # shared count/body helpers
         ├── baseline_tests.py               # P.1 / C.2 assertions
         ├── course_announcements_tests.py   # P.2 / C.3 assertions
         ├── general_announcements_tests.py  # P.3 / C.4 assertions
+        ├── config_surface.py               # C.1.3 / C.1.4 configuration-surface probes
         ├── memory_tests.py                 # C.5 scenarios under valgrind
         ├── python_baseline.py               # phase aggregator (impl=python)
         ├── python_course_announcements.py   # phase aggregator (impl=python)
         ├── python_general_announcements.py  # phase aggregator (impl=python)
         ├── c_baseline.py                    # phase aggregator (impl=c)
+        ├── c_config.py                      # phase aggregator (impl=c, C.1.3/C.1.4)
         ├── c_course_announcements.py        # phase aggregator (impl=c)
         ├── c_general_announcements.py       # phase aggregator (impl=c)
         └── c_memory.py                      # phase aggregator (impl=c)

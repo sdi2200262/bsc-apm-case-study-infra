@@ -57,7 +57,6 @@ from .manifest import (
     load_manifest,
 )
 from .submissions import (
-    SubmissionName,
     is_valid_submission_name,
     parse_submission_name,
     participant_subdir,

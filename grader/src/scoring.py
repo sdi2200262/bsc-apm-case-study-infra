@@ -4,15 +4,12 @@
 """
 Test definitions and score aggregation for the grading rubric.
 
-The rubric assigns 100 points across two implementations: 41 to
-the Python implementation (baseline plus per-tool announcement
-features) and 59 to the C replica (build and tech-stack
-verification, baseline mirror, the same announcement features,
-and four memory scenarios). The test-definition tuples encode
-the per-test point values, the category each test falls under,
-and a short human-readable description; the ``Scorer`` class
-accumulates per-test results and computes the aggregate scores
-the report writer consumes.
+The rubric assigns 100 points across two implementations: 41 to the
+Python implementation and 59 to the C replica. Per-tier budgets are
+declared in ``_EXPECTED_TIER_POINTS`` and enforced at import by
+``_assert_rubric_balance``; see SCORING.md for the full rubric.
+``Scorer`` accumulates per-test results and computes the aggregate
+scores the report writer consumes.
 
 The JSON shape returned by ``Scorer.to_dict`` is consumed by
 ``pipeline.grade``, ``pipeline.combine``, and the ``inspect``
@@ -90,6 +87,28 @@ PYTHON_GENERAL_TESTS: tuple[TestDefinition, ...] = (
 C_INFRA_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.1.1", 3, "build", "c", "make c-server compiles the server binary", "baseline"),
     TestDefinition("C.1.2", 2, "stack", "c", "ldd reports libcurl, libxml2, and no JSON-parser library", "baseline"),
+    TestDefinition(
+        "C.1.3",
+        3,
+        "config",
+        "c",
+        "env-var configuration surface: server starts and completes the "
+        "JSON-RPC initialize handshake plus an authenticated login "
+        "configured purely via ECLASS_* environment variables with no "
+        ".env file present",
+        "baseline",
+    ),
+    TestDefinition(
+        "C.1.4",
+        2,
+        "config",
+        "c",
+        "verbatim documented .env surface: server starts, handshakes, "
+        "and authenticates with the testing environment's own .env and "
+        "certs/ copied verbatim into the package root and no ECLASS_* "
+        "or TLS environment variables",
+        "baseline",
+    ),
 )
 
 C_BASELINE_TESTS: tuple[TestDefinition, ...] = (
@@ -112,8 +131,8 @@ C_COURSE_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.3.4", 1, "course", "c", "empty course returns no-announcements message", "feature"),
     TestDefinition("C.3.5", 3, "course", "c", "days_back=0 returns the day-zero announcement", "feature"),
     TestDefinition("C.3.6", 3, "course", "c", "days_back=15 returns the two in-scope announcements", "feature"),
-    TestDefinition("C.3.7", 4, "course", "c", "default days_back returns the three in-scope announcements", "feature"),
-    TestDefinition("C.3.8", 3, "course", "c", "days_back=60 returns all four announcements", "feature"),
+    TestDefinition("C.3.7", 3, "course", "c", "default days_back returns the three in-scope announcements", "feature"),
+    TestDefinition("C.3.8", 2, "course", "c", "days_back=60 returns all four announcements", "feature"),
 )
 
 C_GENERAL_TESTS: tuple[TestDefinition, ...] = (
@@ -122,14 +141,14 @@ C_GENERAL_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.4.3", 1, "general", "c", "days_back=31 returns older-than-30-days error", "feature"),
     TestDefinition("C.4.4", 3, "general", "c", "days_back=0 returns the three day-zero announcements", "feature"),
     TestDefinition("C.4.5", 3, "general", "c", "days_back=15 returns the six in-scope announcements", "feature"),
-    TestDefinition("C.4.6", 5, "general", "c", "default returns nine announcements with multi-source attribution", "feature"),
+    TestDefinition("C.4.6", 3, "general", "c", "default returns nine announcements with multi-source attribution", "feature"),
 )
 
 C_MEMORY_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.5.1", 3, "memory", "c", "login lifecycle leaves no leaked memory", "feature"),
     TestDefinition("C.5.2", 3, "memory", "c", "course-announcement variations leave no leaked memory", "feature"),
     TestDefinition("C.5.3", 3, "memory", "c", "general-announcement variations leave no leaked memory", "feature"),
-    TestDefinition("C.5.4", 4, "memory", "c", "full lifecycle integration leaves no leaked memory", "feature"),
+    TestDefinition("C.5.4", 3, "memory", "c", "full lifecycle integration leaves no leaked memory", "feature"),
 )
 
 PYTHON_FEATURE_TESTS: tuple[TestDefinition, ...] = (
@@ -145,6 +164,70 @@ C_TESTS: tuple[TestDefinition, ...] = (
     C_INFRA_TESTS + C_BASELINE_TESTS + C_FEATURE_TESTS
 )
 ALL_TESTS: tuple[TestDefinition, ...] = PYTHON_TESTS + C_TESTS
+
+# Required per-tier and per-implementation point budget. The rubric
+# is balanced by construction; this table is the single source of
+# truth a future edit is checked against so an unintended imbalance
+# fails loudly at import rather than silently skewing scores.
+_EXPECTED_TIER_POINTS: tuple[tuple[str, tuple[TestDefinition, ...], int], ...] = (
+    ("python baseline", PYTHON_BASELINE_TESTS, 10),
+    ("python course", PYTHON_COURSE_TESTS, 17),
+    ("python general", PYTHON_GENERAL_TESTS, 14),
+    ("c infra", C_INFRA_TESTS, 10),
+    ("c baseline", C_BASELINE_TESTS, 10),
+    ("c course", C_COURSE_TESTS, 15),
+    ("c general", C_GENERAL_TESTS, 12),
+    ("c memory", C_MEMORY_TESTS, 12),
+)
+_EXPECTED_PYTHON_POINTS = 41
+_EXPECTED_C_POINTS = 59
+_EXPECTED_GRAND_POINTS = 100
+
+
+class RubricImbalanceError(AssertionError):
+    """Raised at import when the rubric point budget does not balance.
+
+    The grand total must be 100, the Python implementation 41, the C
+    replica 59, and each tier its documented sub-total. A raised
+    instance names the tier whose sum drifted and the expected and
+    actual values so the corrective edit is unambiguous.
+    """
+
+
+def _assert_rubric_balance() -> None:
+    """Verify the rubric sums to its documented per-tier budget.
+
+    Raises:
+        RubricImbalanceError: When any tier sub-total, the Python
+            total, the C total, or the grand total differs from the
+            documented value. The message names the failing bucket
+            and the expected versus actual point counts so the fix
+            does not require recomputing the whole table by hand.
+    """
+    for label, tests, expected in _EXPECTED_TIER_POINTS:
+        actual = sum(t.points for t in tests)
+        if actual != expected:
+            raise RubricImbalanceError(
+                f"rubric tier '{label}' sums to {actual}, expected {expected}"
+            )
+    python_total = sum(t.points for t in PYTHON_TESTS)
+    if python_total != _EXPECTED_PYTHON_POINTS:
+        raise RubricImbalanceError(
+            f"python total sums to {python_total}, expected {_EXPECTED_PYTHON_POINTS}"
+        )
+    c_total = sum(t.points for t in C_TESTS)
+    if c_total != _EXPECTED_C_POINTS:
+        raise RubricImbalanceError(
+            f"c total sums to {c_total}, expected {_EXPECTED_C_POINTS}"
+        )
+    grand_total = sum(t.points for t in ALL_TESTS)
+    if grand_total != _EXPECTED_GRAND_POINTS:
+        raise RubricImbalanceError(
+            f"grand total sums to {grand_total}, expected {_EXPECTED_GRAND_POINTS}"
+        )
+
+
+_assert_rubric_balance()
 
 
 def all_tests() -> dict[str, TestDefinition]:
