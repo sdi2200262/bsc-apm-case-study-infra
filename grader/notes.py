@@ -27,31 +27,35 @@ combine runs.
 Sidecar shape::
 
     notes:
-      - test_id: C.5.2
+      - test_ids: [C.5.2, C.5.3, C.5.4]
         note: |
-          Free prose describing why this row reads the way it
-          does. Multi-line content is supported via YAML's
-          block scalar; trailing whitespace is stripped on save.
+          Free prose describing the one root cause shared by
+          every listed rubric row. Multi-line content is
+          supported via YAML's block scalar; trailing whitespace
+          is stripped on save.
       - note: |
-          A general note about the submission, not tied to a
-          specific rubric row.
+          A submission-level observation, not tied to any rubric
+          row.
 
-The ``test_id`` field is optional. When present, the CLI's
-``add`` subcommand validates the ID against the ``tests`` block
+The ``test_ids`` field is optional and, when present, lists one
+or more rubric rows that share a single root cause. The ``add``
+subcommand validates every listed ID against the ``tests`` block
 in the current ``results.json``. When absent, the note is a
-general observation about the submission as a whole.
+submission-level observation about the submission as a whole.
 
 The CLI is invoked as
 ``python -m grader.notes <subcommand> <results_dir> [...]``
 where ``results_dir`` is the directory holding ``results.json``.
 Subcommands:
 
-* ``add --note "<prose>" [--test-id <id>]``: append one entry.
-  When ``--test-id`` is given, the ID must address an entry in
-  the current ``results.json``'s ``tests`` block.
+* ``add --note "<prose>" [--test-id <id> ...]``: append one
+  entry. ``--test-id`` may be repeated; every ID must address an
+  entry in the current ``results.json``'s ``tests`` block, and
+  the listed rows all share the one root cause the note states.
 * ``list``: print every note with its index plus a freshness
-  indicator (a ``test_id`` whose entry has disappeared from
-  ``results.json`` after a re-run is flagged ``stale``).
+  indicator (a ``test_ids`` entry naming a row that has
+  disappeared from ``results.json`` after a re-run is flagged
+  ``stale``).
 * ``remove --index <N>``: delete the entry at the given index.
 """
 
@@ -73,7 +77,7 @@ class NotesError(Exception):
     """Raised when a notes operation fails for a recoverable reason."""
 
 
-def load_notes(directory: Path) -> list[dict[str, str]]:
+def load_notes(directory: Path) -> list[dict[str, Any]]:
     """Read the notes sidecar in ``directory``, returning the entry list.
 
     Args:
@@ -82,9 +86,10 @@ def load_notes(directory: Path) -> list[dict[str, str]]:
 
     Returns:
         The parsed list of note entries. Each entry carries a
-        non-empty ``note`` string; entries that target a specific
-        rubric row also carry a ``test_id``. An empty list when
-        the sidecar is absent or its ``notes`` field is empty.
+        non-empty ``note`` string; an entry that attaches to
+        rubric rows also carries a non-empty ``test_ids`` list of
+        non-empty strings. An empty list when the sidecar is
+        absent or its ``notes`` field is empty.
 
     Raises:
         NotesError: When the sidecar exists but is malformed.
@@ -104,7 +109,7 @@ def load_notes(directory: Path) -> list[dict[str, str]]:
         return []
     if not isinstance(notes, list):
         raise NotesError(f"sidecar at {path} 'notes' must be a list")
-    out: list[dict[str, str]] = []
+    out: list[dict[str, Any]] = []
     for index, entry in enumerate(notes):
         if not isinstance(entry, dict):
             raise NotesError(
@@ -115,20 +120,24 @@ def load_notes(directory: Path) -> list[dict[str, str]]:
             raise NotesError(
                 f"sidecar at {path} entry {index} 'note' must be a non-empty string"
             )
-        entry_out: dict[str, str] = {"note": note_value.rstrip()}
-        test_id = entry.get("test_id")
-        if test_id is not None:
-            if not isinstance(test_id, str) or not test_id:
+        entry_out: dict[str, Any] = {"note": note_value.rstrip()}
+        test_ids = entry.get("test_ids")
+        if test_ids is not None:
+            if (
+                not isinstance(test_ids, list)
+                or not test_ids
+                or not all(isinstance(t, str) and t for t in test_ids)
+            ):
                 raise NotesError(
-                    f"sidecar at {path} entry {index} 'test_id' "
-                    f"must be a non-empty string when present"
+                    f"sidecar at {path} entry {index} 'test_ids' must be a "
+                    f"non-empty list of non-empty strings when present"
                 )
-            entry_out["test_id"] = test_id
+            entry_out["test_ids"] = list(test_ids)
         out.append(entry_out)
     return out
 
 
-def save_notes(directory: Path, notes: list[dict[str, str]]) -> None:
+def save_notes(directory: Path, notes: list[dict[str, Any]]) -> None:
     """Write the entry list to the notes sidecar in ``directory``.
 
     The write is atomic via sibling-tempfile rename; concurrent
@@ -210,26 +219,26 @@ def _cmd_add(args: argparse.Namespace) -> int:
     note_text = args.note.rstrip()
     if not note_text:
         raise NotesError("--note must contain non-whitespace text")
-    entry: dict[str, str] = {"note": note_text}
-    if args.test_id is not None:
+    entry: dict[str, Any] = {"note": note_text}
+    if args.test_ids:
         results = _read_results(directory)
         known = _known_test_ids(results)
-        if args.test_id not in known:
+        unknown = [tid for tid in args.test_ids if tid not in known]
+        if unknown:
             raise NotesError(
-                f"test_id {args.test_id!r} is not in {RESULTS_FILENAME}'s "
-                f"tests block"
+                f"test_ids {unknown!r} not in {RESULTS_FILENAME}'s tests block"
             )
-        entry["test_id"] = args.test_id
+        entry["test_ids"] = list(args.test_ids)
     notes = load_notes(directory)
     notes.append(entry)
     save_notes(directory, notes)
-    if "test_id" in entry:
+    if "test_ids" in entry:
         print(
-            f"added note for test {entry['test_id']} "
+            f"added note for tests {', '.join(entry['test_ids'])} "
             f"(now {len(notes)} note(s))"
         )
     else:
-        print(f"added general note (now {len(notes)} note(s))")
+        print(f"added submission-level note (now {len(notes)} note(s))")
     return 0
 
 
@@ -243,13 +252,14 @@ def _cmd_list(args: argparse.Namespace) -> int:
     results = _read_results(directory)
     known = _known_test_ids(results)
     for index, entry in enumerate(notes):
-        test_id = entry.get("test_id")
-        if test_id is None:
-            scope = "general"
-        elif test_id in known:
-            scope = f"test={test_id} ok"
+        test_ids = entry.get("test_ids")
+        if not test_ids:
+            scope = "submission-level"
+        elif all(tid in known for tid in test_ids):
+            scope = f"tests={','.join(test_ids)} ok"
         else:
-            scope = f"test={test_id} stale"
+            missing = [tid for tid in test_ids if tid not in known]
+            scope = f"tests={','.join(test_ids)} stale (missing {','.join(missing)})"
         print(f"[{index}] {scope}")
         for line in entry["note"].rstrip().splitlines():
             print(f"      {line}")
@@ -268,7 +278,11 @@ def _cmd_remove(args: argparse.Namespace) -> int:
         )
     removed = notes.pop(args.index)
     save_notes(directory, notes)
-    target = removed.get("test_id", "general")
+    target = (
+        ", ".join(removed["test_ids"])
+        if removed.get("test_ids")
+        else "submission-level"
+    )
     print(f"removed note ({target}; now {len(notes)} note(s))")
     return 0
 
@@ -326,11 +340,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     add_parser.add_argument(
         "--test-id",
-        dest="test_id",
+        dest="test_ids",
+        action="append",
         default=None,
+        metavar="ID",
         help=(
-            "optional rubric ID this note attaches to (e.g. C.5.2); "
-            "validated against results.json"
+            "rubric ID this note attaches to (e.g. C.5.2); repeatable "
+            "to bind several rows that share one root cause; every ID "
+            "is validated against results.json. Omit for a "
+            "submission-level note"
         ),
     )
     list_parser = sub.add_parser(

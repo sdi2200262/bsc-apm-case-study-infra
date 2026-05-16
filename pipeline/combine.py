@@ -254,7 +254,7 @@ def _build_combined(
     results_payload: Any,
     metrics_payload: Any,
     metrics_notes_payload: list[dict[str, str]] | None,
-    results_notes_payload: list[dict[str, str]] | None,
+    results_notes_payload: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
     """Assemble the combined-artifact wrapper.
 
@@ -325,29 +325,30 @@ def _load_metrics_notes(path: Path) -> list[dict[str, str]]:
     return out
 
 
-def _load_results_notes(path: Path) -> list[dict[str, str]]:
+def _load_results_notes(path: Path) -> list[dict[str, Any]]:
     """Read the results-notes sidecar and return its entry list.
 
     The sidecar's canonical writer is ``grader.notes``;
     pipeline.combine reads the YAML directly to keep the pipeline
     package free of in-process dependencies on the grader package.
     Each entry must carry a non-empty ``note`` string and may
-    optionally carry a non-empty ``test_id`` naming the rubric row
-    the note attaches to.
+    optionally carry a non-empty ``test_ids`` list of non-empty
+    strings naming the rubric rows the note attaches to (one or
+    more rows that share a single root cause).
 
     Args:
         path: Path to ``results_notes.yaml``.
 
     Returns:
         The ordered entry list. Each entry is ``{"note": ...}`` or
-        ``{"note": ..., "test_id": ...}`` depending on whether the
-        author attached the note to a specific rubric row.
+        ``{"note": ..., "test_ids": [...]}`` depending on whether
+        the author attached the note to specific rubric rows.
 
     Raises:
         StageExecutionError: When the sidecar is malformed.
     """
     payload = _read_notes_payload(path)
-    out: list[dict[str, str]] = []
+    out: list[dict[str, Any]] = []
     for index, entry in enumerate(payload):
         note_value = entry.get("note")
         if not isinstance(note_value, str) or not note_value.strip():
@@ -355,15 +356,20 @@ def _load_results_notes(path: Path) -> list[dict[str, str]]:
                 f"combine: notes sidecar at {path} entry {index} 'note' "
                 f"must be a non-empty string"
             )
-        entry_out: dict[str, str] = {"note": note_value.rstrip()}
-        test_id = entry.get("test_id")
-        if test_id is not None:
-            if not isinstance(test_id, str) or not test_id:
+        entry_out: dict[str, Any] = {"note": note_value.rstrip()}
+        test_ids = entry.get("test_ids")
+        if test_ids is not None:
+            if (
+                not isinstance(test_ids, list)
+                or not test_ids
+                or not all(isinstance(t, str) and t for t in test_ids)
+            ):
                 raise StageExecutionError(
                     f"combine: notes sidecar at {path} entry {index} "
-                    f"'test_id' must be a non-empty string when present"
+                    f"'test_ids' must be a non-empty list of non-empty "
+                    f"strings when present"
                 )
-            entry_out["test_id"] = test_id
+            entry_out["test_ids"] = list(test_ids)
         out.append(entry_out)
     return out
 
