@@ -137,6 +137,16 @@ the run. Patch-apply failures, provisioning failures, pre-flight
 failures, and reset failures terminate the run early; every such
 failure prints one actionable line on stderr.
 
+The scored verdicts in the results JSON are reproducible against
+the pinned references below; the captured `full_output` transcript
+text is not byte-stable across seedings. The testing environment's
+seed writes each announcement date at insert time as the seeding
+wall clock minus the entry's `days_ago`, and the C.1.2 `ldd`
+capture includes loader-assigned load addresses, so two grading
+environments seeded on different days yield identical scores but
+textually divergent transcripts. Compare results JSON on the
+verdicts, not by byte diff.
+
 ## Pinned references
 
 | Component | Pinned at |
