@@ -201,7 +201,7 @@ def _print_diagnostics(diagnostics: dict[str, Any]) -> None:
     print(f"  subagent_models_indexed:                  {diagnostics.get('subagent_models_indexed', 0)}")
     distribution = diagnostics.get("model_token_distribution", {})
     if distribution:
-        print(f"  model_token_distribution:")
+        print("  model_token_distribution:")
         for model, tokens in sorted(distribution.items(), key=lambda item: item[1], reverse=True):
             print(f"    {model:30} {tokens:>14,}")
     print(f"  tool_result_count / tool_error_count:     {diagnostics['tool_result_count']} / {diagnostics['tool_error_count']}")
@@ -218,12 +218,12 @@ def _print_diagnostics(diagnostics: dict[str, Any]) -> None:
         print(f"    FAIL {name}: residual={result.get('residual')} (left={result.get('left')}, right={result.get('right')})")
     notes = diagnostics.get("notes", [])
     if notes:
-        print(f"  notes:")
+        print("  notes:")
         for note in notes:
             print(f"    - {note}")
     by_file = diagnostics.get("compaction_events_by_file", {})
     if by_file:
-        print(f"  compaction_events_by_file:")
+        print("  compaction_events_by_file:")
         for path, count in by_file.items():
             print(f"    - {path}: {count}")
 

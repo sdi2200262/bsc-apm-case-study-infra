@@ -40,7 +40,7 @@ single-pass walk over a file's records:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -58,7 +58,6 @@ from .schema import (
     is_user_authored_enqueue,
     parse_record,
     queue_operation,
-    queue_record_content,
 )
 from .subagents import SubagentModelIndex, build_subagent_model_index
 

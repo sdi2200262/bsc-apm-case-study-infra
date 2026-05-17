@@ -49,12 +49,9 @@ from typing import Iterable
 
 from .loader import STEER_FATE_DELIVERED, Conversation, SteerEvent
 from .schema import (
-    QUEUE_OP_ENQUEUE,
     RECORD_TYPE_ASSISTANT,
     Record,
-    is_compact_summary_user,
     is_synthetic_assistant,
-    is_user_authored_enqueue,
     queue_operation,
 )
 from .user_prompts import (

@@ -55,7 +55,7 @@ from .buckets import DEFAULT_SHORT_THRESHOLD
 from .cli_render import print_economic, print_inspection, print_process
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .io import is_sanitised_payload, load_json, write_file_text, write_json
-from .loader import discover_conversation_files, discover_sanitisable_jsonl_files
+from .loader import discover_sanitisable_jsonl_files
 from .metrics.economic import compute_session_economic
 from .rates import (
     RateTableError,

@@ -71,7 +71,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..rates import (
-    CATEGORIES,
     CATEGORY_CACHE_1H,
     CATEGORY_CACHE_5M,
     CATEGORY_CACHE_READ,

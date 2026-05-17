@@ -58,14 +58,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
 
 from .commands import (
     APM_PHASE_BY_ROLE,
     FRAMEWORK_APM,
     FRAMEWORK_SPECKIT,
     PHASE_OTHER,
-    ROLE_PLANNER,
     ROLE_UNASSIGNED,
     classify_command,
     extract_command_names,

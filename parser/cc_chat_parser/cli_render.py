@@ -115,11 +115,11 @@ def print_inspection(session: Session) -> None:
         for record_type, count in sorted(per_file_counts.items()):
             print(f"      {record_type:32} {count}")
         if per_file_subtypes:
-            print(f"    subtypes:")
+            print("    subtypes:")
             for (record_type, subtype), count in sorted(per_file_subtypes.items()):
                 print(f"      {record_type}/{subtype:24} {count}")
         if per_file_queue:
-            print(f"    queue operations:")
+            print("    queue operations:")
             for op, count in sorted(per_file_queue.items()):
                 print(f"      {op:32} {count}")
         print(f"    genuine user prompts:       {per_file_user_prompts}")
@@ -130,21 +130,21 @@ def print_inspection(session: Session) -> None:
         print(f"    compaction events:          {compaction_count}")
         print(f"    derived turns:              {len(turns)}")
         if warnings_count:
-            print(f"    queue lifecycle warnings:")
+            print("    queue lifecycle warnings:")
             for warning in conversation.queue_lifecycle_warnings:
                 print(f"      - {warning}")
     print()
     print("session totals:")
     print(f"  records:                       {total_records}")
-    print(f"  record types:")
+    print("  record types:")
     for record_type, count in sorted(record_counts.items()):
         print(f"    {record_type:32} {count}")
     if subtype_counts:
-        print(f"  subtypes:")
+        print("  subtypes:")
         for (record_type, subtype), count in sorted(subtype_counts.items()):
             print(f"    {record_type}/{subtype:24} {count}")
     if queue_op_counts:
-        print(f"  queue operations:")
+        print("  queue operations:")
         for op, count in sorted(queue_op_counts.items()):
             print(f"    {op:32} {count}")
     print(f"  genuine user prompts:          {genuine_user_prompts}")
@@ -166,11 +166,11 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
     metadata, and reports the per-model token distribution and the
     delegated-attribution mix that drove the headline cost figure.
     """
-    print(f"economic dimension (session scope):")
+    print("economic dimension (session scope):")
     print(f"  modal main model:             {economic.model or '(none)'}")
     print(f"  rate table snapshot date:     {rate_table.snapshot_date}")
     print(f"  rate table source path:       {rate_table.source_path}")
-    print(f"  pricing sources:")
+    print("  pricing sources:")
     for url in rate_table.sources:
         print(f"    - {url}")
     print()
@@ -189,7 +189,7 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
     print()
     print(f"  total prompt tokens:          {economic.total_prompt_tokens:>14,}")
     print()
-    print(f"  per-model billed token volume:")
+    print("  per-model billed token volume:")
     for model, tokens in sorted(
         economic.model_token_distribution.items(),
         key=lambda item: item[1],
@@ -254,19 +254,19 @@ def print_process(session: Session, short_threshold: int) -> None:
     print(f"    steer_delivered_count:   {user_input_metrics.steer_delivered_count}")
     print(f"    steer_abandoned_count:   {user_input_metrics.steer_abandoned_count}")
     print(f"    steer_attempted_count:   {user_input_metrics.steer_attempted_count}")
-    print(f"    turn_prompts_bucket_shares:")
+    print("    turn_prompts_bucket_shares:")
     for bucket in BUCKETS:
         print(f"      {bucket:10} {user_input_metrics.turn_prompts_bucket_shares[bucket]:.4f}")
-    print(f"    steer_delivered_bucket_shares:")
+    print("    steer_delivered_bucket_shares:")
     for bucket in BUCKETS:
         print(f"      {bucket:10} {user_input_metrics.steer_delivered_bucket_shares[bucket]:.4f}")
-    print(f"    all_inputs_bucket_shares:")
+    print("    all_inputs_bucket_shares:")
     for bucket in BUCKETS:
         print(f"      {bucket:10} {user_input_metrics.all_inputs_bucket_shares[bucket]:.4f}")
-    print(f"    turn_prompts_magnitude_by_bucket (mean chars):")
+    print("    turn_prompts_magnitude_by_bucket (mean chars):")
     for bucket in BUCKETS:
         print(f"      {bucket:10} {user_input_metrics.turn_prompts_magnitude_by_bucket[bucket]:.1f}")
-    print(f"    steer_delivered_magnitude_by_bucket (mean chars):")
+    print("    steer_delivered_magnitude_by_bucket (mean chars):")
     for bucket in BUCKETS:
         print(f"      {bucket:10} {user_input_metrics.steer_delivered_magnitude_by_bucket[bucket]:.1f}")
     print()
