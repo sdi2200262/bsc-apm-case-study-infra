@@ -23,6 +23,7 @@ from pathlib import Path
 DOTENV_FILENAME = ".env"
 CERTS_DIRNAME = "certs"
 SSO_CERT_FILENAME = "sso_cert.pem"
+CREDENTIAL_KEYS = ("ECLASS_USERNAME", "ECLASS_PASSWORD")
 
 
 def preflight_provisioning(mock_root: Path) -> None:
@@ -110,6 +111,36 @@ def install_sso_cert(eclass_root: Path, mock_root: Path) -> Path:
     shutil.rmtree(destination, ignore_errors=True)
     shutil.copytree(source, destination)
     return destination
+
+
+def blank_dotenv_credentials(eclass_root: Path) -> None:
+    """Empty only the credential values in the checkout's ``.env``, in place.
+
+    Every other line is preserved verbatim (comments, ordering, all
+    non-credential keys) so the dotenv surface stays otherwise
+    valid; only the keys in :data:`CREDENTIAL_KEYS` are emptied.
+    Used by the missing-credentials probes to deprive the on-disk
+    surface without removing the file.
+
+    Args:
+        eclass_root: Resolved patched eclass-mcp-server checkout path.
+
+    Raises:
+        FileNotFoundError: When the checkout has no ``.env``; a
+            verbatim copy must be written before blanking.
+    """
+    eclass_root = Path(eclass_root).resolve()
+    dotenv_path = eclass_root / DOTENV_FILENAME
+    rewritten: list[str] = []
+    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.partition("=")[0].strip()
+            if key in CREDENTIAL_KEYS:
+                rewritten.append(f"{key}=")
+                continue
+        rewritten.append(line)
+    dotenv_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
 
 
 def reset_provisioning(eclass_root: Path) -> None:

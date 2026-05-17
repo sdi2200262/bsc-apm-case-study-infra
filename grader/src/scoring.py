@@ -115,7 +115,7 @@ C_BASELINE_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.2.1", 1, "protocol", "c", "initialize and tools/list expose all six tools", "baseline"),
     TestDefinition("C.2.2", 1, "protocol", "c", "login with valid credentials succeeds", "baseline"),
     TestDefinition("C.2.3", 1, "protocol", "c", "second login reports already-logged-in", "baseline"),
-    TestDefinition("C.2.4", 1, "protocol", "c", "login with empty credentials reports missing-credentials", "baseline"),
+    TestDefinition("C.2.4", 1, "protocol", "c", "missing-credentials error on every implemented configuration surface, attributed per surface against C.1.3/C.1.4", "baseline"),
     TestDefinition("C.2.5", 1, "protocol", "c", "logout while authenticated succeeds", "baseline"),
     TestDefinition("C.2.6", 1, "protocol", "c", "logout without prior login is a no-op", "baseline"),
     TestDefinition("C.2.7", 1, "protocol", "c", "get_courses returns the enrolled courses", "baseline"),

@@ -141,6 +141,18 @@ plus `ECLASS_*`-and-TLS per spawn), so the implementation is measured
 regardless of which surface it reads. Only a C.1.1 compile failure
 cascade-skips the dependent C rows.
 
+C.2.4 extends the per-surface principle to the negative contract.
+Missing-credential handling is billed per implemented surface:
+each surface is deprived of credentials in isolation and must
+return the exact missing-credentials error. A surface a
+participant did not implement is penalised once at C.1.3 or C.1.4
+and is not billed again here, so C.2.4 is scored only on the
+surfaces the recorded C.1.3/C.1.4 verdicts show implemented; when
+neither is implemented the loss is attributed to C.1.3/C.1.4.
+C.2.4 reading those verdicts is a narrow attribution dependency,
+not a return to the removed config cascade: the row still runs and
+the rest of the suite stays decoupled.
+
 | ID | Points | Description |
 |----|--------|-------------|
 | C.1.1 | 3 | `make c-server` exits 0 and produces the `server` binary |
@@ -159,7 +171,7 @@ behaviour, executed against the C binary instead of the Python server.
 | C.2.1 | 1 | `initialize` shape and `tools/list` return all six tools |
 | C.2.2 | 1 | Login with valid credentials succeeds |
 | C.2.3 | 1 | Second login while authenticated reports already-logged-in |
-| C.2.4 | 1 | Login with empty credentials reports the missing-credentials error |
+| C.2.4 | 1 | Missing-credentials error reported on every implemented configuration surface, each surface deprived of credentials in isolation; scored only on the surfaces the recorded C.1.3/C.1.4 verdicts show implemented (a surface penalised there is not billed again) |
 | C.2.5 | 1 | Logout while authenticated succeeds |
 | C.2.6 | 1 | Logout without prior login is a no-op |
 | C.2.7 | 1 | `get_courses` while authenticated returns the enrolled courses |

@@ -22,6 +22,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..provision import (
+    CREDENTIAL_KEYS,
+    blank_dotenv_credentials,
+    write_dotenv,
+)
 from ..seed import SEED
 from .runner import (
     call_tool,
@@ -141,17 +146,37 @@ def test_login_already_logged_in(
 def test_login_missing_credentials(
     impl: str, eclass_dir: Path, mock_root: Path, debug: bool
 ) -> tuple[bool, str, str]:
-    """P.1.4 / C.2.4: ``login`` with empty credentials returns the missing-creds error."""
-    overrides = {"ECLASS_USERNAME": "", "ECLASS_PASSWORD": ""}
-    with spawn_server(impl, eclass_dir, mock_root, debug, env_overrides=overrides) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        response = call_tool(server, "login", {})
-        text = extract_text(response)
-        if text == LOGIN_MISSING_CREDS:
-            return True, "exact missing-credentials string matched", text
-        return False, f"expected exact missing-credentials error, got: '{text}'", text
+    """P.1.4: ``login`` with no credentials on either surface returns the missing-creds error.
+
+    Both surfaces are deprived together (the ``ECLASS_*`` credential
+    variables blanked and the on-disk ``.env`` credential values
+    emptied), so a correct server finds no credentials anywhere and
+    must report the missing-credentials error; the verbatim ``.env``
+    is restored afterwards so later rows see the unmodified
+    dual-provisioned state. The Python row has no per-surface rubric
+    analogue (unlike the C-side C.2.4), so it asserts the unified
+    no-credentials-anywhere behaviour.
+    """
+    blank_dotenv_credentials(eclass_dir)
+    overrides = {key: "" for key in CREDENTIAL_KEYS}
+    try:
+        with spawn_server(
+            impl, eclass_dir, mock_root, debug, env_overrides=overrides
+        ) as server:
+            if server is None:
+                return SERVER_START_FAIL
+            initialize_server(server)
+            response = call_tool(server, "login", {})
+            text = extract_text(response)
+            if text == LOGIN_MISSING_CREDS:
+                return True, "exact missing-credentials string matched", text
+            return (
+                False,
+                f"expected exact missing-credentials error, got: '{text}'",
+                text,
+            )
+    finally:
+        write_dotenv(eclass_dir, mock_root)
 
 
 def test_logout_success(

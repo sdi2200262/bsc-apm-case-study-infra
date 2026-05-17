@@ -245,7 +245,14 @@ def _run_c_phases(
 
     _record_phase(scorer, "c config", c_config.run, eclass_root, mock_root, debug)
 
-    _record_phase(scorer, "c baseline", c_baseline.run, eclass_root, mock_root, debug)
+    print("c baseline phase")
+    config_passed = frozenset(
+        test_id for test_id, result in scorer.results.items() if result.passed
+    )
+    for test_id, result in c_baseline.run(
+        eclass_root, mock_root, debug, config_passed
+    ).items():
+        scorer.record(test_id, result[0], result[1], result[2])
     _record_phase(scorer, "c course", c_course_announcements.run, eclass_root, mock_root, debug)
     _record_phase(scorer, "c general", c_general_announcements.run, eclass_root, mock_root, debug)
 

@@ -114,7 +114,7 @@ seed back to its baseline, then sequences the phase modules:
 7. C compile (`make c-server`, scored as C.1.1).
 8. C tech-stack verification (`ldd` whitelist, scored as C.1.2).
 9. C configuration-surface probes (C.1.3 env-var surface, C.1.4 verbatim documented `.env` surface).
-10. C baseline phase (C.2.1 through C.2.10).
+10. C baseline phase (C.2.1 through C.2.10); C.2.4 (missing credentials) is billed per implemented surface, scored against the recorded C.1.3/C.1.4 verdicts (see SCORING.md).
 11. C course-announcements phase (C.3.1 through C.3.8).
 12. C general-announcements phase (C.4.1 through C.4.6).
 13. C memory phase (four valgrind scenarios, C.5.1 through C.5.4).
@@ -205,7 +205,7 @@ grader/
         ├── baseline_tests.py               # P.1 / C.2 assertions
         ├── course_announcements_tests.py   # P.2 / C.3 assertions
         ├── general_announcements_tests.py  # P.3 / C.4 assertions
-        ├── config_surface.py               # C.1.3 / C.1.4 configuration-surface probes
+        ├── config_surface.py               # C.1.3 / C.1.4 / C.2.4 surface-isolated probes
         ├── memory_tests.py                 # C.5 scenarios under valgrind
         ├── python_baseline.py               # phase aggregator (impl=python)
         ├── python_course_announcements.py   # phase aggregator (impl=python)
