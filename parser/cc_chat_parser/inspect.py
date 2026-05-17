@@ -31,6 +31,7 @@ the parser previously emitted via ``--metrics --output``.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -79,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         artifact = load_json(args.metrics_file)
-    except Exception as error:
+    except (OSError, json.JSONDecodeError) as error:
         print(f"error: cannot read {args.metrics_file}: {error}", file=sys.stderr)
         return 1
     if not isinstance(artifact, dict) or "session_metadata" not in artifact:
