@@ -1,0 +1,22 @@
+{
+  "users": [
+    {
+      "username": "student_courses",
+      "password": "coursepass123",
+      "display_name": "Demo Student",
+      "email": "student_courses@example.edu",
+      "givenname": "Demo",
+      "surname": "Student",
+      "studentid": "STU1001"
+    },
+    {
+      "username": "student_general",
+      "password": "generalpass123",
+      "display_name": "Demo Student",
+      "email": "student_general@example.edu",
+      "givenname": "Demo",
+      "surname": "Student",
+      "studentid": "STU1002"
+    }
+  ]
+}

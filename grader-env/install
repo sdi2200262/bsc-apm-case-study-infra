@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Install entry script for the BSc APM Case Study grading environment.
+# Loads the docker images bundled in the release tarball, generates the
+# self-signed SSL certificates the mock CAS needs, and reports ready.
+# Idempotent: re-running is safe.
+
+set -euo pipefail
+
+PREFIX="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CERTS_DIR="$PREFIX/certs"
+CERT_FILE="$CERTS_DIR/sso_cert.pem"
+KEY_FILE="$CERTS_DIR/sso_key.pem"
+CERT_DAYS=365
+CERT_SUBJECT='/CN=172.17.0.1'
+CERT_SAN='subjectAltName=IP:172.17.0.1,IP:127.0.0.1,DNS:localhost'
+DOTENV_FILE="$PREFIX/.env"
+
+err() { echo "$*" >&2; }
+step() { echo "==> $*"; }
+
+require() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    err "install: '$1' is not available on this host; install it and re-run"
+    exit 1
+  fi
+}
+
+require docker
+require openssl
+
+step "loading docker images from $PREFIX"
+shopt -s nullglob
+loaded_any=false
+for tar in "$PREFIX"/*image*.tar; do
+  step "loading $(basename "$tar")"
+  docker load --input "$tar" >/dev/null
+  rm -f "$tar"
+  loaded_any=true
+done
+shopt -u nullglob
+if ! $loaded_any; then
+  step "no image tarballs found alongside install (assuming images already loaded)"
+fi
+
+if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+  step "generating self-signed SSL certificates in $CERTS_DIR"
+  mkdir -p "$CERTS_DIR"
+  openssl req -x509 -newkey rsa:2048 \
+    -keyout "$KEY_FILE" \
+    -out "$CERT_FILE" \
+    -days "$CERT_DAYS" -nodes \
+    -subj "$CERT_SUBJECT" \
+    -addext "$CERT_SAN" >/dev/null 2>&1
+  chmod 644 "$CERT_FILE"
+  chmod 600 "$KEY_FILE"
+else
+  step "SSL certificates already present in $CERTS_DIR"
+fi
+
+if [ ! -f "$DOTENV_FILE" ]; then
+  step "writing $DOTENV_FILE for local development"
+  cat > "$DOTENV_FILE" <<'EOF'
+# Credentials and connection settings for the bundled grading
+# environment. The grader copies this file and the certs/ directory
+# beside it into the eclass-mcp-server checkout under test. The cert
+# paths below are relative, so once .env and certs/sso_cert.pem are
+# both inside the checkout, the server resolves them correctly when
+# run from that directory. The seed defines two users
+# (student_courses, student_general); this default selects the
+# baseline / course-suite user, and the grader overrides
+# ECLASS_USERNAME / ECLASS_PASSWORD per scenario group as needed.
+
+ECLASS_URL=http://localhost
+ECLASS_USERNAME=student_courses
+ECLASS_PASSWORD=coursepass123
+ECLASS_SSO_DOMAIN=172.17.0.1:18443
+ECLASS_SSO_PROTOCOL=https
+SSL_CERT_FILE=./certs/sso_cert.pem
+REQUESTS_CA_BUNDLE=./certs/sso_cert.pem
+CURL_CA_BUNDLE=./certs/sso_cert.pem
+EOF
+  chmod 644 "$DOTENV_FILE"
+else
+  step ".env already present at $DOTENV_FILE"
+fi
+
+step "ready, run ./scripts/up"

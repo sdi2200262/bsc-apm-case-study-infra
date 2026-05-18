@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>BSc APM Case Study Mock CAS - Login</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<style>
+body { background: #f4f6f8; }
+.brand { color: #153f65; font-weight: 600; }
+.mock-banner {
+  background: #fff8e1;
+  border-left: 4px solid #d4a017;
+  padding: 0.85rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.95rem;
+}
+.cas-card { box-shadow: 0 6px 24px rgba(21,63,101,0.08); border: 0; }
+.error-msg { color: #b00020; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+<header class="bg-white border-bottom shadow-sm py-3">
+  <div class="container d-flex align-items-center">
+    <span class="brand h4 mb-0">BSc APM Case Study Mock CAS</span>
+  </div>
+</header>
+<main class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-7 col-lg-6">
+      <div class="mock-banner mb-4">
+        <strong>Mock authentication service.</strong>
+        This is the BSc APM Case Study testing environment.
+        It is not a real University of Athens login page; do not enter real credentials.
+      </div>
+      <div class="card cas-card">
+        <div class="card-body p-4">
+          <h2 class="card-title h5 mb-1">eClass</h2>
+          <p class="text-muted small mb-4">Sign in to continue to the mock eClass instance.</p>
+          {{ERROR_BLOCK}}
+          <form method="post" id="fm1" action="login">
+            <div class="mb-3">
+              <label for="username" class="form-label">Username</label>
+              <input type="text" class="form-control" id="username" name="username" autocomplete="off" required>
+            </div>
+            <div class="mb-3">
+              <label for="password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="password" name="password" autocomplete="off" required>
+            </div>
+            <input type="hidden" name="execution" value="{{EXECUTION}}">
+            <input type="hidden" name="_eventId" value="submit">
+            <input type="hidden" name="geolocation" value="">
+            <input type="hidden" name="service" value="{{SERVICE}}">
+            <button type="submit" class="btn btn-primary w-100">Sign in</button>
+          </form>
+        </div>
+      </div>
+      <p class="text-center text-muted small mt-4 mb-0">
+        Mock CAS for the BSc APM Case Study, Department of Informatics and Telecommunications, University of Athens.
+      </p>
+    </div>
+  </div>
+</main>
+</body>
+</html>

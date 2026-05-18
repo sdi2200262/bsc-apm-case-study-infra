@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Probe the grading environment and report whether it is healthy.
+# Exits 0 when both openeclass and the mock CAS respond, 1 otherwise.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="$(cd "$SCRIPT_DIR/.." && pwd)"
+COMPOSE=(docker compose -f "$PREFIX/compose.yaml")
+
+ECLASS_PROBE="http://localhost/"
+SSO_PROBE="https://localhost:18443/health"
+
+ready=true
+
+if curl -fsS -m 5 "$ECLASS_PROBE" >/dev/null 2>&1; then
+  echo "openeclass:  ready ($ECLASS_PROBE)"
+else
+  echo "openeclass:  not responding"
+  ready=false
+fi
+
+if curl -fskS -m 5 "$SSO_PROBE" >/dev/null 2>&1; then
+  echo "mock CAS:    ready ($SSO_PROBE)"
+else
+  echo "mock CAS:    not responding"
+  ready=false
+fi
+
+echo
+"${COMPOSE[@]}" ps || true
+
+if $ready; then
+  exit 0
+fi
+exit 1

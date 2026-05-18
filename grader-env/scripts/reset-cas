@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Restart the mock CAS service to clear its in-memory ticket state.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+step() { echo "==> $*"; }
+
+step "restarting sso service"
+exec docker compose -f "$PREFIX/compose.yaml" restart sso

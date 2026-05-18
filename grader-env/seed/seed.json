@@ -1,0 +1,136 @@
+{
+  "users": [
+    {
+      "username": "student_courses",
+      "cas_password": "coursepass123",
+      "display_name": "Demo Student",
+      "email": "student_courses@example.edu",
+      "givenname": "Demo",
+      "surname": "Student",
+      "studentid": "STU1001",
+      "status": 5,
+      "lang": "el"
+    },
+    {
+      "username": "student_general",
+      "cas_password": "generalpass123",
+      "display_name": "Demo Student",
+      "email": "student_general@example.edu",
+      "givenname": "Demo",
+      "surname": "Student",
+      "studentid": "STU1002",
+      "status": 5,
+      "lang": "el"
+    }
+  ],
+  "cas": {
+    "host": "172.17.0.1",
+    "port": 18443,
+    "context": "",
+    "title": "Είσοδος με λογαριασμό ΕΚΠΑ"
+  },
+  "courses": [
+    {
+      "code": "CS101",
+      "title": "Introduction to Computer Science",
+      "visible": 2,
+      "public_code": "CS101",
+      "lang": "el",
+      "enrolled_users": [
+        "student_courses"
+      ],
+      "announcements": [
+        {
+          "days_ago": 0,
+          "title": "Algorithm review session today",
+          "body": "An algorithm review session is scheduled for this afternoon at 14:00 in the main lecture hall."
+        }
+      ]
+    },
+    {
+      "code": "PHYS150",
+      "title": "Classical Mechanics",
+      "visible": 2,
+      "public_code": "PHYS150",
+      "lang": "el",
+      "enrolled_users": [
+        "student_courses"
+      ],
+      "announcements": [
+        {
+          "days_ago": 2,
+          "title": "Office hours today",
+          "body": "Office hours run from 14:00 to 16:00 today in room A-12."
+        },
+        {
+          "days_ago": 8,
+          "title": "Problem set 3 deadline reminder",
+          "body": "Problem set 3 is due this Friday; the deadline cannot be extended further."
+        },
+        {
+          "days_ago": 30,
+          "title": "Lab schedule confirmed",
+          "body": "Laboratory sessions begin in week 3 and run weekly through the term."
+        },
+        {
+          "days_ago": 31,
+          "title": "Pre-term reading list posted",
+          "body": "The recommended reading list for the upcoming semester is now available on the portal."
+        }
+      ]
+    },
+    {
+      "code": "MATH201",
+      "title": "Linear Algebra",
+      "visible": 2,
+      "public_code": "MATH201",
+      "lang": "el",
+      "enrolled_users": [
+        "student_courses"
+      ],
+      "announcements": [
+        {
+          "days_ago": 45,
+          "title": "Welcome to MATH201",
+          "body": "Welcome to the course. Topics include vector spaces and linear maps."
+        }
+      ]
+    },
+    {
+      "code": "BIO110",
+      "title": "Introduction to Biology",
+      "visible": 2,
+      "public_code": "BIO110",
+      "lang": "el",
+      "enrolled_users": [
+        "student_general"
+      ],
+      "announcements": [
+        {
+          "days_ago": 3,
+          "title": "Problem set 4 released",
+          "body": "Problem set 4 is available and due at the end of next week."
+        },
+        {
+          "days_ago": 10,
+          "title": "Tutorial room change",
+          "body": "The Wednesday tutorial moves to room B-12 from this week."
+        }
+      ]
+    }
+  ],
+  "admin_announcements": [
+    {
+      "days_ago": 7,
+      "title": "Acceptable use policy update",
+      "body": "The acceptable use policy has been updated; the changes apply immediately.",
+      "lang": "el"
+    },
+    {
+      "days_ago": 20,
+      "title": "Library subscriptions renewed",
+      "body": "Online library subscriptions have been renewed for the semester.",
+      "lang": "el"
+    }
+  ]
+}

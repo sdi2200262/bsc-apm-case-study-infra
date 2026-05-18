@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+
+name: Build amd64 grading-environment release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Check out openeclass at Release_4.3.3
+        uses: actions/checkout@v4
+        with:
+          repository: gunet/openeclass
+          ref: Release_4.3.3
+          path: openeclass
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Build release tarball
+        working-directory: grader-env
+        run: make ARCH=amd64 release
+
+      - name: Smoke-test the tarball in a fresh prefix
+        run: |
+          mkdir -p /tmp/smoke
+          tar -xzf grader-env/release/bsc-apm-grader-env-amd64.tar.gz -C /tmp/smoke
+          cd /tmp/smoke
+          ./install
+          ./scripts/up
+          ./scripts/status
+          ./scripts/down
+
+      - name: Publish amd64 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=grader-env-amd64
+          TITLE="Grading environment (amd64)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --cleanup-tag --yes
+          fi
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --target "$GITHUB_SHA" \
+            --latest=true \
+            grader-env/release/bsc-apm-grader-env-amd64.tar.gz

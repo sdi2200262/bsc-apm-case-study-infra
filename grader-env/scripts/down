@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Bring the grading environment down. Named volumes survive so a
+# subsequent `up` resumes without re-seeding.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+exec docker compose -f "$PREFIX/compose.yaml" down

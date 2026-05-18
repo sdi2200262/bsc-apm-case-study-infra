@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Full reset: stop the stack, drop every named volume, bring it back
+# up from a clean state. Used by the grading machine at the start of
+# each grading run.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="$(cd "$SCRIPT_DIR/.." && pwd)"
+COMPOSE=(docker compose -f "$PREFIX/compose.yaml")
+
+step() { echo "==> $*"; }
+
+step "stopping compose stack and dropping all named volumes"
+"${COMPOSE[@]}" down -v
+
+step "bringing stack back up"
+exec "$SCRIPT_DIR/up"

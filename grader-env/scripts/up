@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Bring the grading environment up. Idempotent.
+#
+# Steps:
+#   1. docker compose up -d
+#   2. wait for the database healthcheck
+#   3. wait for openeclass to respond on http://localhost/
+#   4. wait for the mock CAS to respond on https://localhost:18443/health
+#   5. perform openeclass first-time install when config/config.php is absent
+#   6. ensure /var/www/html/courses/temp exists for the htmlpurifier cache
+#   7. apply the seed via php inside the eclass container
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="$(cd "$SCRIPT_DIR/.." && pwd)"
+COMPOSE=(docker compose -f "$PREFIX/compose.yaml")
+
+ECLASS_CONTAINER="bsc-apm-grader-env-eclass-1"
+DB_USER=root
+DB_PASS=secret
+DB_NAME=eclass
+
+ECLASS_PROBE="http://localhost/"
+ECLASS_INSTALL_URL="http://localhost/install/index.php"
+ECLASS_CONFIG_PATH="/var/www/html/config/config.php"
+ECLASS_ADMIN_USER=admin
+ECLASS_ADMIN_PASS=adminpass
+SSO_PROBE="https://localhost:18443/health"
+
+WAIT_DB_RETRIES=60
+WAIT_DB_INTERVAL=2
+WAIT_HTTP_RETRIES=90
+WAIT_HTTP_INTERVAL=2
+WAIT_SSO_RETRIES=30
+WAIT_SSO_INTERVAL=2
+
+err() { echo "$*" >&2; }
+step() { echo "==> $*"; }
+
+wait_for_db_health() {
+  for _ in $(seq 1 "$WAIT_DB_RETRIES"); do
+    if "${COMPOSE[@]}" ps --format '{{.Service}} {{.Health}}' \
+        | grep -E '^db[[:space:]]+healthy$' >/dev/null; then
+      return 0
+    fi
+    sleep "$WAIT_DB_INTERVAL"
+  done
+  return 1
+}
+
+wait_for_eclass_http() {
+  for _ in $(seq 1 "$WAIT_HTTP_RETRIES"); do
+    if curl -fsS -m 5 "$ECLASS_PROBE" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$WAIT_HTTP_INTERVAL"
+  done
+  return 1
+}
+
+wait_for_sso_http() {
+  for _ in $(seq 1 "$WAIT_SSO_RETRIES"); do
+    if curl -fskS -m 5 "$SSO_PROBE" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$WAIT_SSO_INTERVAL"
+  done
+  return 1
+}
+
+eclass_is_installed() {
+  docker exec "$ECLASS_CONTAINER" test -f "$ECLASS_CONFIG_PATH" 2>/dev/null
+}
+
+run_eclass_install() {
+  curl -fsS -o /dev/null -X POST "$ECLASS_INSTALL_URL" \
+    -d "install8=1" \
+    -d "lang=el" \
+    -d "welcomeScreen=1" \
+    -d "dbHostForm=db" \
+    -d "dbUsernameForm=$DB_USER" \
+    -d "dbPassForm=$DB_PASS" \
+    -d "dbNameForm=$DB_NAME" \
+    -d "dbMyAdmin=" \
+    -d "urlForm=http://localhost/" \
+    -d "nameForm=Platform Administrator" \
+    -d "loginForm=$ECLASS_ADMIN_USER" \
+    -d "passForm=$ECLASS_ADMIN_PASS" \
+    -d "campusForm=Open eClass" \
+    -d "helpdeskForm=" \
+    -d "helpdeskmail=" \
+    -d "postaddressForm=" \
+    -d "eclass_stud_reg=2" \
+    -d "emailForm=" \
+    -d "institutionForm=GUNet" \
+    -d "institutionUrlForm=https://www.gunet.gr/" \
+    -d "email_announce=" \
+    -d "email_bounces=" \
+    -d "email_transport=mail" \
+    -d "theme_selection=0" \
+    -d "homepage_intro="
+}
+
+step "starting compose stack"
+"${COMPOSE[@]}" up -d
+
+step "waiting for database healthcheck"
+if ! wait_for_db_health; then
+  err "db did not become healthy within $((WAIT_DB_RETRIES * WAIT_DB_INTERVAL))s"
+  exit 1
+fi
+
+step "waiting for openeclass on $ECLASS_PROBE"
+if ! wait_for_eclass_http; then
+  err "openeclass did not respond on $ECLASS_PROBE within $((WAIT_HTTP_RETRIES * WAIT_HTTP_INTERVAL))s"
+  exit 1
+fi
+
+step "waiting for mock CAS on $SSO_PROBE"
+if ! wait_for_sso_http; then
+  err "mock CAS did not respond on $SSO_PROBE within $((WAIT_SSO_RETRIES * WAIT_SSO_INTERVAL))s"
+  exit 1
+fi
+
+if eclass_is_installed; then
+  step "openeclass already installed (config/config.php present)"
+else
+  step "performing openeclass first-time install"
+  if ! run_eclass_install; then
+    err "openeclass install POST failed"
+    exit 1
+  fi
+  if ! eclass_is_installed; then
+    err "openeclass install completed without writing $ECLASS_CONFIG_PATH"
+    exit 1
+  fi
+fi
+
+step "ensuring courses/temp exists for htmlpurifier cache"
+docker exec -u nginx "$ECLASS_CONTAINER" mkdir -p /var/www/html/courses/temp
+
+step "applying seed via php"
+docker exec -u nginx "$ECLASS_CONTAINER" php /srv/seed/seed.php
+
+step "ready"
+echo "openeclass: http://localhost/"
+echo "mock CAS:   https://localhost:18443/  (eclass container reaches it at https://172.17.0.1:18443/)"

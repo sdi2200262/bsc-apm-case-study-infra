@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+#
+# Drop the database volume and bring the stack back up. The next `up`
+# re-applies the seed against a fresh database, so dates re-anchor to
+# apply time.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PREFIX="$(cd "$SCRIPT_DIR/.." && pwd)"
+COMPOSE=(docker compose -f "$PREFIX/compose.yaml")
+
+DB_VOLUME="bsc-apm-grader-env_db_data"
+
+step() { echo "==> $*"; }
+
+step "stopping compose stack"
+"${COMPOSE[@]}" down
+
+step "removing database volume $DB_VOLUME"
+docker volume rm "$DB_VOLUME" >/dev/null 2>&1 || true
+
+step "bringing stack back up"
+exec "$SCRIPT_DIR/up"
