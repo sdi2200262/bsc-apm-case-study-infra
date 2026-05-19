@@ -1,0 +1,391 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+"""
+Centralised acceptance policy for the exact-string scenario assertions.
+
+``expected`` constructs the faithful openeclass output; this module
+owns the single decision of whether a tool response is accepted and,
+when it is, which form it took. Every string-matched rubric row runs
+its response through one matcher here and records the returned
+diagnostic as an unscored annotation, so the report states how each
+row matched rather than only that it passed.
+
+The fixed-string rows (the error and empty-window responses) record
+one of two strictness modes:
+
+- ``BYTE_EXACT``: the response equalled the constructed expected
+  string byte for byte.
+- ``WHITESPACE_NORMALIZED``: the response equalled it only after the
+  non-breaking space family was mapped to an ASCII space. The PRD
+  requires rendered text to carry normalised whitespace, so a date
+  the platform renders with a narrow no-break space and one rendered
+  with a plain space are the same answer; this mode records that the
+  acceptance relied on that rule.
+
+The announcement success rows and ``get_courses`` are on a
+different axis: the PRD specifies the response content and format
+but not a presentation order or a single layout, so the matcher
+accepts two forms and records which form matched as the diagnostic.
+:func:`match_announcements` records ``ANNOUNCEMENTS_ORDERED`` (the
+openeclass-derived order) or ``ANNOUNCEMENTS_UNORDERED`` (the same
+byte-exact entries compared as an order-insensitive multiset).
+:func:`match_get_courses` records ``GET_COURSES_FAITHFUL`` (the
+openeclass-formatted layout) or ``GET_COURSES_DOCUMENTED`` (the
+documented-clean layout). The non-breaking space normalisation is
+applied within every form unconditionally (the PRD whitespace
+rule), so it is not surfaced as a separate strictness mode for
+these rows. The second, lenient form in each pair
+(``ANNOUNCEMENTS_UNORDERED``, ``GET_COURSES_DOCUMENTED``, collected
+in :data:`LENIENT_MODES`) is warned for human review at end of
+grading (see :mod:`grader.src.reporting`).
+
+The handshake rows are on a different axis again. The ``initialize``
+frame has two accepted capability forms (see
+:mod:`.expected`), and which one a submission satisfied is itself
+the contract-relevant fact, so :func:`match_initialize` records the
+matched form, ``CAP_LIBRARY`` or ``CAP_DOC``, as the mode rather
+than a strictness value. The ``tools/list`` row
+(:func:`match_tools_list`) is one byte-exact contract for both
+implementations and records no mode at all; its result is a
+pass/fail with a reason, and the row's recorded mode is ``None``.
+
+A matcher returns ``None`` when the response is not accepted; the
+caller treats ``None`` as a failed row and records no diagnostic.
+"""
+
+from __future__ import annotations
+
+import re
+from collections import Counter
+
+from ..seed import Course
+from .expected import (
+    CAPABILITIES_DOC,
+    CAPABILITIES_LIBRARY,
+    INITIALIZE_PROTOCOL_VERSION,
+    INITIALIZE_SERVER_INFO,
+    announcement_preamble,
+    expected_tools_list,
+    get_courses_forms,
+)
+
+BYTE_EXACT = "byte-exact"
+WHITESPACE_NORMALIZED = "whitespace-normalized"
+
+# The two ``initialize`` capability forms, recorded as the row's
+# diagnostic so the report states which documented contract the
+# frame satisfied (see :mod:`.expected` for why both are accepted).
+CAP_LIBRARY = "capabilities-library"
+CAP_DOC = "capabilities-doc"
+
+# The announcement and ``get_courses`` success rows record the
+# accepted FORM as the diagnostic, not a strictness mode: the PRD
+# does not mandate a presentation order, so the matcher accepts the
+# openeclass-derived ordered form OR an order-insensitive form, and
+# which one matched is the fact a reviewer acts on. The existing
+# non-breaking-space normalisation is applied within each form
+# unconditionally (the PRD whitespace rule), so a separate strictness
+# mode would add no decision and is not surfaced for these rows.
+ANNOUNCEMENTS_ORDERED = "announcements-ordered"
+ANNOUNCEMENTS_UNORDERED = "announcements-unordered"
+GET_COURSES_FAITHFUL = "get-courses-faithful"
+GET_COURSES_DOCUMENTED = "get-courses-documented"
+
+# The lenient (second) accepted forms. ``reporting`` imports this
+# single set to detect, at end of grading, every row accepted only
+# via a lenient form and warn a human to review it. Adding a future
+# lenient form requires only extending this constant.
+LENIENT_MODES = frozenset({ANNOUNCEMENTS_UNORDERED, GET_COURSES_DOCUMENTED})
+
+# The platform's locale date renderer emits U+202F (a narrow
+# no-break space) before the meridiem under recent CLDR; the same
+# layer can emit U+00A0 and the thin/figure spaces elsewhere. The
+# PRD requires rendered text to carry normalised whitespace, so the
+# comparison maps this space family to a plain ASCII space on both
+# sides. Only the space codepoint is changed, character for
+# character: newlines, indentation, and every other byte stay exact,
+# so the date value, the response format, ordering, and structure
+# remain fully asserted.
+_SPACE_FAMILY = (0x00A0, 0x2007, 0x2009, 0x202F)
+_SPACE_NORMALISATION = {codepoint: " " for codepoint in _SPACE_FAMILY}
+
+def normalize_response(text: str) -> str:
+    """Return ``text`` with the non-breaking space family mapped to ASCII space.
+
+    Args:
+        text: A tool response or a constructed expected response.
+
+    Returns:
+        ``text`` with U+00A0/U+2007/U+2009/U+202F replaced by a
+        plain space; all other characters, including newlines and
+        indentation, are unchanged.
+    """
+    return text.translate(_SPACE_NORMALISATION)
+
+
+def match_exact(actual: str, expected: str) -> str | None:
+    """Return ``BYTE_EXACT`` when ``actual`` equals ``expected`` byte for byte.
+
+    Used by the error, empty-window, and fixed baseline-literal rows
+    whose contract is a single invariant string with no rendered
+    whitespace to normalise.
+
+    Args:
+        actual: The tool's response text.
+        expected: The invariant expected string.
+
+    Returns:
+        ``BYTE_EXACT`` on an exact match, otherwise ``None``.
+    """
+    return BYTE_EXACT if actual == expected else None
+
+
+def match_response(actual: str, expected: str) -> str | None:
+    """Return the match mode for an announcement-response comparison.
+
+    ``BYTE_EXACT`` when the two are byte-equal; otherwise
+    ``WHITESPACE_NORMALIZED`` when they are equal after the
+    non-breaking space family is mapped to an ASCII space on both
+    sides; otherwise ``None``. Every difference other than that
+    space family (count, ordering, titles, bodies, the date value
+    and format, the entry structure) still fails the match.
+
+    Args:
+        actual: The tool's response text.
+        expected: The constructed expected response.
+
+    Returns:
+        The match mode, or ``None`` when the two do not match even
+        after whitespace normalisation.
+    """
+    if actual == expected:
+        return BYTE_EXACT
+    if normalize_response(actual) == normalize_response(expected):
+        return WHITESPACE_NORMALIZED
+    return None
+
+
+def match_get_courses(
+    text: str,
+    courses: tuple[Course, ...],
+    allow_documented_clean: bool,
+) -> str | None:
+    """Return the matched ``get_courses`` form, or ``None``.
+
+    ``tools-reference.md`` documents a clean format while the Python
+    reference server reproduces the openeclass layout glue; both are
+    legitimate readings of the task materials. The Python reference
+    must emit the openeclass-formatted form, so only that form is a
+    candidate for it; the C replica may emit either. Each candidate
+    is judged by :func:`match_response`, so the brittle U+00A0/CRLF/
+    space glue is tolerated exactly as the rendered dates are. The
+    recorded diagnostic is the matched layout: ``GET_COURSES_FAITHFUL``
+    for the openeclass-formatted layout, ``GET_COURSES_DOCUMENTED``
+    for the documented-clean layout. The documented-clean layout is a
+    lenient acceptance and is warned for human review at end of
+    grading (see :mod:`grader.src.reporting`).
+
+    Args:
+        text: The tool's response text.
+        courses: The user's courses in title-alphabetical order.
+        allow_documented_clean: When ``True`` (the C replica) the
+            documented-clean layout is also an accepted candidate;
+            when ``False`` (the Python reference) only the
+            openeclass-formatted form is.
+
+    Returns:
+        ``GET_COURSES_FAITHFUL`` or ``GET_COURSES_DOCUMENTED`` for
+        the matched layout, ``None`` when no candidate matches (a
+        missing or extra course, a wrong title/code/URL, a wrong
+        order, or a wrong count grammar all fall here).
+    """
+    faithful, documented_clean = get_courses_forms(courses)
+    if match_response(text, faithful) is not None:
+        return GET_COURSES_FAITHFUL
+    if allow_documented_clean and match_response(text, documented_clean) is not None:
+        return GET_COURSES_DOCUMENTED
+    return None
+
+
+def match_announcements(
+    text: str,
+    expected_ordered: str,
+    expected_entries: tuple[str, ...],
+    expected_count: int,
+) -> str | None:
+    """Return the accepted announcement form, or ``None``.
+
+    The PRD specifies the response format and content but not a
+    presentation order, so two forms are accepted:
+
+    - Form 1 (``ANNOUNCEMENTS_ORDERED``): the response equals the
+      openeclass-derived ordered string under :func:`match_response`
+      (byte-exact, or equal after the non-breaking space family is
+      normalised).
+    - Form 2 (``ANNOUNCEMENTS_UNORDERED``): the response parses by
+      the PRD grammar into the same multiset of byte-exact entries
+      (after the same space-family normalisation) with the same
+      count, but the sequence and the per-entry index number are not
+      enforced. Form 2 enforces every other field exactly: a wrong
+      title, body, date value, source, a missing or extra or
+      duplicated entry, a wrong count grammar, or a malformed entry
+      still fails.
+
+    Form 1 is tried first; the matched form is the recorded
+    diagnostic. A second-form acceptance is warned for human review
+    at end of grading (see :mod:`grader.src.reporting`).
+
+    Args:
+        text: The tool's response text.
+        expected_ordered: The constructed openeclass-derived ordered
+            response (the Form-1 expected string).
+        expected_entries: The index-free per-entry blocks the
+            response must contain as a multiset (the Form-2 expected
+            entries), single-sourced from :mod:`.expected`.
+        expected_count: The number of in-window entries the preamble
+            must declare and the response must carry.
+
+    Returns:
+        ``ANNOUNCEMENTS_ORDERED`` or ``ANNOUNCEMENTS_UNORDERED`` for
+        the accepted form, ``None`` when neither form matches.
+    """
+    if match_response(text, expected_ordered) is not None:
+        return ANNOUNCEMENTS_ORDERED
+    parsed = _parse_announcement_entries(text, expected_count)
+    if parsed is None:
+        return None
+    expected_multiset = Counter(
+        normalize_response(entry) for entry in expected_entries
+    )
+    if Counter(parsed) == expected_multiset:
+        return ANNOUNCEMENTS_UNORDERED
+    return None
+
+
+def match_initialize(actual_result: dict) -> str | None:
+    """Return the matched ``initialize`` capability form, or ``None``.
+
+    ``protocolVersion`` and ``serverInfo`` must equal the invariant
+    constructed constants exactly. The ``capabilities`` object is
+    then matched against the two accepted forms: the library form
+    yields ``CAP_LIBRARY``, the documented form yields ``CAP_DOC``,
+    and anything else fails the row. Only these three fields are the
+    contract; an ``initialize`` result may carry further fields (an
+    ``instructions`` string, SDK metadata) and those are outside the
+    row's contract and ignored. The expected values are constructed;
+    nothing here is captured from the submission.
+
+    Args:
+        actual_result: The replica's ``initialize`` result object.
+
+    Returns:
+        ``CAP_LIBRARY`` or ``CAP_DOC`` for the matched capability
+        form; ``None`` when the protocol version, server info, or
+        capabilities object does not match either accepted form.
+    """
+    if actual_result.get("protocolVersion") != INITIALIZE_PROTOCOL_VERSION:
+        return None
+    if actual_result.get("serverInfo") != INITIALIZE_SERVER_INFO:
+        return None
+    capabilities = actual_result.get("capabilities")
+    if capabilities == CAPABILITIES_LIBRARY:
+        return CAP_LIBRARY
+    if capabilities == CAPABILITIES_DOC:
+        return CAP_DOC
+    return None
+
+
+def match_tools_list(actual: list[dict]) -> tuple[bool, str]:
+    """Return whether ``tools/list`` byte-equals the expected tool list.
+
+    Both implementations are held to one contract: every one of the
+    six constructed tool objects is present with its ``name``,
+    ``description``, and ``inputSchema`` byte-equal to the expected
+    values, order-insensitive, and no unexpected tool. The C replica
+    extends the low-level baseline server whose ``tools/list`` wire
+    serialisation is byte-stable across the entire supported ``mcp``
+    range (the same verified-release constraint the constructed
+    expected values rely on), so a single byte-exact contract is
+    faithful for the Python reference and the C replica alike. A
+    server whose tool-schema serialisation differs from the expected
+    values (extra schema keywords, regenerated descriptions, a
+    different object shape) fails this row; that divergence is the
+    intended signal.
+
+    Args:
+        actual: The ``tools`` array from the ``tools/list`` result.
+
+    Returns:
+        ``(True, summary)`` when the contract holds, ``(False,
+        reason)`` naming the first divergence otherwise.
+    """
+    expected_tools = expected_tools_list()
+    expected_names = {tool["name"] for tool in expected_tools}
+    actual_by_name = {
+        tool["name"]: tool
+        for tool in actual
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    }
+    missing = expected_names - set(actual_by_name)
+    if missing:
+        return False, f"tools/list is missing {sorted(missing)}"
+    extra = set(actual_by_name) - expected_names
+    if extra:
+        return False, f"tools/list advertises unexpected tools {sorted(extra)}"
+
+    for expected_tool in expected_tools:
+        got = actual_by_name[expected_tool["name"]]
+        for key in ("name", "description", "inputSchema"):
+            if got.get(key) != expected_tool.get(key):
+                return False, (
+                    f"tools/list {expected_tool['name']}.{key} "
+                    "differs from the expected values"
+                )
+    return True, "all 6 tool objects byte-equal the expected values"
+
+
+def _parse_announcement_entries(
+    text: str, expected_count: int
+) -> list[str] | None:
+    """Parse a populated announcement response into its index-free entries.
+
+    Inverts the ``preamble + blank line + blank-line-separated
+    entries`` construction (see
+    :func:`grader.src.protocol.expected.course_response`). The
+    space-family normalisation is applied to the whole response
+    first; it touches only the space codepoints, so newlines and
+    indentation are unaffected and the blank-line split is exact.
+    The leading ``<n>. `` index of each entry is stripped because
+    Form 2 does not enforce the sequence number; every other byte is
+    preserved for the multiset comparison the caller performs.
+
+    Total by contract: any structural surprise (a wrong preamble or
+    count, a block without an index prefix, the wrong number of
+    blank-line-separated blocks) returns ``None`` rather than
+    raising, so a malformed response is a failed row, not a crash.
+
+    Args:
+        text: The tool's response text.
+        expected_count: The entry count the preamble must declare and
+            the response must carry (always positive: the empty-window
+            rows use :func:`match_exact`, never this path).
+
+    Returns:
+        The index-free, space-normalised entry blocks, or ``None``
+        when the response does not parse as a populated response of
+        exactly ``expected_count`` entries.
+    """
+    normalized = normalize_response(text)
+    parts = normalized.split("\n\n")
+    if len(parts) != expected_count + 1:
+        return None
+    if parts[0] != normalize_response(announcement_preamble(expected_count)):
+        return None
+    entries: list[str] = []
+    for block in parts[1:]:
+        index_prefix = re.match(r"\d+\. ", block)
+        if index_prefix is None:
+            return None
+        entries.append(block[index_prefix.end():])
+    return entries

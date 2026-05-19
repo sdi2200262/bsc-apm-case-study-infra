@@ -29,7 +29,7 @@ from pathlib import Path
 # stale or advanced ``main`` on the operator's local clone cannot
 # silently change the grading baseline; rebasing the pin requires
 # updating this constant in lock-step with the participant package
-# and the rubric narrative.
+# and SCORING.md.
 PATCH_BASELINE_PIN = "dbd2d16"
 
 EXCLUDE_PATTERNS: tuple[str, ...] = (
@@ -46,7 +46,7 @@ TEST_BRANCH_PREFIX = "grader-test-"
 
 
 def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
-    """Create a test branch from main and apply the patch on it.
+    """Create a test branch from the pinned baseline commit and apply the patch.
 
     Args:
         repo_path: Resolved path to the eclass-mcp-server checkout.
@@ -136,7 +136,18 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
 
 
 def _git(repo_path: Path, *args: str) -> tuple[bool, str]:
-    """Run ``git`` with the given arguments and return ``(ok, output)``."""
+    """Run ``git`` with the given arguments and return ``(ok, output)``.
+
+    Args:
+        repo_path: Working directory the git invocation runs in.
+        *args: Argument tokens passed to ``git`` after the program name.
+
+    Returns:
+        ``(True, stdout)`` on a clean exit; ``(False, detail)`` when
+        ``git`` could not be launched, was killed by a signal, or
+        exited non-zero. The failure detail combines both child
+        streams and names the signal on a negative return code.
+    """
     try:
         result = subprocess.run(
             ["git", *args],
@@ -147,6 +158,12 @@ def _git(repo_path: Path, *args: str) -> tuple[bool, str]:
         )
     except OSError as error:
         return False, str(error)
+    if result.returncode < 0:
+        return False, (
+            f"git {args[0] if args else ''} killed by signal "
+            f"{-result.returncode}: "
+            f"{(result.stderr + result.stdout).strip()}"
+        )
     if result.returncode != 0:
-        return False, (result.stderr or result.stdout).strip()
+        return False, (result.stderr + result.stdout).strip()
     return True, result.stdout.strip()

@@ -2,190 +2,272 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-General-announcements protocol assertions.
+General-announcements protocol assertions (P.3.x / C.4.x).
 
-Each function tests one P.3 / C.4 row from the rubric against a
-freshly-spawned MCP server. The functions take ``impl`` as the
-first parameter so the Python and C aggregators drive the same
-body through either implementation.
+Principal: ``student_general`` (enrolled in BIO110 only). Each
+function accepts an optional ``instant`` (per-run seed-apply
+timestamp) and ``memcheck``. Return shape is a 5-tuple
+``(ok, msg, detail, leak_tuple|None, mode|None)`` following the
+same convention as ``course_announcements_tests``.
 
-Strict-tier assertions check exact equality against the documented
-error strings. Every implementation-tier and anchor-tier assertion
-exercises the general endpoint at one ``days_back`` value and
-asserts:
-
-* the seed-derived ``Found N announcement(s):`` count preamble,
-* the verbatim body of every in-scope announcement (admin entries
-  plus enrolled-course entries within the 30-day backend floor),
-  and
-* the source-attribution distribution: the count of
-  ``Source: <value>`` lines per attribution value matches the
-  expected count derived from the seed, which forces one
-  attribution line per entry (PRD §2.2) and the right attribution
-  on each entry (admin → ``System``; course entry → that course's
-  code).
-
-The anchor (P.3.6 / C.4.6) carries higher point weight than the
-implementation-tier rows because the default-window probe has
-the largest expected count. Every implementation-tier and
-anchor-tier row asserts the same shape.
+Leak-verdict pattern: functional result is saved inside the ``with``
+block; :func:`leak_after` is called after the block exits so
+``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
 """
 
 from __future__ import annotations
 
-import json
+import datetime
 from pathlib import Path
 
-from ..seed import SEED, general_announcements_in_window
-from ._announcements_assertions import (
-    assert_count_and_bodies,
-    attribution_counts,
-    expected_attribution_counts,
-    source_attributions,
+from ..seed import SEED, general_announcements_in_window, user
+from ._assertion_support import (
+    Result5,
+    SERVER_START_FAIL,
+    leak_after,
 )
-from .runner import (
-    call_tool,
-    extract_text,
-    initialize_server,
-    spawn_server,
-    tool_exists,
+from .expected import (
+    ERR_GENERAL_UPPER_BOUND,
+    ERR_NEGATIVE_DAYS_BACK,
+    ERR_NOT_LOGGED_IN,
+    NO_ANNOUNCEMENTS,
+    general_entries,
+    general_response,
 )
+from .matching import match_announcements, match_exact
+from .runner import ServerProcess, call_tool, extract_text, initialize_server, spawn_server
 
+_PRINCIPAL = user(SEED, "student_general")
 TOOL_NAME = "get_general_announcements"
-DEFAULT_DAYS_BACK = 30
 
-ERR_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
-ERR_BAD_DAYS = "Error: days_back must be a non-negative integer."
-ERR_OVER_THIRTY = "Error: Cannot retrieve announcements older than 30 days."
 
-SERVER_START_FAIL = (False, "Could not start server", "Server failed to start")
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_general principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username,
+            "ECLASS_PASSWORD": _PRINCIPAL.password}
 
 
 def test_general_not_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.3.1 / C.4.1: tool without a prior login returns the not-logged-in error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        response = call_tool(server, TOOL_NAME, {})
-        text = extract_text(response)
-        if text == ERR_NOT_LOGGED_IN:
-            return True, "exact not-logged-in error matched", text
-        return False, f"expected exact '{ERR_NOT_LOGGED_IN}', got: '{text}'", text
-
-
-def test_general_negative_days(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.3.2 / C.4.2: a negative ``days_back`` returns the positive-integer error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        response = call_tool(server, TOOL_NAME, {"days_back": -5})
-        text = extract_text(response)
-        if text == ERR_BAD_DAYS:
-            return True, "exact positive-integer error matched", text
-        return False, f"expected exact '{ERR_BAD_DAYS}', got: '{text}'", text
-
-
-def test_general_over_thirty(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.3.3 / C.4.3: ``days_back=31`` returns the older-than-thirty error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        response = call_tool(server, TOOL_NAME, {"days_back": 31})
-        text = extract_text(response)
-        if text == ERR_OVER_THIRTY:
-            return True, "exact older-than-thirty error matched", text
-        return False, f"expected exact '{ERR_OVER_THIRTY}', got: '{text}'", text
-
-
-def test_general_days_zero(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.3.4 / C.4.4: ``days_back=0`` returns the three day-zero announcements."""
-    return _impl_window_test(impl, eclass_dir, mock_root, debug, days_back=0)
-
-
-def test_general_days_15(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.3.5 / C.4.5: ``days_back=15`` returns the six in-scope announcements."""
-    return _impl_window_test(impl, eclass_dir, mock_root, debug, days_back=15)
-
-
-def test_general_default_aggregation(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.3.6 / C.4.6: default returns nine announcements with multi-source attribution."""
-    return _impl_window_test(
-        impl, eclass_dir, mock_root, debug, days_back=DEFAULT_DAYS_BACK
-    )
-
-
-def _impl_window_test(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
     debug: bool,
-    days_back: int,
-) -> tuple[bool, str, str]:
-    """Drive a general-endpoint window assertion at one ``days_back`` value.
-
-    Asserts the count preamble, every in-scope body verbatim, and
-    the source-attribution distribution PRD §2.2 makes hard on every
-    non-empty response: one ``Source: <value>`` line per entry,
-    admin entries attributed to ``System``, course entries
-    attributed to that course's code. The expected per-attribution
-    counts derive from the seeded in-scope set and are compared as
-    a single equality.
-    """
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        args: dict = {} if days_back == DEFAULT_DAYS_BACK else {"days_back": days_back}
-        response = call_tool(server, TOOL_NAME, args)
-        text = extract_text(response)
-        if not text:
-            return False, "empty or invalid response", json.dumps(response)
-        expected = general_announcements_in_window(SEED, days_back)
-        ok, message = assert_count_and_bodies(text, expected)
-        if not ok:
-            return False, message, text
-        actual_attribution = attribution_counts(source_attributions(text))
-        expected_attribution = expected_attribution_counts(expected)
-        if actual_attribution != expected_attribution:
-            return (
-                False,
-                "source attribution mismatch: "
-                f"expected {expected_attribution}, got {actual_attribution}",
-                text,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.1 / C.4.1: tool without login returns the not-logged-in error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(impl, eclass_dir, mock_root, debug, memcheck=memcheck) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            text = extract_text(call_tool(server, TOOL_NAME, {}))
+            mode = match_exact(text, ERR_NOT_LOGGED_IN)
+            ok = mode is not None
+            msg = "exact not-logged-in error matched" if ok else (
+                f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
             )
-        return (
-            True,
-            f"preamble, {len(expected)} bodies, per-entry source attribution",
-            text,
-        )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def _missing_tool_failure() -> tuple[bool, str, str]:
-    """Return the structured failure tuple for an unimplemented tool."""
-    return False, f"{TOOL_NAME} tool not implemented", "Tool not found in tools/list"
+def test_general_negative_days(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.2 / C.4.2: days_back=-1 returns the non-negative-integer error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {"days_back": -1}))
+            mode = match_exact(text, ERR_NEGATIVE_DAYS_BACK)
+            ok = mode is not None
+            msg = "exact negative-days error matched" if ok else (
+                f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_general_over_thirty(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.3 / C.4.3: days_back=31 returns the upper-bound error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {"days_back": 31}))
+            mode = match_exact(text, ERR_GENERAL_UPPER_BOUND)
+            ok = mode is not None
+            msg = "exact upper-bound error matched" if ok else (
+                f"expected {ERR_GENERAL_UPPER_BOUND!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_general_days_zero(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.4 / C.4.4: days_back=0 returns the empty-window string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {"days_back": 0}))
+            mode = match_exact(text, NO_ANNOUNCEMENTS)
+            ok = mode is not None
+            msg = "exact empty-window string matched" if ok else (
+                f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_general_days_5(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.5 / C.4.5: days_back=5 returns 1 item (BIO110 a1 at 3d)."""
+    assert instant is not None, "instant is required for this row"
+    anns = general_announcements_in_window(SEED, "student_general", 5)
+    expected = general_response(instant, anns)
+    expected_entries = general_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {"days_back": 5}))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "days_back=5 announcement response accepted (1 item)" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_general_days_8(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.6 / C.4.6: days_back=8 returns 2 items (BIO110 a1, SYS1).
+
+    Exercises the union of enrolled-course and system announcements
+    with both Source forms in one response.
+    """
+    assert instant is not None, "instant is required for this row"
+    anns = general_announcements_in_window(SEED, "student_general", 8)
+    expected = general_response(instant, anns)
+    expected_entries = general_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {"days_back": 8}))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "days_back=8 union announcement response accepted (2 items)" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_general_default(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.3.7 / C.4.7: days_back omitted returns the default-window response.
+
+    Default = 30; student_general sees BIO110 a1 (3d), SYS1 (7d),
+    BIO110 a2 (10d), SYS2 (20d): 4 items alternating source.
+    """
+    assert instant is not None, "instant is required for this row"
+    anns = general_announcements_in_window(SEED, "student_general", 30)
+    expected = general_response(instant, anns)
+    expected_entries = general_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {}))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "default-window announcement response accepted (4 items)" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode

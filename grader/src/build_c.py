@@ -6,16 +6,16 @@ C build and tech-stack verification for the eclass-mcp-server's c-replica.
 
 The C replica lives at ``<eclass-root>/c-replica/`` and ships a
 Makefile whose ``c-server`` target builds the ``server`` binary.
-Two assertions live here:
+Two entry points live here:
 
 - ``compile_c_replica`` (C.1.1) runs ``make clean`` then
   ``make c-server`` and verifies the binary lands at
   ``<c-replica>/server`` with execute permission.
-- ``verify_stack`` (C.1.2) runs ``ldd`` against the produced
-  binary and asserts the require-plus-forbidden mechanic the
-  rubric documents: ``libcurl.so`` and ``libxml2.so`` must be
-  present, and no SO name may match the JSON-parser regex
-  ``^lib(json|cjson|jansson|yajl|jq|parson)``. Transitive system
+- ``verify_stack`` runs ``ldd`` once against the produced binary
+  and derives three independent verdicts: C.1.2 (``libcurl.so``
+  present), C.1.3 (``libxml2.so`` present), and C.1.4 (no SO name
+  matches the JSON-parser regex
+  ``^lib(json|cjson|jansson|yajl|jq|parson)``). Transitive system
   dependencies of libcurl and libxml2 are unrestricted.
 
 A pkg-config probe warns when libcurl or libxml2 are below the
@@ -107,9 +107,15 @@ def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
         )
 
     if result.returncode != 0:
-        err = result.stderr or result.stdout
+        err = (result.stderr + "\n" + result.stdout).strip()
         if not versions_ok:
             err = f"{warning}\n{err}"
+        if result.returncode < 0:
+            return (
+                False,
+                f"make c-server killed by signal {-result.returncode}",
+                err,
+            )
         attribution = _attribute_build_failure(err)
         if attribution is not None:
             return False, f"make c-server failed: {attribution}", err
@@ -142,27 +148,35 @@ def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
     )
 
 
-def verify_stack(eclass_root: Path) -> tuple[bool, str, str]:
+def verify_stack(eclass_root: Path) -> dict[str, tuple[bool, str, str]]:
     """Verify the c-replica binary's dynamic-link tech stack.
+
+    Runs ``ldd`` once and derives three independently-scored verdicts:
+
+    - ``"C.1.2"``: dynamic dependencies include ``libcurl``.
+    - ``"C.1.3"``: dynamic dependencies include ``libxml2``.
+    - ``"C.1.4"``: dynamic dependencies exclude every JSON-parsing
+      library (``libjson``, ``libcjson``, ``libjansson``, ``libyajl``,
+      ``libjq``, ``libparson``).
+
+    Each verdict is independent so a single stack defect fails only
+    the row it isolates.
 
     Args:
         eclass_root: Resolved path to the eclass-mcp-server
             checkout containing the ``c-replica/`` subdirectory.
 
     Returns:
-        Tuple of ``(ok, summary, detail)``. ``ok`` is ``True`` only
-        when every required library is linked and no forbidden
-        library is linked. ``detail`` carries the captured ``ldd``
-        output for review.
+        Mapping of rubric identifier to ``(ok, summary, detail)``.
+        All three rows are present even when ``ldd`` fails (each
+        records the same failure in that case).
     """
     eclass_root = Path(eclass_root).resolve()
     server_binary = eclass_root / "c-replica" / "server"
     if not server_binary.exists():
-        return (
-            False,
-            "server binary not found",
-            f"server binary not found at {server_binary}",
-        )
+        msg = f"server binary not found at {server_binary}"
+        fail = (False, "server binary not found", msg)
+        return {"C.1.2": fail, "C.1.3": fail, "C.1.4": fail}
 
     try:
         result = subprocess.run(
@@ -172,44 +186,45 @@ def verify_stack(eclass_root: Path) -> tuple[bool, str, str]:
             timeout=LDD_TIMEOUT_SECONDS,
         )
     except FileNotFoundError:
-        return False, "ldd not on PATH", "ldd not on PATH"
+        fail = (False, "ldd not on PATH", "ldd not on PATH")
+        return {"C.1.2": fail, "C.1.3": fail, "C.1.4": fail}
     except subprocess.TimeoutExpired:
-        return (
-            False,
-            f"ldd timed out ({LDD_TIMEOUT_SECONDS}s)",
-            f"ldd timed out after {LDD_TIMEOUT_SECONDS} seconds",
-        )
+        msg = f"ldd timed out after {LDD_TIMEOUT_SECONDS} seconds"
+        fail = (False, f"ldd timed out ({LDD_TIMEOUT_SECONDS}s)", msg)
+        return {"C.1.2": fail, "C.1.3": fail, "C.1.4": fail}
 
     if result.returncode != 0:
-        return False, f"ldd exit {result.returncode}", result.stderr or result.stdout
+        msg = (result.stderr + "\n" + result.stdout).strip()
+        if result.returncode < 0:
+            summary = f"ldd killed by signal {-result.returncode}"
+        else:
+            summary = f"ldd exit {result.returncode}"
+        fail = (False, summary, msg)
+        return {"C.1.2": fail, "C.1.3": fail, "C.1.4": fail}
 
     output = result.stdout
     so_names = _extract_so_names(output)
 
-    missing_required = [
-        name for name in REQUIRED_LIBRARIES
-        if not any(so.startswith(name) for so in so_names)
-    ]
-    if missing_required:
-        return (
-            False,
-            f"missing required libraries: {missing_required}",
-            output,
-        )
+    has_curl = any(so.startswith("libcurl.so") for so in so_names)
+    has_xml2 = any(so.startswith("libxml2.so") for so in so_names)
+    forbidden = [n for n in so_names if FORBIDDEN_LIBRARY_PATTERN.match(n)]
 
-    forbidden = [name for name in so_names if FORBIDDEN_LIBRARY_PATTERN.match(name)]
-    if forbidden:
-        return (
-            False,
-            f"forbidden JSON-parser libraries linked: {forbidden}",
-            output,
-        )
-
-    return (
-        True,
-        "libcurl and libxml2 linked; no forbidden JSON-parser library present",
-        output,
+    c12: tuple[bool, str, str] = (
+        (True, "libcurl present in dynamic dependencies", output)
+        if has_curl
+        else (False, "libcurl not found in dynamic dependencies", output)
     )
+    c13: tuple[bool, str, str] = (
+        (True, "libxml2 present in dynamic dependencies", output)
+        if has_xml2
+        else (False, "libxml2 not found in dynamic dependencies", output)
+    )
+    c14: tuple[bool, str, str] = (
+        (True, "no forbidden JSON-parser library in dynamic dependencies", output)
+        if not forbidden
+        else (False, f"forbidden JSON-parser libraries linked: {forbidden}", output)
+    )
+    return {"C.1.2": c12, "C.1.3": c13, "C.1.4": c14}
 
 
 def _attribute_build_failure(err: str) -> str | None:
@@ -233,7 +248,15 @@ def _attribute_build_failure(err: str) -> str | None:
 
 
 def _extract_so_names(ldd_output: str) -> list[str]:
-    """Return the SO names ``ldd`` reports, one entry per output line."""
+    """Return the SO names ``ldd`` reports, one entry per output line.
+
+    Args:
+        ldd_output: Captured ``ldd`` stdout.
+
+    Returns:
+        The SO-name tokens matched by ``_LDD_LINE_PATTERN``, one per
+        matched line, in source order.
+    """
     names: list[str] = []
     for line in ldd_output.splitlines():
         match = _LDD_LINE_PATTERN.match(line)

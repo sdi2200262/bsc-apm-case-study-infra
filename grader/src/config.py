@@ -151,6 +151,22 @@ def _load_yaml_paths(
     file raises ``GraderConfigError``. When no override is set,
     the resolver tries ``<search-root>/grader.yaml`` and tolerates
     its absence (returns an empty mapping with no config path).
+
+    Args:
+        config_override: Explicit config path supplied by the
+            caller, or ``None`` to fall back to the default search.
+        search_root: Directory the default ``grader.yaml`` lookup
+            uses when ``config_override`` is ``None``.
+
+    Returns:
+        ``(config_path, paths_mapping)`` where ``config_path`` is the
+        resolved YAML path (``None`` when no default file was found)
+        and ``paths_mapping`` is the parsed ``paths`` section.
+
+    Raises:
+        GraderConfigError: When ``config_override`` is set but the
+            file does not exist, or when the parsed YAML is not a
+            mapping or its ``paths`` section is not a mapping.
     """
     if config_override is not None:
         candidate = config_override
@@ -180,7 +196,17 @@ def _load_yaml_paths(
 
 
 def _read_yaml(path: Path) -> Any:
-    """Read a YAML file and return the parsed payload (or ``None`` for empty files)."""
+    """Read a YAML file and return the parsed payload (or ``None`` for empty files).
+
+    Args:
+        path: YAML file to read.
+
+    Returns:
+        The parsed payload, or ``None`` when the file is empty.
+
+    Raises:
+        GraderConfigError: When the YAML cannot be parsed.
+    """
     try:
         with path.open("r", encoding="utf-8") as source:
             return yaml.safe_load(source)

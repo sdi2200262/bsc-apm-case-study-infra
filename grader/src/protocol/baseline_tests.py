@@ -2,19 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-Baseline-tier protocol assertions.
+Baseline-tier protocol assertions (P.1.x / C.2.x).
 
-Each function tests one P.1 / C.2 row from the rubric against a
-freshly-spawned MCP server. The functions are implementation-
-agnostic: each takes ``impl`` as the first parameter and the
-runner's ``spawn_server`` decides whether to start the Python
-reference or the C replica. The Python and C aggregators tag the
-same function with the test id appropriate to the implementation.
+Each function tests one rubric row against a freshly-spawned MCP server.
+Principal: ``student_courses``. All return a 5-tuple
+``(ok, msg, detail, leak_tuple|None, mode|None)`` where
+``leak_tuple`` is ``(clean, detail)`` from
+``ServerProcess.leak_verdict``, or ``None`` when ``memcheck=False``,
+and ``mode`` is the ``matching`` mode the row was accepted under
+(``None`` for a failed match or a non-string-matched row).
 
-Strict equality is asserted wherever the response text is
-deterministic against the seeded environment. The seeded
-``get_courses`` preamble carries the count of enrolled courses
-read from the loaded seed.
+Leak-verdict pattern: functional result is saved inside the ``with``
+block; ``leak_after()`` is called after the block exits so
+``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
 """
 
 from __future__ import annotations
@@ -22,256 +22,450 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..provision import (
-    CREDENTIAL_KEYS,
-    blank_dotenv_credentials,
-    write_dotenv,
+from ..provision import blank_dotenv_credentials, write_dotenv
+from ..seed import SEED, enrolled_courses, user
+
+from ._assertion_support import (
+    Result5,
+    SERVER_START_FAIL,
+    leak_after,
 )
-from ..seed import SEED
+from .matching import (
+    match_exact,
+    match_get_courses,
+    match_initialize,
+    match_tools_list,
+)
 from .runner import (
+    CLIENT_NAME,
+    CLIENT_VERSION,
+    PROTOCOL_VERSION,
+    ServerProcess,
     call_tool,
     extract_text,
     initialize_server,
     spawn_server,
 )
 
-ALL_TOOL_NAMES: frozenset[str] = frozenset({
-    "login",
-    "logout",
-    "get_courses",
-    "authstatus",
-    "get_course_announcements",
-    "get_general_announcements",
-})
+# Two-principal seed; baseline suite runs as student_courses.
+_PRINCIPAL = user(SEED, "student_courses")
+_COURSES = enrolled_courses(SEED, "student_courses")
 
-# The baseline string constants below are inherited verbatim from
-# the upstream eclass-mcp-server reference at the patch baseline
-# pin (commit dbd2d16). Strict-tier baseline tests (P.1.2-P.1.10
-# and C.2.2-C.2.10) assert exact equality against these strings,
-# so any rebase of the patch baseline pin must re-verify the
-# wording. The `LOGIN_MISSING_CREDS` two-sentence form extends the
-# single-sentence wording documented in
-# eclass-mcp-server/docs/reference/tools-reference.md; C-replica
-# participants reproduce the full string by reading the upstream
-# Python source at src/eclass_mcp_server/server.py.
-
-GET_COURSES_PREAMBLE = f"Found {len(SEED.enrolled_course_codes)} courses:"
-
-LOGIN_SUCCESS = f"Login successful! You are now logged in as {SEED.username}."
-LOGIN_ALREADY = f"Already logged in as {SEED.username}"
+LOGIN_SUCCESS = f"Login successful! You are now logged in as {_PRINCIPAL.username}."
+LOGIN_ALREADY = f"Already logged in as {_PRINCIPAL.username}"
 LOGIN_MISSING_CREDS = (
     "Error: Username and password must be provided in the .env file. "
     "Please set ECLASS_USERNAME and ECLASS_PASSWORD in your .env file."
 )
-LOGOUT_SUCCESS = f"Successfully logged out user {SEED.username}."
+LOGOUT_SUCCESS = f"Successfully logged out user {_PRINCIPAL.username}."
 LOGOUT_NO_OP = "Not logged in, nothing to do."
-COURSES_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
-AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {SEED.username}"
+COURSES_NOT_LOGGED_IN = (
+    "Error: Not logged in. Please log in first using the login tool."
+)
+AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {_PRINCIPAL.username}"
 AUTHSTATUS_NOT_LOGGED_IN = "Status: Not logged in"
 
-SERVER_START_FAIL = (False, "Could not start server", "Server failed to start")
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_courses principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username,
+            "ECLASS_PASSWORD": _PRINCIPAL.password}
 
 
-def test_initialize_and_tools_list(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.1 / C.2.1: ``initialize`` shape and ``tools/list`` carry all six tools."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        init_response = server.send_request({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "grader", "version": "1.0.0"},
-            },
-        })
-        if not init_response or "result" not in init_response:
-            return False, "initialize: invalid or missing response", json.dumps(init_response)
-        result = init_response["result"]
-        for field in ("protocolVersion", "capabilities", "serverInfo"):
-            if field not in result:
-                return False, f"initialize: missing field '{field}'", json.dumps(init_response)
-        server.send_notification({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-        })
-        list_response = server.send_request({
-            "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
-        })
-        if not list_response or "result" not in list_response:
-            return False, "tools/list: invalid or missing response", json.dumps(list_response)
-        tools = list_response["result"].get("tools", [])
-        names = {t.get("name") for t in tools}
-        missing = ALL_TOOL_NAMES - names
-        if missing:
-            return False, f"tools/list: missing tools {sorted(missing)}", json.dumps(list_response)
-        return True, f"initialize and tools/list expose all {len(ALL_TOOL_NAMES)} tools", json.dumps(list_response)
+def test_tools_list(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.1 / C.2.2: tools/list matches the constructed expected tool list.
+
+    Both implementations are held to the same byte-exact six-object
+    contract (``name``, ``description``, ``inputSchema``) against the
+    constructed expected values, so a server whose tool schemas
+    serialise differently fails this row. This row records no string
+    mode.
+    """
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            raw = server.send_request({
+                "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
+            })
+            detail = json.dumps(raw)
+            result = raw.get("result") if raw else None
+            tools = result.get("tools") if isinstance(result, dict) else None
+            if not isinstance(tools, list):
+                ok = False
+                msg = "tools/list: invalid or missing tools array"
+            else:
+                ok, msg = match_tools_list(tools)
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_authstatus_pre_login(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.2 / C.2.3: authstatus before any login returns the not-logged-in string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            text = extract_text(call_tool(server, "authstatus", {}))
+            mode = match_exact(text, AUTHSTATUS_NOT_LOGGED_IN)
+            ok = mode is not None
+            msg = "exact not-logged-in status matched" if ok else (
+                f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
 def test_login_success(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.2 / C.2.2: ``login`` with valid credentials returns the success string."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        response = call_tool(server, "login", {})
-        text = extract_text(response)
-        if text == LOGIN_SUCCESS:
-            return True, "exact login success string matched", text
-        return False, f"expected exact '{LOGIN_SUCCESS}', got: '{text}'", text
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.3 / C.2.4: login with valid credentials returns the success string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            text = extract_text(call_tool(server, "login", {}))
+            mode = match_exact(text, LOGIN_SUCCESS)
+            ok = mode is not None
+            msg = "exact login success string matched" if ok else (
+                f"expected {LOGIN_SUCCESS!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_login_already_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.3 / C.2.3: a second ``login`` call surfaces the already-logged-in state."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        call_tool(server, "login", {})
-        response = call_tool(server, "login", {})
-        text = extract_text(response)
-        if text == LOGIN_ALREADY:
-            return True, "exact already-logged-in string matched", text
-        return False, f"expected exact '{LOGIN_ALREADY}', got: '{text}'", text
+def test_authstatus_post_login(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.4 / C.2.5: authstatus after login returns the logged-in string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, "authstatus", {}))
+            mode = match_exact(text, AUTHSTATUS_LOGGED_IN)
+            ok = mode is not None
+            msg = "exact logged-in status matched" if ok else (
+                f"expected {AUTHSTATUS_LOGGED_IN!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_login_missing_credentials(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.4: ``login`` with no credentials on either surface returns the missing-creds error.
+def test_login_already(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.5 / C.2.6: second login while authenticated returns the already string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, "login", {}))
+            mode = match_exact(text, LOGIN_ALREADY)
+            ok = mode is not None
+            msg = "exact already-logged-in string matched" if ok else (
+                f"expected {LOGIN_ALREADY!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
-    Both surfaces are deprived together (the ``ECLASS_*`` credential
-    variables blanked and the on-disk ``.env`` credential values
-    emptied), so a correct server finds no credentials anywhere and
-    must report the missing-credentials error; the verbatim ``.env``
-    is restored afterwards so later rows see the unmodified
-    dual-provisioned state. The Python row has no per-surface rubric
-    analogue (unlike the C-side C.2.4), so it asserts the unified
-    no-credentials-anywhere behaviour.
+
+def test_missing_credentials(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.6 / C.2.7: login with both credential surfaces deprived.
+
+    Blanks both the env-var surface (empty ``ECLASS_USERNAME`` /
+    ``ECLASS_PASSWORD``) and the on-disk ``.env``; restores the
+    verbatim ``.env`` in ``finally``.
     """
     blank_dotenv_credentials(eclass_dir)
-    overrides = {key: "" for key in CREDENTIAL_KEYS}
+    overrides = {"ECLASS_USERNAME": "", "ECLASS_PASSWORD": ""}
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
     try:
         with spawn_server(
-            impl, eclass_dir, mock_root, debug, env_overrides=overrides
+            impl, eclass_dir, mock_root, debug,
+            env_overrides=overrides, memcheck=memcheck,
         ) as server:
-            if server is None:
-                return SERVER_START_FAIL
-            initialize_server(server)
-            response = call_tool(server, "login", {})
-            text = extract_text(response)
-            if text == LOGIN_MISSING_CREDS:
-                return True, "exact missing-credentials string matched", text
-            return (
-                False,
-                f"expected exact missing-credentials error, got: '{text}'",
-                text,
-            )
+            srv = server
+            if server is not None:
+                initialize_server(server)
+                text = extract_text(call_tool(server, "login", {}))
+                mode = match_exact(text, LOGIN_MISSING_CREDS)
+                ok = mode is not None
+                msg = "exact missing-credentials string matched" if ok else (
+                    f"expected missing-credentials error, got {text!r}"
+                )
+                detail = text
     finally:
         write_dotenv(eclass_dir, mock_root)
-
-
-def test_logout_success(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.5 / C.2.5: ``logout`` after a successful login returns the success string."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        call_tool(server, "login", {})
-        response = call_tool(server, "logout", {})
-        text = extract_text(response)
-        if text == LOGOUT_SUCCESS:
-            return True, "exact logout success string matched", text
-        return False, f"expected exact '{LOGOUT_SUCCESS}', got: '{text}'", text
-
-
-def test_logout_no_op(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.6 / C.2.6: ``logout`` without a prior login returns the no-op string."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        response = call_tool(server, "logout", {})
-        text = extract_text(response)
-        if text == LOGOUT_NO_OP:
-            return True, "exact logout no-op string matched", text
-        return False, f"expected exact '{LOGOUT_NO_OP}', got: '{text}'", text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
 def test_get_courses_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.7 / C.2.7: ``get_courses`` after login lists every enrolled course."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        call_tool(server, "login", {})
-        response = call_tool(server, "get_courses", {})
-        text = extract_text(response)
-        if not text:
-            return False, "empty or invalid response", json.dumps(response)
-        if GET_COURSES_PREAMBLE not in text:
-            return False, f"missing preamble '{GET_COURSES_PREAMBLE}', got: '{text[:200]}'", text
-        missing = [code for code in SEED.enrolled_course_codes if code not in text]
-        if missing:
-            return False, f"missing enrolled course codes: {missing}", text
-        return True, f"preamble and {len(SEED.enrolled_course_codes)} enrolled codes present", text
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.7 / C.2.8: get_courses while logged in returns an accepted form.
+
+    The Python reference must emit the openeclass-formatted course list;
+    the C replica may emit that or the documented-clean layout. The
+    accept-set is the matcher's concern; this row records which
+    accepted layout matched as its diagnostic.
+    """
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, "get_courses", {}))
+            mode = match_get_courses(
+                text, _COURSES, allow_documented_clean=(impl == "c"),
+            )
+            ok = mode is not None
+            msg = "get_courses response accepted" if ok else (
+                f"get_courses did not match an accepted form; "
+                f"got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_logout_success(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.8 / C.2.9: logout while authenticated returns the success string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, "logout", {}))
+            mode = match_exact(text, LOGOUT_SUCCESS)
+            ok = mode is not None
+            msg = "exact logout success string matched" if ok else (
+                f"expected {LOGOUT_SUCCESS!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_authstatus_post_logout(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.9 / C.2.10: authstatus after logout returns the not-logged-in string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            call_tool(server, "logout", {})
+            text = extract_text(call_tool(server, "authstatus", {}))
+            mode = match_exact(text, AUTHSTATUS_NOT_LOGGED_IN)
+            ok = mode is not None
+            msg = "exact not-logged-in status after logout matched" if ok else (
+                f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
 def test_get_courses_not_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.8 / C.2.8: ``get_courses`` without authentication returns the not-logged-in error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        response = call_tool(server, "get_courses", {})
-        text = extract_text(response)
-        if text == COURSES_NOT_LOGGED_IN:
-            return True, "exact not-logged-in string matched", text
-        return False, f"expected exact '{COURSES_NOT_LOGGED_IN}', got: '{text}'", text
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.10 / C.2.11: get_courses without login returns the not-logged-in error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            text = extract_text(call_tool(server, "get_courses", {}))
+            mode = match_exact(text, COURSES_NOT_LOGGED_IN)
+            ok = mode is not None
+            msg = "exact not-logged-in error matched" if ok else (
+                f"expected {COURSES_NOT_LOGGED_IN!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_authstatus_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.9 / C.2.9: ``authstatus`` after login reports the logged-in state."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        call_tool(server, "login", {})
-        response = call_tool(server, "authstatus", {})
-        text = extract_text(response)
-        if text == AUTHSTATUS_LOGGED_IN:
-            return True, "exact logged-in status matched", text
-        return False, f"expected exact '{AUTHSTATUS_LOGGED_IN}', got: '{text}'", text
+def test_logout_no_op(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """P.1.11 / C.2.12: logout without a prior login returns the no-op string."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            text = extract_text(call_tool(server, "logout", {}))
+            mode = match_exact(text, LOGOUT_NO_OP)
+            ok = mode is not None
+            msg = "exact logout no-op string matched" if ok else (
+                f"expected {LOGOUT_NO_OP!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_authstatus_not_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.1.10 / C.2.10: ``authstatus`` before login reports the not-logged-in state."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        response = call_tool(server, "authstatus", {})
-        text = extract_text(response)
-        if text == AUTHSTATUS_NOT_LOGGED_IN:
-            return True, "exact not-logged-in status matched", text
-        return False, f"expected exact '{AUTHSTATUS_NOT_LOGGED_IN}', got: '{text}'", text
+def test_initialize_frame(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    memcheck: bool = False,
+) -> Result5:
+    """C.2.1 only: the hand-written initialize frame against the expected response.
+
+    Asserts the C replica's ``protocolVersion`` and ``serverInfo``
+    equal the invariant constructed constants and its
+    ``capabilities`` object is one of the two accepted constructed
+    forms (see :mod:`.expected`). The matched form, recorded as the
+    row's diagnostic, is ``capabilities-library`` or
+    ``capabilities-doc``. The expected response is constructed, never captured
+    from the submission. C-only: a non-C implementation does not
+    apply.
+    """
+    if impl != "c":
+        reason = "C.2.1 applies to the C replica only"
+        return False, reason, reason, None, None
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            raw = server.send_request({
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": CLIENT_NAME, "version": CLIENT_VERSION,
+                    },
+                },
+            })
+            result = raw.get("result") if raw else None
+            detail = json.dumps(raw)
+            if result is None:
+                ok, msg = False, "initialize: no result field"
+            else:
+                mode = match_initialize(result)
+                ok = mode is not None
+                msg = (
+                    f"initialize frame accepted ({mode})"
+                ) if ok else (
+                    "initialize frame matched neither accepted "
+                    f"capability form: got {result!r}"
+                )
+    return ok, msg, detail, leak_after(srv, memcheck), mode

@@ -21,6 +21,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from .protocol.matching import (
+    ANNOUNCEMENTS_UNORDERED,
+    GET_COURSES_DOCUMENTED,
+    LENIENT_MODES,
+)
 from .scoring import (
     C_BASELINE_TESTS,
     C_COURSE_TESTS,
@@ -32,10 +37,22 @@ from .scoring import (
     PYTHON_GENERAL_TESTS,
     Scorer,
     TestDefinition,
+    all_tests,
 )
 
 CONSOLE_MESSAGE_LIMIT = 200
 VERBOSE_MESSAGE_LIMIT = 60
+WARNING_RESPONSE_LIMIT = 800
+
+# Plain-words label per lenient form for the human-facing WARNINGS
+# block. ``LENIENT_MODES`` (imported from ``matching``) is the single
+# source of which modes are lenient; this map is presentation only,
+# and an unmapped future lenient mode falls back to a generic phrase
+# so adding one still requires only the ``matching`` constant.
+_LENIENT_FORM_PHRASE = {
+    ANNOUNCEMENTS_UNORDERED: "accepted via the order-insensitive announcement form",
+    GET_COURSES_DOCUMENTED: "accepted via the documented-clean get_courses form",
+}
 
 SECTION_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
     ("PYTHON BASELINE", PYTHON_BASELINE_TESTS),
@@ -168,10 +185,79 @@ def print_console_summary(
 
     for line in _summary_lines(scorer):
         print(line)
+    for line in _lenient_warnings(scorer):
+        print(line)
     print("")
     print(f"  JSON report: {paths.json_path}")
     print(f"  Text report: {paths.txt_path}")
     print("=" * 50)
+
+
+def _lenient_warnings(scorer: Scorer) -> list[str]:
+    """Build the WARNINGS block for rows accepted via a lenient form.
+
+    A row is flagged when its recorded diagnostic is in
+    :data:`grader.src.protocol.matching.LENIENT_MODES` (the
+    order-insensitive announcement form or the documented-clean
+    ``get_courses`` form). Each warned row names its id, description,
+    the plain-words lenient form, and a bounded tail of its retained
+    response (the full response is also in the JSON report). The
+    block states that a human must review each row and decide any
+    manual sidecar deduction; the lenient form is a legitimate
+    acceptance and carries no automatic scoring effect. Returns an
+    empty list when no row used a lenient form, so no empty section
+    is printed.
+
+    Args:
+        scorer: Populated scorer whose results carry the recorded
+            diagnostic per row.
+
+    Returns:
+        The WARNINGS block lines, or an empty list when none apply.
+    """
+    defs = all_tests()
+    flagged = [
+        (test_id, result)
+        for test_id, result in scorer.results.items()
+        if result.diagnostic in LENIENT_MODES
+    ]
+    if not flagged:
+        return []
+    lines: list[str] = []
+    lines.append("=" * 70)
+    lines.append("WARNINGS")
+    lines.append("=" * 70)
+    lines.append(
+        "  These rows were accepted via a lenient form. A human must"
+    )
+    lines.append(
+        "  review each and decide any manual sidecar deduction; the"
+    )
+    lines.append(
+        "  lenient form is a legitimate accept with no automatic effect."
+    )
+    lines.append("")
+    for test_id, result in flagged:
+        definition = defs.get(test_id)
+        description = definition.description if definition else ""
+        # The ``flagged`` filter above keeps only rows whose
+        # ``diagnostic`` is in ``LENIENT_MODES`` (a frozenset of
+        # strings), so the value is non-``None`` here; binding it
+        # locally narrows the type for ``.get``.
+        diagnostic = result.diagnostic or ""
+        phrase = _LENIENT_FORM_PHRASE.get(
+            diagnostic,
+            f"accepted via a lenient form ({diagnostic})",
+        )
+        lines.append(f"  [REVIEW] {test_id}: {description}")
+        lines.append(f"           {phrase}")
+        lines.append(
+            f"           response: "
+            f"{_truncate(result.full_output, WARNING_RESPONSE_LIMIT)}"
+        )
+    lines.append("")
+    lines.append("=" * 70)
+    return lines
 
 
 def _summary_lines(scorer: Scorer) -> list[str]:

@@ -12,22 +12,23 @@ checkout.
 
 Phase order, per implementation:
 
-- Python: dependency install (prerequisite, not scored), then
-  P.1 baseline, P.2 course announcements, P.3 general
-  announcements.
-- C: C.1.1 compile, C.1.2 tech stack, C.1.3/C.1.4 configuration
-  surfaces, then C.2 baseline, C.3 course announcements, C.4
-  general announcements, C.5 memory scenarios.
-
-A C compile failure cascade-skips every dependent C row, because a
-server that did not build cannot be exercised. A configuration
-surface failure (C.1.3 or C.1.4) does not cascade: the functional
-and memory suites still run, under a dual-provisioned environment
-(``ECLASS_*`` injected and the documented ``.env`` present), so the
-implementation is measured regardless of which surface the
-participant's server reads. The C.5 memory phase keeps its feature
-gate: a scenario whose named feature rows did not pass is recorded
-as a zero-point skip.
+- Python: dependency install (prerequisite, not scored); then the
+  resolved ``mcp`` release is asserted to be one of the releases the
+  baseline handshake rows were verified against (a read-only version
+  check; the phases that follow compare against a constructed
+  initialize and tools/list contract that is byte-faithful only for
+  those releases); then P.1 baseline, P.2 course announcements, P.3
+  general announcements.
+- C: C.1.1 compile (sole hard gate: on fail, skip-record every
+  other C row including all ``.mem`` and C.5 rows and return).
+  After compile: C.1.2/C.1.3/C.1.4 tech stack (no cascade);
+  C.1.5/C.1.6 configuration surfaces (no cascade; restores
+  dual-provisioned state); C.2 baseline (each C.2.3-12 row also
+  records a ``.mem`` sub-assertion scored only if its functional
+  assertion passes); C.3 course announcements and C.4 general
+  announcements (same per-scenario ``.mem`` pattern); C.5
+  multi-step memory last (gated on specific composed single-call
+  scenarios named in each scenario's ``gates_on``).
 
 Exit codes:
 
@@ -38,8 +39,7 @@ Exit codes:
 - ``2`` on argument errors or a missing patch file.
 
 Invoke as ``python -m grader`` from a working directory that has
-the ``grader`` package on ``sys.path``. The script accepts either
-a patch file (patch mode) or ``--no-patch`` (baseline mode).
+the ``grader`` package on ``sys.path``.
 """
 
 from __future__ import annotations
@@ -78,10 +78,7 @@ def main() -> int:
 
     Returns:
         ``0`` on a clean run; ``2`` on an argparse usage error;
-        ``1`` on any ``GraderError`` raised during the pre-grading
-        sequence, on a missing or unappliable patch, or on a
-        provisioning failure. Missing-patch and patch-apply
-        failures share exit code ``1`` and the stderr channel.
+        ``1`` on any ``GraderError`` or a patch-application failure.
     """
     parser = _build_parser()
     args = parser.parse_args()
@@ -105,13 +102,11 @@ def _run(args: argparse.Namespace) -> int:
         args: Parsed argparse namespace.
 
     Returns:
-        ``0`` on a clean run with the phase reports written;
-        ``2`` when a supplied patch file does not exist on disk;
+        ``0`` on a clean run; ``2`` when a patch file is missing;
         ``1`` when patch application or provisioning fails.
 
     Raises:
-        GraderError: When configuration is missing, pre-flight
-            fails, or reset fails.
+        GraderError: When configuration, pre-flight, or reset fails.
     """
     config = resolve_config(
         mock_root_flag=args.mock_root,
@@ -135,8 +130,7 @@ def _run(args: argparse.Namespace) -> int:
         patch_path = Path(args.patch_file).resolve()
         if not patch_path.exists():
             print(
-                f"error: patch-apply failed: patch file not found: "
-                f"{patch_path}",
+                f"error: patch-apply failed: patch file not found: {patch_path}",
                 file=sys.stderr,
             )
             return 1
@@ -187,7 +181,7 @@ def _run_python_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run Python build (prerequisite), then the three Python phases."""
+    """Run the Python dependency install, the mcp version check, then phases."""
     print("python build: uv sync")
     ok, summary, _detail = build_python.build(eclass_root)
     print(f"python build: {summary}")
@@ -198,9 +192,15 @@ def _run_python_phases(
             f"skipped: python build failed ({summary})",
         )
         return
-    _record_phase(scorer, "python baseline", python_baseline.run, eclass_root, mock_root, debug)
-    _record_phase(scorer, "python course", python_course_announcements.run, eclass_root, mock_root, debug)
-    _record_phase(scorer, "python general", python_general_announcements.run, eclass_root, mock_root, debug)
+    print("mcp check: resolving the eclass-mcp-server mcp version")
+    preflight.assert_mcp_release_verified(eclass_root)
+    print("mcp check: resolved mcp is a verified release")
+    _record_phase(scorer, "python baseline", python_baseline.run,
+                  eclass_root, mock_root, debug)
+    _record_phase(scorer, "python course", python_course_announcements.run,
+                  eclass_root, mock_root, debug)
+    _record_phase(scorer, "python general", python_general_announcements.run,
+                  eclass_root, mock_root, debug)
 
 
 def _run_c_phases(
@@ -209,22 +209,15 @@ def _run_c_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run C compile, tech-stack, config surfaces, then the protocol phases.
+    """Run C compile, tech-stack, config surfaces, then protocol phases.
 
-    A compile failure cascade-skips every dependent C row, because a
-    server that did not build cannot be exercised. The two
-    configuration-surface probes (C.1.3, C.1.4) run before the
-    functional suite but do not gate it: the ``c_config`` aggregator
-    restores the dual-provisioned environment after the probes so
-    C.2 through C.5 measure the implementation regardless of which
-    surface the server reads.
-
-    The memory phase runs after the C feature phases so the scorer
-    already carries the C.2/C.3/C.4 results that each memory
-    scenario's ``gates_on`` consults. A memory scenario whose
-    feature paths did not pass is recorded as a zero-point skip
-    rather than driven under valgrind on a short-circuited error
-    path.
+    C.1.1 compile is the sole hard gate: on fail every other C row
+    (including all ``.mem`` and C.5 rows) is skip-recorded and the
+    function returns. The tech-stack (C.1.2/C.1.3/C.1.4) and config-
+    surface (C.1.5/C.1.6) phases run independently with no cascade.
+    Per-scenario ``.mem`` sub-assertions ride each C functional run.
+    The multi-step memory phase runs last, gated on its composed
+    single-call scenarios.
     """
     print("c compile: make c-server")
     compile_ok, compile_summary, compile_detail = build_c.compile_c_replica(eclass_root)
@@ -239,22 +232,22 @@ def _run_c_phases(
         return
 
     print("c stack: ldd verification")
-    stack_ok, stack_summary, stack_detail = build_c.verify_stack(eclass_root)
-    scorer.record("C.1.2", stack_ok, stack_summary, stack_detail)
-    print(f"c stack: {stack_summary}")
+    stack_results = build_c.verify_stack(eclass_root)
+    for test_id, result in stack_results.items():
+        scorer.record(test_id, result[0], result[1], result[2])
+        print(f"c stack {test_id}: {result[1]}")
 
     _record_phase(scorer, "c config", c_config.run, eclass_root, mock_root, debug)
 
     print("c baseline phase")
-    config_passed = frozenset(
-        test_id for test_id, result in scorer.results.items() if result.passed
-    )
-    for test_id, result in c_baseline.run(
-        eclass_root, mock_root, debug, config_passed
-    ).items():
-        scorer.record(test_id, result[0], result[1], result[2])
-    _record_phase(scorer, "c course", c_course_announcements.run, eclass_root, mock_root, debug)
-    _record_phase(scorer, "c general", c_general_announcements.run, eclass_root, mock_root, debug)
+    for test_id, result in c_baseline.run(eclass_root, mock_root, debug).items():
+        scorer.record(test_id, result[0], result[1], result[2],
+                      diagnostic=result[3])
+
+    _record_phase(scorer, "c course", c_course_announcements.run,
+                  eclass_root, mock_root, debug)
+    _record_phase(scorer, "c general", c_general_announcements.run,
+                  eclass_root, mock_root, debug)
 
     print("c memory phase")
     passed_tests = frozenset(
@@ -263,10 +256,13 @@ def _run_c_phases(
     for test_id, result in c_memory.run(
         eclass_root, mock_root, debug, passed_tests
     ).items():
-        scorer.record(test_id, result[0], result[1], result[2])
+        scorer.record(test_id, result[0], result[1], result[2],
+                      diagnostic=result[3])
 
 
-PhaseRunner = Callable[[Path, Path, bool], dict[str, tuple[bool, str, str]]]
+PhaseRunner = Callable[
+    [Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]
+]
 
 
 def _record_phase(
@@ -277,10 +273,17 @@ def _record_phase(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Drive one phase aggregator and record its results into the scorer."""
+    """Drive one phase aggregator and record its results into the scorer.
+
+    Every aggregator yields ``(passed, message, full_output, mode)``;
+    ``mode`` is the ``matching`` mode the row was accepted under and
+    is recorded as the unscored per-test diagnostic (``None`` for a
+    failed or non-string-matched row).
+    """
     print(f"{label} phase")
     for test_id, result in run_func(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2])
+        scorer.record(test_id, result[0], result[1], result[2],
+                       diagnostic=result[3])
 
 
 def _skip_remaining(
@@ -288,7 +291,7 @@ def _skip_remaining(
     tests: tuple[scoring.TestDefinition, ...],
     reason: str,
 ) -> None:
-    """Record a skip result for every rubric row in ``tests`` that has no entry yet."""
+    """Record a skip for every rubric row in ``tests`` without an entry yet."""
     for test in tests:
         if test.id not in scorer.results:
             scorer.record(test.id, False, reason, reason)

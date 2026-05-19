@@ -7,9 +7,8 @@ Subprocess invocation of the testing environment's reset script.
 The grader calls ``<mock-root>/scripts/reset`` once at the start
 of each grading run to guarantee a deterministic starting state:
 fresh database volume, cleared mock CAS in-memory state, dropped
-PHP opcache and session storage. The reset is the testing
-environment's single nuclear chain; the grader does not
-parameterise it.
+PHP opcache and session storage. The grader invokes it
+unparameterised; it is the environment's all-or-nothing reset.
 
 A non-zero exit from the reset script raises ``ResetError`` with
 the captured output tail so the operator sees the failing step
@@ -62,8 +61,13 @@ def run_reset(mock_root: Path) -> None:
             f"reset script at {script} could not be executed: {error}"
         ) from error
     if result.returncode != 0:
-        tail = (result.stderr or result.stdout or "").strip().splitlines()
-        snippet = "\n  ".join(tail[-10:]) if tail else "(no output)"
+        combined = (result.stderr + "\n" + result.stdout).strip().splitlines()
+        snippet = "\n  ".join(combined[-10:]) if combined else "(no output)"
+        if result.returncode < 0:
+            raise ResetError(
+                f"reset script at {script} killed by signal "
+                f"{-result.returncode}; tail:\n  {snippet}"
+            )
         raise ResetError(
             f"reset script at {script} exited with code "
             f"{result.returncode}; tail:\n  {snippet}"

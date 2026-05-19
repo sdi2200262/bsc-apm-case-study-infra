@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-Author-curated annotations attached to grader results.
+Hand-written annotations attached to grader results.
 
 The grader produces a per-submission ``results.json`` that scores
 every rubric row and carries the per-test message the assertion
@@ -12,7 +12,7 @@ message cannot: a feature path that traces leak-free under
 valgrind because the participant's handler short-circuits before
 allocating, a strict match that passes because the participant
 matched a peripheral seed value rather than the intended
-contract, an integration anchor that fails for a reason
+contract, an infrastructure row that fails for a reason
 upstream of the participant's work.
 
 Notes live in a YAML sidecar named ``results_notes.yaml`` in
@@ -27,7 +27,7 @@ combine runs.
 Sidecar shape::
 
     notes:
-      - test_ids: [C.5.2, C.5.3, C.5.4]
+      - test_ids: [C.5.1, C.5.2, C.5.3]
         note: |
           Free prose describing the one root cause shared by
           every listed rubric row. Multi-line content is
@@ -182,7 +182,16 @@ class _LiteralBlockDumper(yaml.SafeDumper):
 
 
 def _represent_str_literal_when_multiline(dumper: yaml.SafeDumper, data: str) -> Any:
-    """Choose ``|`` block scalar for multi-line strings, default for the rest."""
+    """Choose ``|`` block scalar for multi-line strings, default for the rest.
+
+    Args:
+        dumper: Active PyYAML dumper.
+        data: String value being serialised.
+
+    Returns:
+        A YAML scalar node with literal style ``|`` when ``data``
+        carries a newline, default scalar style otherwise.
+    """
     if "\n" in data:
         return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
     return dumper.represent_scalar("tag:yaml.org,2002:str", data)
@@ -214,7 +223,20 @@ def _known_test_ids(results: dict[str, Any]) -> set[str]:
 
 
 def _cmd_add(args: argparse.Namespace) -> int:
-    """Append one entry to the sidecar after optional test-ID validation."""
+    """Append one entry to the sidecar after optional test-ID validation.
+
+    Args:
+        args: Parsed namespace carrying ``results_dir``, ``note``,
+            and optional ``test_ids``.
+
+    Returns:
+        Process exit code (``0`` on success).
+
+    Raises:
+        NotesError: When the note text is empty after stripping, a
+            listed test ID is absent from ``results.json``, or
+            ``results.json`` is missing or malformed.
+    """
     directory = args.results_dir
     note_text = args.note.rstrip()
     if not note_text:
@@ -243,7 +265,18 @@ def _cmd_add(args: argparse.Namespace) -> int:
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
-    """Print every entry with its index and a freshness indicator."""
+    """Print every entry with its index and a freshness indicator.
+
+    Args:
+        args: Parsed namespace carrying ``results_dir``.
+
+    Returns:
+        Process exit code (``0`` on success).
+
+    Raises:
+        NotesError: When the sidecar is malformed or
+            ``results.json`` is missing or malformed.
+    """
     directory = args.results_dir
     notes = load_notes(directory)
     if not notes:
@@ -267,7 +300,19 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
 
 def _cmd_remove(args: argparse.Namespace) -> int:
-    """Remove the entry at the given index."""
+    """Remove the entry at the given index.
+
+    Args:
+        args: Parsed namespace carrying ``results_dir`` and the
+            integer ``index``.
+
+    Returns:
+        Process exit code (``0`` on success).
+
+    Raises:
+        NotesError: When the sidecar is missing or empty, or when
+            ``index`` is out of range.
+    """
     directory = args.results_dir
     notes = load_notes(directory)
     if not notes:
@@ -319,7 +364,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m grader.notes",
         description=(
-            "Manage author-curated annotations on grader results. "
+            "Manage hand-written annotations on grader results. "
             "Notes live in results_notes.yaml beside results.json."
         ),
     )

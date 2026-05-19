@@ -10,17 +10,18 @@ dataset.
 ## Overview
 
 The grader scores a participant's submission against a 100-point
-rubric covering the Python implementation (41 points: 10 baseline,
-17 course announcements, 14 general announcements) and the C
-replica (59 points: 10 build, tech-stack, and the two
-configuration surfaces; 10 baseline; 15 course announcements; 12
-general announcements; 12 memory scenarios). The baseline score
-with no patch applied is 9/100, awarded for the nine Python
-baseline rows the upstream `eclass-mcp-server` reference already
-passes; P.1.1 (the `tools/list` registration check for all six
-tools) is the one baseline row that requires the patch's tool
-additions to pass. The participant testing environment is shipped
-separately by the
+rubric covering 90 atomic rows: 30 points to the Python
+implementation and 70 points to the C replica. The Python
+implementation contributes 11 baseline rows worth 11 points and 16
+feature rows worth 19 points (9 course-announcement rows worth 11
+points plus 7 general-announcement rows worth 8 points, with three
+of those feature rows worth 2 points each). The C replica
+contributes 37 functional and infrastructure rows (6 infra, 12
+baseline, 9 course, 7 general, 3 multi-step memory) plus 26
+per-scenario memory sub-assertions, each sub-assertion awarded only
+when its paired functional scenario passes.
+
+The participant testing environment is shipped separately by the
 [`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task)
 repository; the grader probes its endpoints, invokes its reset script,
 and spawns participant MCP servers under environment variables
@@ -106,29 +107,32 @@ for the mock CAS), invokes `<mock-root>/scripts/reset` to flush the
 seed back to its baseline, then sequences the phase modules:
 
 1. Apply the patch on a fresh test branch (or skip in `--no-patch` baseline mode).
-2. Provision the dev environment: copy `<mock-root>/.env` and `<mock-root>/certs/` verbatim into the checkout, overwriting any `.env` or cert shipped inside the patch. A preflight verifies both source artefacts are present. Provisioning is reset per submission. See SCORING.md C.1.3/C.1.4 for how the two configuration-surface probes use this wiring.
+2. Provision the dev environment: copy `<mock-root>/.env` and `<mock-root>/certs/` verbatim into the checkout, overwriting any `.env` or cert shipped inside the patch. A preflight verifies both source artefacts are present. Provisioning is reset per submission.
 3. Python dependency install (`uv sync` against the participant's checkout) as a non-scored prerequisite. Failure skips every Python rubric row.
-4. Python baseline phase (P.1.1 through P.1.10).
-5. Python course-announcements phase (P.2.1 through P.2.8).
-6. Python general-announcements phase (P.3.1 through P.3.6).
-7. C compile (`make c-server`, scored as C.1.1).
-8. C tech-stack verification (`ldd` whitelist, scored as C.1.2).
-9. C configuration-surface probes (C.1.3 env-var surface, C.1.4 verbatim documented `.env` surface).
-10. C baseline phase (C.2.1 through C.2.10); C.2.4 (missing credentials) is billed per implemented surface, scored against the recorded C.1.3/C.1.4 verdicts (see SCORING.md).
-11. C course-announcements phase (C.3.1 through C.3.8).
-12. C general-announcements phase (C.4.1 through C.4.6).
-13. C memory phase (four valgrind scenarios, C.5.1 through C.5.4).
+4. Python baseline phase (P.1.1 through P.1.11).
+5. Python course-announcements phase (P.2.1 through P.2.9).
+6. Python general-announcements phase (P.3.1 through P.3.7).
+7. C compile (`make c-server`, scored as C.1.1). C.1.1 is the sole hard gate: on fail every other C row is skip-recorded and the run proceeds to reporting.
+8. C tech-stack verification (`ldd` whitelist): C.1.2 libcurl, C.1.3 libxml2, C.1.4 no-JSON-library (no cascade from any of these).
+9. C configuration-surface probes: C.1.5 env-var surface, C.1.6 verbatim documented `.env` surface (no cascade; restores dual-provisioned state after).
+10. C baseline phase (C.2.1 through C.2.12). C.2.3 through C.2.12 each also record a `.mem` sub-assertion scored only when the functional assertion passes.
+11. C course-announcements phase (C.3.1 through C.3.9), each with a `.mem` sub-assertion.
+12. C general-announcements phase (C.4.1 through C.4.7), each with a `.mem` sub-assertion.
+13. C memory phase: three multi-step valgrind scenarios (C.5.1 through C.5.3), each gated on the composed single-call scenarios named in its `gates_on` tuple.
 
 Each protocol test spawns the participant's MCP server as a
 subprocess (Python: `uv run python -m src.eclass_mcp_server.server`;
 C: `c-replica/server` directly), sends JSON-RPC requests on stdin,
-and asserts against the response's `text` content. Each memory
-scenario wraps the C-replica spawn in `valgrind` and verifies a
-clean exit with zero leaked bytes.
+and asserts against the response's `text` content. C functional
+scenarios run under valgrind; the `.mem` sub-assertion passes when
+the functional scenario passes AND valgrind exits cleanly with zero
+leaked bytes.
 
-`seed.yaml` and the `.env`/`certs/` provisioning are separate
-mechanisms: `seed.yaml` plus `make check-seed` guards that the
-rubric's expected data values still match the task seed; the
+The seed and the `.env`/`certs/` provisioning are separate
+mechanisms: the grader reads the grading environment's own
+`grader-env/seed/seed.yaml` (the same file the environment image is
+built from, in this repository) so the rubric's expected data
+values cannot drift from the environment under test; the
 `.env`/`certs/` copy guards that the participant server's wiring to
 the testing environment is the literal documented wiring.
 
@@ -155,34 +159,6 @@ verdicts, not by byte diff.
 | Testing environment (amd64) | `bsc-apm-case-study-task` release tag `bsc-apm-case-study-task` |
 | Testing environment (arm64) | `bsc-apm-case-study-task` release tag `bsc-apm-case-study-task-arm64` |
 
-A grading machine that produces a baseline score other than
-9/100 against these pinned references is misconfigured.
-
-## Seed-mirror sync
-
-`grader/seed.yaml` is a pinned mirror of the testing environment's
-seed file. The `Makefile` next to it carries two targets that keep
-the mirror in lock-step with the upstream source:
-
-```bash
-# Diff the mirror against the testing environment's release tag.
-# Exits 1 on drift.
-make check-seed
-
-# Overwrite the mirror's body from the testing environment's
-# release tag, preserving the local header comment block.
-make refresh-seed
-
-# Override the pin via REF=<tag-or-sha>:
-make check-seed REF=main
-```
-
-Default `REF` is `bsc-apm-case-study-task` (the amd64 release tag),
-so reproducibility tracks the released testing-environment surface.
-Run `make check-seed` before any grading run that uses a re-cut
-testing-environment release; run `make refresh-seed` to bring the
-mirror forward when drift surfaces.
-
 ## Directory structure
 
 ```
@@ -191,9 +167,7 @@ grader/
 ├── __main__.py                       # CLI entry: python -m grader
 ├── inspect.py                        # results browser
 ├── notes.py                          # CLI entry: python -m grader.notes
-├── Makefile                          # seed-mirror sync targets
 ├── README.md
-├── seed.yaml                         # pinned mirror of the testing env's seed
 └── src/
     ├── __init__.py
     ├── config.py                     # path resolution from CLI flags or grader.yaml
@@ -204,24 +178,29 @@ grader/
     ├── env_file.py                   # single-source .env parser (provision + runner)
     ├── provision.py                  # verbatim .env + certs/ provisioning from mock-root
     ├── build_python.py               # uv sync for the Python implementation
-    ├── build_c.py                    # C.1.1 compile and C.1.2 stack verification
-    ├── seed.py                       # seed.yaml loader and per-window helpers
+    ├── build_c.py                    # C.1.1 compile and C.1.2/C.1.3/C.1.4 stack verification
+    ├── seed.py                       # grader-env seed loader and per-principal/window helpers
     ├── scoring.py                    # rubric definitions and the Scorer
     ├── reporting.py                  # JSON, text, and console writers
     └── protocol/
         ├── __init__.py
-        ├── runner.py                       # server spawn, JSON-RPC framing, .env-sourced config
-        ├── _announcements_assertions.py    # shared count/body helpers
+        ├── runner.py                       # server spawn, JSON-RPC framing, schema-gated tools/call
+        ├── server_env.py                   # spawned-server environment block (single-sourced from <mock-root>/.env)
+        ├── _memcheck.py                    # valgrind stderr parsing helpers
+        ├── _assertion_support.py           # shared scenario scaffolding + .mem-recording helper
+        ├── calibration.py                  # per-run seed-apply instant from MariaDB
+        ├── expected.py                     # expected response strings and the constructed handshake contract
+        ├── matching.py                     # acceptance policy (byte-exact, whitespace-normalised, two-form)
         ├── baseline_tests.py               # P.1 / C.2 assertions
         ├── course_announcements_tests.py   # P.2 / C.3 assertions
         ├── general_announcements_tests.py  # P.3 / C.4 assertions
-        ├── config_surface.py               # C.1.3 / C.1.4 / C.2.4 surface-isolated probes
-        ├── memory_tests.py                 # C.5 scenarios under valgrind
+        ├── config_surface.py               # C.1.5 / C.1.6 surface-isolated probes
+        ├── memory_tests.py                 # C.5 multi-step scenarios under valgrind
         ├── python_baseline.py               # phase aggregator (impl=python)
         ├── python_course_announcements.py   # phase aggregator (impl=python)
         ├── python_general_announcements.py  # phase aggregator (impl=python)
         ├── c_baseline.py                    # phase aggregator (impl=c)
-        ├── c_config.py                      # phase aggregator (impl=c, C.1.3/C.1.4)
+        ├── c_config.py                      # phase aggregator (impl=c, C.1.5/C.1.6)
         ├── c_course_announcements.py        # phase aggregator (impl=c)
         ├── c_general_announcements.py       # phase aggregator (impl=c)
         └── c_memory.py                      # phase aggregator (impl=c)
