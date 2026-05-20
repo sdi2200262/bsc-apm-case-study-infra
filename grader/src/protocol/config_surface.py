@@ -29,6 +29,7 @@ from ..provision import (
     write_dotenv,
 )
 from ..seed import SEED, user
+from .expected import login_success
 from .runner import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -49,7 +50,7 @@ TLS_TRUST_ENV_KEYS = (
 )
 
 _PRINCIPAL = user(SEED, "student_courses")
-LOGIN_SUCCESS = f"Login successful! You are now logged in as {_PRINCIPAL.username}."
+LOGIN_SUCCESS = login_success(_PRINCIPAL.username)
 
 IMPL = "c"
 

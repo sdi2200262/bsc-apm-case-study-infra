@@ -23,32 +23,32 @@ one of two strictness modes:
   with a plain space are the same answer; this mode records that the
   acceptance relied on that rule.
 
-The announcement success rows and ``get_courses`` are on a
-different axis: the PRD specifies the response content and format
-but not a presentation order or a single layout, so the matcher
-accepts two forms and records which form matched as the diagnostic.
-:func:`match_announcements` records ``ANNOUNCEMENTS_ORDERED`` (the
-openeclass-derived order) or ``ANNOUNCEMENTS_UNORDERED`` (the same
-byte-exact entries compared as an order-insensitive multiset).
-:func:`match_get_courses` records ``GET_COURSES_FAITHFUL`` (the
-openeclass-formatted layout) or ``GET_COURSES_DOCUMENTED`` (the
-documented-clean layout). The non-breaking space normalisation is
-applied within every form unconditionally (the PRD whitespace
-rule), so it is not surfaced as a separate strictness mode for
-these rows. The second, lenient form in each pair
-(``ANNOUNCEMENTS_UNORDERED``, ``GET_COURSES_DOCUMENTED``, collected
-in :data:`LENIENT_MODES`) is warned for human review at end of
-grading (see :mod:`grader.src.reporting`).
+Three rows accept one of two labelled forms and record the matched
+label as the diagnostic. :func:`match_announcements` records
+``ANNOUNCEMENTS_ORDERED`` (the openeclass-derived order) or
+``ANNOUNCEMENTS_UNORDERED`` (the same byte-exact entries compared
+as an order-insensitive multiset). :func:`match_get_courses` records
+``GET_COURSES_FAITHFUL`` (the openeclass-formatted layout) or
+``GET_COURSES_DOCUMENTED`` (the documented-clean layout).
+:func:`match_initialize` records ``CAP_FAITHFUL`` (the capabilities
+object the SDK serialises for a tools-only server) or
+``CAP_DOCUMENTED`` (the literal object the wire-protocol reference
+documents). All three matchers route through :func:`_try_forms`
+which evaluates labelled predicates in order and returns the first
+accepted label, so the dispatch is identical across them and the
+per-form acceptance algorithm lives next to each call site. The
+non-breaking space normalisation is applied within each form
+unconditionally (the PRD whitespace rule).
 
-The handshake rows are on a different axis again. The ``initialize``
-frame has two accepted capability forms (see
-:mod:`.expected`), and which one a submission satisfied is itself
-the contract-relevant fact, so :func:`match_initialize` records the
-matched form, ``CAP_LIBRARY`` or ``CAP_DOC``, as the mode rather
-than a strictness value. The ``tools/list`` row
-(:func:`match_tools_list`) is one byte-exact contract for both
-implementations and records no mode at all; its result is a
-pass/fail with a reason, and the row's recorded mode is ``None``.
+The second, lenient form in each pair (``ANNOUNCEMENTS_UNORDERED``,
+``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``, collected in
+:data:`LENIENT_MODES`) is warned for human review at end of grading
+(see :mod:`grader.src.reporting`).
+
+The ``tools/list`` row (:func:`match_tools_list`) is one byte-exact
+contract for both implementations and records no mode at all; its
+result is a pass/fail with a reason, and the row's recorded mode is
+``None``.
 
 A matcher returns ``None`` when the response is not accepted; the
 caller treats ``None`` as a failed row and records no diagnostic.
@@ -58,11 +58,12 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable, Iterable
 
 from ..seed import Course
 from .expected import (
-    CAPABILITIES_DOC,
-    CAPABILITIES_LIBRARY,
+    CAPABILITIES_DOCUMENTED,
+    CAPABILITIES_FAITHFUL,
     INITIALIZE_PROTOCOL_VERSION,
     INITIALIZE_SERVER_INFO,
     announcement_preamble,
@@ -74,10 +75,13 @@ BYTE_EXACT = "byte-exact"
 WHITESPACE_NORMALIZED = "whitespace-normalized"
 
 # The two ``initialize`` capability forms, recorded as the row's
-# diagnostic so the report states which documented contract the
-# frame satisfied (see :mod:`.expected` for why both are accepted).
-CAP_LIBRARY = "capabilities-library"
-CAP_DOC = "capabilities-doc"
+# diagnostic so the report states which contract the frame satisfied.
+# The published wire-protocol reference and the MCP SDK's actual
+# serialisation disagree on the capabilities object; both readings of
+# the task material are accepted, with ``CAP_DOCUMENTED`` flagged for
+# human review (see :data:`LENIENT_MODES`).
+CAP_FAITHFUL = "capabilities-faithful"
+CAP_DOCUMENTED = "capabilities-documented"
 
 # The announcement and ``get_courses`` success rows record the
 # accepted FORM as the diagnostic, not a strictness mode: the PRD
@@ -96,7 +100,9 @@ GET_COURSES_DOCUMENTED = "get-courses-documented"
 # single set to detect, at end of grading, every row accepted only
 # via a lenient form and warn a human to review it. Adding a future
 # lenient form requires only extending this constant.
-LENIENT_MODES = frozenset({ANNOUNCEMENTS_UNORDERED, GET_COURSES_DOCUMENTED})
+LENIENT_MODES = frozenset(
+    {ANNOUNCEMENTS_UNORDERED, GET_COURSES_DOCUMENTED, CAP_DOCUMENTED}
+)
 
 # The platform's locale date renderer emits U+202F (a narrow
 # no-break space) before the meridiem under recent CLDR; the same
@@ -166,6 +172,31 @@ def match_response(actual: str, expected: str) -> str | None:
     return None
 
 
+def _try_forms(
+    forms: Iterable[tuple[str, Callable[[], bool]]],
+) -> str | None:
+    """Return the label of the first accepted form, or ``None``.
+
+    Each entry is a ``(label, accepts)`` pair; ``accepts`` is invoked
+    in order and the first one returning ``True`` settles the match.
+    The per-form acceptance algorithm stays with the caller so each
+    matcher decides what counts as a match for each of its forms
+    while the dispatch (try in order, label-of-first-match) lives in
+    one place.
+
+    Args:
+        forms: Ordered ``(label, accepts)`` pairs to evaluate.
+
+    Returns:
+        The label of the first form whose predicate returned
+        ``True``; ``None`` when none accepted.
+    """
+    for label, accepts in forms:
+        if accepts():
+            return label
+    return None
+
+
 def match_get_courses(
     text: str,
     courses: tuple[Course, ...],
@@ -201,11 +232,17 @@ def match_get_courses(
         order, or a wrong count grammar all fall here).
     """
     faithful, documented_clean = get_courses_forms(courses)
-    if match_response(text, faithful) is not None:
-        return GET_COURSES_FAITHFUL
-    if allow_documented_clean and match_response(text, documented_clean) is not None:
-        return GET_COURSES_DOCUMENTED
-    return None
+    forms: list[tuple[str, Callable[[], bool]]] = [
+        (GET_COURSES_FAITHFUL, lambda: match_response(text, faithful) is not None),
+    ]
+    if allow_documented_clean:
+        forms.append(
+            (
+                GET_COURSES_DOCUMENTED,
+                lambda: match_response(text, documented_clean) is not None,
+            )
+        )
+    return _try_forms(forms)
 
 
 def match_announcements(
@@ -250,17 +287,26 @@ def match_announcements(
         ``ANNOUNCEMENTS_ORDERED`` or ``ANNOUNCEMENTS_UNORDERED`` for
         the accepted form, ``None`` when neither form matches.
     """
-    if match_response(text, expected_ordered) is not None:
-        return ANNOUNCEMENTS_ORDERED
-    parsed = _parse_announcement_entries(text, expected_count)
-    if parsed is None:
-        return None
-    expected_multiset = Counter(
-        normalize_response(entry) for entry in expected_entries
+    def _accepts_unordered() -> bool:
+        # Form 2 uses a different mechanism from Form 1: parse the
+        # populated-response grammar, then compare as a multiset.
+        parsed = _parse_announcement_entries(text, expected_count)
+        if parsed is None:
+            return False
+        expected_multiset = Counter(
+            normalize_response(entry) for entry in expected_entries
+        )
+        return Counter(parsed) == expected_multiset
+
+    return _try_forms(
+        [
+            (
+                ANNOUNCEMENTS_ORDERED,
+                lambda: match_response(text, expected_ordered) is not None,
+            ),
+            (ANNOUNCEMENTS_UNORDERED, _accepts_unordered),
+        ]
     )
-    if Counter(parsed) == expected_multiset:
-        return ANNOUNCEMENTS_UNORDERED
-    return None
 
 
 def match_initialize(actual_result: dict) -> str | None:
@@ -268,32 +314,38 @@ def match_initialize(actual_result: dict) -> str | None:
 
     ``protocolVersion`` and ``serverInfo`` must equal the invariant
     constructed constants exactly. The ``capabilities`` object is
-    then matched against the two accepted forms: the library form
-    yields ``CAP_LIBRARY``, the documented form yields ``CAP_DOC``,
-    and anything else fails the row. Only these three fields are the
-    contract; an ``initialize`` result may carry further fields (an
-    ``instructions`` string, SDK metadata) and those are outside the
-    row's contract and ignored. The expected values are constructed;
-    nothing here is captured from the submission.
+    then matched against the two accepted forms: the faithful form
+    (what the SDK serialises for a tools-only server) yields
+    ``CAP_FAITHFUL``; the documented form (what the wire-protocol
+    reference literally specifies) yields ``CAP_DOCUMENTED``. The
+    documented form is a lenient acceptance and is warned for human
+    review at end of grading (see :mod:`grader.src.reporting`). Only
+    these three fields are the contract; an ``initialize`` result
+    may carry further fields (an ``instructions`` string, SDK
+    metadata) and those are outside the row's contract and ignored.
+    The expected values are constructed; nothing here is captured
+    from the submission.
 
     Args:
         actual_result: The replica's ``initialize`` result object.
 
     Returns:
-        ``CAP_LIBRARY`` or ``CAP_DOC`` for the matched capability
-        form; ``None`` when the protocol version, server info, or
-        capabilities object does not match either accepted form.
+        ``CAP_FAITHFUL`` or ``CAP_DOCUMENTED`` for the matched
+        capability form; ``None`` when the protocol version, server
+        info, or capabilities object does not match either accepted
+        form.
     """
     if actual_result.get("protocolVersion") != INITIALIZE_PROTOCOL_VERSION:
         return None
     if actual_result.get("serverInfo") != INITIALIZE_SERVER_INFO:
         return None
     capabilities = actual_result.get("capabilities")
-    if capabilities == CAPABILITIES_LIBRARY:
-        return CAP_LIBRARY
-    if capabilities == CAPABILITIES_DOC:
-        return CAP_DOC
-    return None
+    return _try_forms(
+        [
+            (CAP_FAITHFUL, lambda: capabilities == CAPABILITIES_FAITHFUL),
+            (CAP_DOCUMENTED, lambda: capabilities == CAPABILITIES_DOCUMENTED),
+        ]
+    )
 
 
 def match_tools_list(actual: list[dict]) -> tuple[bool, str]:
@@ -302,16 +354,15 @@ def match_tools_list(actual: list[dict]) -> tuple[bool, str]:
     Both implementations are held to one contract: every one of the
     six constructed tool objects is present with its ``name``,
     ``description``, and ``inputSchema`` byte-equal to the expected
-    values, order-insensitive, and no unexpected tool. The C replica
-    extends the low-level baseline server whose ``tools/list`` wire
-    serialisation is byte-stable across the entire supported ``mcp``
-    range (the same verified-release constraint the constructed
-    expected values rely on), so a single byte-exact contract is
-    faithful for the Python reference and the C replica alike. A
-    server whose tool-schema serialisation differs from the expected
-    values (extra schema keywords, regenerated descriptions, a
-    different object shape) fails this row; that divergence is the
-    intended signal.
+    values, order-insensitive, and no unexpected tool. Every entry
+    in the advertised array must itself be a JSON object carrying a
+    string ``name``; a non-object entry or one without a string name
+    fails the row at the entry's index, so a malformed response
+    cannot pass by virtue of carrying enough well-formed siblings.
+    A server whose tool-schema serialisation differs from the
+    expected values (extra schema keywords, regenerated descriptions,
+    a different object shape) likewise fails this row; that
+    divergence is the intended signal.
 
     Args:
         actual: The ``tools`` array from the ``tools/list`` result.
@@ -320,13 +371,15 @@ def match_tools_list(actual: list[dict]) -> tuple[bool, str]:
         ``(True, summary)`` when the contract holds, ``(False,
         reason)`` naming the first divergence otherwise.
     """
+    for index, tool in enumerate(actual):
+        if not isinstance(tool, dict):
+            return False, f"tools/list entry {index} is not a JSON object"
+        if not isinstance(tool.get("name"), str):
+            return False, f"tools/list entry {index} has no string name"
+
     expected_tools = expected_tools_list()
     expected_names = {tool["name"] for tool in expected_tools}
-    actual_by_name = {
-        tool["name"]: tool
-        for tool in actual
-        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
-    }
+    actual_by_name = {tool["name"]: tool for tool in actual}
     missing = expected_names - set(actual_by_name)
     if missing:
         return False, f"tools/list is missing {sorted(missing)}"

@@ -48,7 +48,11 @@ from collections.abc import Iterator
 from typing import IO
 
 from .. import provision
-from ._memcheck import VALGRIND_STDERR_TAIL_LINES, parse_leak_bytes, tail_lines
+from ._memcheck import (
+    VALGRIND_STDERR_TAIL_LINES,
+    classify_leak_verdict,
+    tail_lines,
+)
 from ._schema_validation import validate_against_schema
 from .server_env import eclass_config_pairs, mcp_server_env, tls_trust_env
 
@@ -247,9 +251,12 @@ class ServerProcess:
     def leak_verdict(self) -> tuple[bool, str]:
         """Return the valgrind leak verdict after ``stop()`` has been called.
 
-        Call only when ``ctx.memcheck`` and ``ctx.impl == "c"``.
-        Clean iff exit code is not 99 AND both ``definitely lost``
-        and ``indirectly lost`` are zero bytes.
+        Call only when ``ctx.memcheck`` and ``ctx.impl == "c"``. The
+        clean/not-clean decision is delegated to
+        :func:`._memcheck.classify_leak_verdict` so the per-scenario
+        ``.mem`` sub-assertions and the multi-step memory scenarios
+        apply the same rules (signal kill, report completeness, the
+        valgrind error sentinel, and the lost-byte counts).
 
         Returns:
             Tuple of ``(clean, detail_text)`` where ``detail_text``
@@ -261,10 +268,10 @@ class ServerProcess:
         self._valgrind_stderr_file.seek(0)
         raw = self._valgrind_stderr_file.read()
         report = tail_lines(raw, VALGRIND_STDERR_TAIL_LINES)
-        exit_code = self._proc_exit_code if self._proc_exit_code is not None else 0
-        definitely_lost = parse_leak_bytes(raw, "definitely lost")
-        indirectly_lost = parse_leak_bytes(raw, "indirectly lost")
-        clean = (exit_code != 99) and (definitely_lost == 0) and (indirectly_lost == 0)
+        exit_code = (
+            self._proc_exit_code if self._proc_exit_code is not None else 0
+        )
+        clean, _reason = classify_leak_verdict(exit_code, raw)
         return clean, report
 
     def send_request(self, request: dict) -> dict | None:

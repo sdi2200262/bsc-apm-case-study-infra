@@ -95,17 +95,27 @@ NO_ANNOUNCEMENTS = "No announcements found."
 
 SYSTEM_SOURCE = "System"
 
+
+def login_success(username: str) -> str:
+    """Return the exact ``login`` success response for ``username``.
+
+    Single source for the principal-bearing success line the baseline
+    suite and the configuration-surface probes both assert; pinning
+    the format here keeps the two callers in lockstep.
+
+    Args:
+        username: Authenticated principal name to interpolate.
+
+    Returns:
+        ``Login successful! You are now logged in as <username>.``
+    """
+    return f"Login successful! You are now logged in as {username}."
+
 # Constructed handshake contract: the expected ``initialize`` and
 # ``tools/list`` responses the baseline rows (C.2.1, C.2.2, P.1.1)
 # are judged against. These are fixed constants built from the
 # published wire contract, never captured from a graded submission
-# and never obtained by spawning a server at grade time. The
-# eclass-mcp-server dependency floor (``mcp>=1.24.0``, Python >=3.10)
-# admits a finite set of ``mcp`` releases (the Python MCP SDK), and
-# the low-level ``initialize``/``tools/list`` wire serialisation is
-# byte-identical across that entire set, so a single constructed
-# contract is exact; ``preflight.assert_mcp_release_verified`` fails
-# the run loudly if the resolved ``mcp`` is outside the verified set.
+# and never obtained by spawning a server at grade time.
 
 # Every baseline tool advertises this one no-argument input schema.
 BASELINE_TOOL_INPUT_SCHEMA = {
@@ -188,18 +198,18 @@ ALL_TOOL_OBJECTS: tuple[dict, ...] = BASELINE_TOOLS + ANNOUNCEMENT_TOOLS
 INITIALIZE_PROTOCOL_VERSION = "2025-03-26"
 INITIALIZE_SERVER_INFO = {"name": "eclass-mcp", "version": "0.1.0"}
 
-# Two accepted `initialize.capabilities` objects. CAPABILITIES_LIBRARY
-# is what the MCP SDK actually serialises for a tools-only low-level
-# server across the entire supported `mcp` range. CAPABILITIES_DOC is
-# the object the project's own wire-protocol reference (section 1)
-# documents. The two differ, and no `mcp` release in the supported
-# range emits the documented object: the wire-protocol reference is
-# inaccurate on this point. Because that reference is published task
-# material, building the handshake to it is a legitimate reading, so
-# both objects are accepted and the matched one is recorded as the
-# row's diagnostic. Neither is captured from a submission.
-CAPABILITIES_LIBRARY = {"experimental": {}, "tools": {"listChanged": False}}
-CAPABILITIES_DOC = {
+# Two accepted ``initialize.capabilities`` objects. The MCP SDK
+# serialises one shape for a tools-only low-level server;
+# ``eclass-mcp-server/docs/reference/wire-protocol.md`` documents a
+# different shape. Both are legitimate readings of the published task
+# material: a participant who uses the SDK ends up at the faithful
+# shape, and a participant who reads the wire-protocol reference and
+# transcribes it ends up at the documented shape. Both objects are
+# accepted; the matched one is recorded as the row's diagnostic and
+# ``CAP_DOCUMENTED`` is a lenient acceptance flagged for human review
+# at end of grading. Neither is captured from a submission.
+CAPABILITIES_FAITHFUL = {"experimental": {}, "tools": {"listChanged": False}}
+CAPABILITIES_DOCUMENTED = {
     "tools": {"listChanged": False},
     "prompts": {},
     "resources": {},

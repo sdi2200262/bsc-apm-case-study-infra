@@ -51,29 +51,46 @@ content but not a presentation order or a single layout:
   - Form 2 `get-courses-documented`: the documented-clean layout per
     `tools-reference.md` (the bare course title).
 
+The `initialize` row (C.2.1) follows the same two-form pattern, with
+byte-exact `protocolVersion` and `serverInfo` plus one of two
+accepted `capabilities` objects:
+
+- Form 1 `capabilities-faithful`: the object the MCP SDK serialises
+  for a low-level tools-only server.
+- Form 2 `capabilities-documented`: the object the project's
+  wire-protocol reference (`eclass-mcp-server/docs/reference/
+  wire-protocol.md`) literally documents.
+
+The two differ; both are accepted because a participant who uses
+the SDK ends up at the faithful shape and a participant who reads
+the wire-protocol reference and transcribes it ends up at the
+documented shape.
+
 The accepted form is recorded as the row's diagnostic. The lenient
 second form in each pair (`announcements-unordered`,
-`get-courses-documented`) prints a WARNINGS line to stdout at the
-end of grading that names the row and shows its response, prompting
-the operator to review the row and decide any manual deduction
-recorded in `results_notes.yaml`. The Python reference accepts only
-the openeclass-derived forms; the C replica accepts either, because
-both are legitimate readings of the published task materials.
-
-The `initialize` row (C.2.1) is byte-exact with two accepted
-capability forms (`capabilities-library`, `capabilities-doc`). The
-two forms differ in their `capabilities` object: the MCP SDK
-serialises one set of fields for a low-level tools-only server
-across the supported `mcp` range; the project's wire-protocol
-reference documents a different set. Both are accepted and the
-matched form is recorded.
+`get-courses-documented`, `capabilities-documented`) prints a
+WARNINGS line to stdout at the end of grading that names the row
+and shows its response, prompting the operator to review the row
+and decide any manual deduction recorded in `results_notes.yaml`.
+The Python reference accepts only the openeclass-derived forms for
+the announcement and `get_courses` rows; the C replica accepts
+either, because both are legitimate readings of the published task
+materials.
 
 The `tools/list` row (P.1.1 / C.2.2) is one byte-exact contract for
 both implementations: every tool object's `name`, `description`, and
 `inputSchema` must equal the constructed expected values byte for
-byte, order-insensitive, with no extra tools. Per-tool divergence (an
-extra schema keyword, a regenerated description, a different
-serialised shape) fails this row.
+byte, order-insensitive, with no extra tools, and every advertised
+entry itself must be a JSON object with a string `name`. Per-tool
+divergence (an extra schema keyword, a regenerated description, a
+different serialised shape, a non-object entry) fails this row.
+
+The handshake rows (P.1.1, C.2.1, C.2.2) compare against
+SDK-emitted serialisation. A failure here may reflect a participant
+defect OR an SDK behavioural change since the expected values were
+captured; the WARNINGS block surfaces handshake-row failures
+alongside the lenient acceptances so the reviewer can inspect the
+detail before judging.
 
 ## Boundary semantics
 

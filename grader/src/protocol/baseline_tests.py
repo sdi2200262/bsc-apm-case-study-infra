@@ -30,6 +30,7 @@ from ._assertion_support import (
     SERVER_START_FAIL,
     leak_after,
 )
+from .expected import ERR_NOT_LOGGED_IN, login_success
 from .matching import (
     match_exact,
     match_get_courses,
@@ -51,7 +52,7 @@ from .runner import (
 _PRINCIPAL = user(SEED, "student_courses")
 _COURSES = enrolled_courses(SEED, "student_courses")
 
-LOGIN_SUCCESS = f"Login successful! You are now logged in as {_PRINCIPAL.username}."
+LOGIN_SUCCESS = login_success(_PRINCIPAL.username)
 LOGIN_ALREADY = f"Already logged in as {_PRINCIPAL.username}"
 LOGIN_MISSING_CREDS = (
     "Error: Username and password must be provided in the .env file. "
@@ -59,9 +60,6 @@ LOGIN_MISSING_CREDS = (
 )
 LOGOUT_SUCCESS = f"Successfully logged out user {_PRINCIPAL.username}."
 LOGOUT_NO_OP = "Not logged in, nothing to do."
-COURSES_NOT_LOGGED_IN = (
-    "Error: Not logged in. Please log in first using the login tool."
-)
 AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {_PRINCIPAL.username}"
 AUTHSTATUS_NOT_LOGGED_IN = "Status: Not logged in"
 
@@ -378,10 +376,10 @@ def test_get_courses_not_logged_in(
         if server is not None:
             initialize_server(server)
             text = extract_text(call_tool(server, "get_courses", {}))
-            mode = match_exact(text, COURSES_NOT_LOGGED_IN)
+            mode = match_exact(text, ERR_NOT_LOGGED_IN)
             ok = mode is not None
             msg = "exact not-logged-in error matched" if ok else (
-                f"expected {COURSES_NOT_LOGGED_IN!r}, got {text!r}"
+                f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
             )
             detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode

@@ -14,6 +14,18 @@ validation-error response (returned to the caller in place of a real
 grader does not control, causes the gate to no-op (``None``) and the
 call passes through; the documented total behaviour for an untrusted
 participant schema.
+
+This gate applies to the C replica only and mirrors what an
+SDK-compliant client experiences against the Python reference. A
+participant whose advertised schema is stricter than the PRD (a
+``days_back`` schema with ``minimum: 0``, for instance) has stopped
+being a drop-in replacement for the Python reference: the negative-
+``days_back`` rows hit this gate before the participant's tool body
+runs, the caller receives the synthesised validation error in place
+of the PRD-mandated error string, and the row correctly bills the
+divergence. The replica's contract is to behave as the SDK does;
+choosing a schema that intercepts contract-relevant calls is the
+participant's deviation, not an instrument artefact.
 """
 
 from __future__ import annotations

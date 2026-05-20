@@ -12,13 +12,8 @@ checkout.
 
 Phase order, per implementation:
 
-- Python: dependency install (prerequisite, not scored); then the
-  resolved ``mcp`` release is asserted to be one of the releases the
-  baseline handshake rows were verified against (a read-only version
-  check; the phases that follow compare against a constructed
-  initialize and tools/list contract that is byte-faithful only for
-  those releases); then P.1 baseline, P.2 course announcements, P.3
-  general announcements.
+- Python: dependency install (prerequisite, not scored), then P.1
+  baseline, P.2 course announcements, P.3 general announcements.
 - C: C.1.1 compile (sole hard gate: on fail, skip-record every
   other C row including all ``.mem`` and C.5 rows and return).
   After compile: C.1.2/C.1.3/C.1.4 tech stack (no cascade);
@@ -181,7 +176,7 @@ def _run_python_phases(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run the Python dependency install, the mcp version check, then phases."""
+    """Run the Python dependency install, then the Python phases."""
     print("python build: uv sync")
     ok, summary, _detail = build_python.build(eclass_root)
     print(f"python build: {summary}")
@@ -192,9 +187,6 @@ def _run_python_phases(
             f"skipped: python build failed ({summary})",
         )
         return
-    print("mcp check: resolving the eclass-mcp-server mcp version")
-    preflight.assert_mcp_release_verified(eclass_root)
-    print("mcp check: resolved mcp is a verified release")
     _record_phase(scorer, "python baseline", python_baseline.run,
                   eclass_root, mock_root, debug)
     _record_phase(scorer, "python course", python_course_announcements.run,

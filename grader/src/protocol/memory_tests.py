@@ -31,7 +31,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._memcheck import VALGRIND_STDERR_TAIL_LINES, parse_leak_bytes, tail_lines
+from ._memcheck import (
+    VALGRIND_STDERR_TAIL_LINES,
+    classify_leak_verdict,
+    tail_lines,
+)
 from .expected import course_url
 from .runner import (
     BASELINE_TOOL_NAMES,
@@ -256,27 +260,11 @@ def classify_valgrind_run(
 ) -> tuple[bool, str, str]:
     """Classify one valgrind run's verdict from its exit code and streams.
 
-    A run is clean only when valgrind ran to completion and reported a
-    leak summary with zero ``definitely lost`` and zero
-    ``indirectly lost`` bytes. The classifier is pure so its decision
-    can be unit-tested without invoking valgrind itself.
-
-    The branches:
-
-    - ``returncode < 0``: valgrind (or its child) was killed by a
-      signal; the run never completed and the verdict is FAIL with
-      the signal named.
-    - end-of-report lines from valgrind's at-exit emit absent from
-      ``stderr``: valgrind did not finish printing its summary even
-      though it returned, so a ``0``-bytes parse would be a false-
-      clean. FAIL with the incomplete-report message.
-    - ``returncode == 99``: valgrind's ``--error-exitcode`` sentinel.
-      FAIL with the parsed lost counts.
-    - parsed lost counts non-zero: FAIL with the leak detail.
-    - otherwise: PASS (``returncode == 0`` or a positive non-99 exit
-      code, with a present summary parsing to zero on both lines; the
-      module docstring's contract is "exit code != 99 and both lost
-      counts zero").
+    Thin wrapper around :func:`._memcheck.classify_leak_verdict`: the
+    shared classifier decides clean-or-not from ``(returncode,
+    stderr)``; this function prefixes the scenario identifier onto
+    the reason and assembles the ``detail`` field with the bounded
+    stderr and stdout tails the multi-step report writer prints.
 
     Args:
         scenario_id: Rubric identifier prefixed onto the summary and
@@ -296,75 +284,5 @@ def classify_valgrind_run(
     if stdout:
         stdout_tail = tail_lines(stdout, VALGRIND_STDERR_TAIL_LINES)
         detail = f"{detail}\n--- stdout tail ---\n{stdout_tail}".strip()
-
-    if returncode < 0:
-        return (
-            False,
-            f"{scenario_id}: valgrind killed by signal {-returncode}",
-            detail,
-        )
-    if not _valgrind_report_complete(stderr):
-        return (
-            False,
-            f"{scenario_id}: incomplete valgrind report; "
-            "no end-of-report lines present",
-            detail,
-        )
-
-    definitely_lost = parse_leak_bytes(stderr, "definitely lost")
-    indirectly_lost = parse_leak_bytes(stderr, "indirectly lost")
-
-    if returncode == 99:
-        return (
-            False,
-            f"{scenario_id}: valgrind error exit (exit 99); "
-            f"{definitely_lost} bytes definitely lost, "
-            f"{indirectly_lost} bytes indirectly lost",
-            detail,
-        )
-    if definitely_lost != 0 or indirectly_lost != 0:
-        return (
-            False,
-            f"{scenario_id}: leaks present "
-            f"({definitely_lost} bytes definitely lost, "
-            f"{indirectly_lost} bytes indirectly lost)",
-            detail,
-        )
-    return (
-        True,
-        f"{scenario_id}: clean run, 0 bytes leaked",
-        detail,
-    )
-
-
-def _valgrind_report_complete(stderr: str) -> bool:
-    """Return whether stderr shows valgrind's at-exit emit ran to completion.
-
-    A complete valgrind report ends with at least one of three markers
-    that the at-exit handler emits unconditionally:
-
-    - the per-category ``definitely lost`` LEAK SUMMARY line (printed
-      when one or more allocations went unfreed at exit);
-    - the all-clean summary line ``All heap blocks were freed -- no
-      leaks are possible`` (printed when zero allocations went
-      unfreed, in place of the per-category breakdown);
-    - the trailing ``ERROR SUMMARY:`` line, emitted on every completed
-      run regardless of leak content.
-
-    Their joint absence indicates the run never reached its emit step
-    (signal kill, hang past timeout, ``_exit`` bypassing the handler),
-    so a parsed zero on either lost line would be a false-clean.
-
-    Args:
-        stderr: Captured valgrind stderr.
-
-    Returns:
-        ``True`` when at least one terminal marker is present,
-        ``False`` otherwise.
-    """
-    lower = stderr.lower()
-    return (
-        "definitely lost" in lower
-        or "all heap blocks were freed -- no leaks are possible" in lower
-        or "error summary:" in lower
-    )
+    clean, reason = classify_leak_verdict(returncode, stderr)
+    return clean, f"{scenario_id}: {reason}", detail

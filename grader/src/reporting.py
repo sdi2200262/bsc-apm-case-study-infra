@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .protocol.matching import (
     ANNOUNCEMENTS_UNORDERED,
+    CAP_DOCUMENTED,
     GET_COURSES_DOCUMENTED,
     LENIENT_MODES,
 )
@@ -52,7 +53,16 @@ WARNING_RESPONSE_LIMIT = 800
 _LENIENT_FORM_PHRASE = {
     ANNOUNCEMENTS_UNORDERED: "accepted via the order-insensitive announcement form",
     GET_COURSES_DOCUMENTED: "accepted via the documented-clean get_courses form",
+    CAP_DOCUMENTED: "accepted via the documented initialize.capabilities form",
 }
+
+# Rubric rows whose pass/fail is determined by SDK-emitted serialisation
+# rather than the participant's own response body. A failure here may
+# reflect a participant defect OR an SDK behavioural change since the
+# expected values were captured, so the WARNINGS block surfaces these
+# failures alongside the lenient acceptances and tells the reviewer to
+# inspect the detail.
+HANDSHAKE_ROW_IDS = frozenset({"P.1.1", "C.2.1", "C.2.2"})
 
 SECTION_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
     ("PYTHON BASELINE", PYTHON_BASELINE_TESTS),
@@ -185,7 +195,7 @@ def print_console_summary(
 
     for line in _summary_lines(scorer):
         print(line)
-    for line in _lenient_warnings(scorer):
+    for line in _warnings(scorer):
         print(line)
     print("")
     print(f"  JSON report: {paths.json_path}")
@@ -193,69 +203,107 @@ def print_console_summary(
     print("=" * 50)
 
 
-def _lenient_warnings(scorer: Scorer) -> list[str]:
-    """Build the WARNINGS block for rows accepted via a lenient form.
+def _warnings(scorer: Scorer) -> list[str]:
+    """Build the WARNINGS block for rows that need a human's eye.
 
-    A row is flagged when its recorded diagnostic is in
-    :data:`grader.src.protocol.matching.LENIENT_MODES` (the
-    order-insensitive announcement form or the documented-clean
-    ``get_courses`` form). Each warned row names its id, description,
-    the plain-words lenient form, and a bounded tail of its retained
-    response (the full response is also in the JSON report). The
-    block states that a human must review each row and decide any
-    manual sidecar deduction; the lenient form is a legitimate
-    acceptance and carries no automatic scoring effect. Returns an
-    empty list when no row used a lenient form, so no empty section
-    is printed.
+    Two row classes appear in this block:
+
+    - Lenient acceptances. A row whose recorded diagnostic is in
+      :data:`grader.src.protocol.matching.LENIENT_MODES` was accepted
+      via a second documented form rather than the faithful one. The
+      acceptance is legitimate and carries no automatic deduction,
+      but a reviewer may want to assess whether the divergence merits
+      a manual sidecar note.
+    - Handshake-row failures. A failed row in
+      :data:`HANDSHAKE_ROW_IDS` may reflect a participant defect OR
+      an SDK behavioural change since the expected values were
+      captured: the rows compare against SDK-emitted serialisation,
+      and a uniform failure across submissions points at the latter.
+
+    Each flagged row names its id, description, the reason it was
+    flagged, and a bounded tail of its retained response (the full
+    response is in the JSON report). Returns an empty list when
+    neither class has entries.
 
     Args:
         scorer: Populated scorer whose results carry the recorded
-            diagnostic per row.
+            diagnostic and pass/fail per row.
 
     Returns:
         The WARNINGS block lines, or an empty list when none apply.
     """
     defs = all_tests()
-    flagged = [
+    lenient_rows = [
         (test_id, result)
         for test_id, result in scorer.results.items()
         if result.diagnostic in LENIENT_MODES
     ]
-    if not flagged:
+    handshake_failures = [
+        (test_id, result)
+        for test_id, result in scorer.results.items()
+        if test_id in HANDSHAKE_ROW_IDS and not result.passed
+    ]
+    if not lenient_rows and not handshake_failures:
         return []
     lines: list[str] = []
     lines.append("=" * 70)
     lines.append("WARNINGS")
     lines.append("=" * 70)
-    lines.append(
-        "  These rows were accepted via a lenient form. A human must"
-    )
-    lines.append(
-        "  review each and decide any manual sidecar deduction; the"
-    )
-    lines.append(
-        "  lenient form is a legitimate accept with no automatic effect."
-    )
-    lines.append("")
-    for test_id, result in flagged:
-        definition = defs.get(test_id)
-        description = definition.description if definition else ""
-        # The ``flagged`` filter above keeps only rows whose
-        # ``diagnostic`` is in ``LENIENT_MODES`` (a frozenset of
-        # strings), so the value is non-``None`` here; binding it
-        # locally narrows the type for ``.get``.
-        diagnostic = result.diagnostic or ""
-        phrase = _LENIENT_FORM_PHRASE.get(
-            diagnostic,
-            f"accepted via a lenient form ({diagnostic})",
-        )
-        lines.append(f"  [REVIEW] {test_id}: {description}")
-        lines.append(f"           {phrase}")
+    if lenient_rows:
         lines.append(
-            f"           response: "
-            f"{_truncate(result.full_output, WARNING_RESPONSE_LIMIT)}"
+            "  These rows were accepted via a lenient form. A human must"
         )
-    lines.append("")
+        lines.append(
+            "  review each and decide any manual sidecar deduction; the"
+        )
+        lines.append(
+            "  lenient form is a legitimate accept with no automatic effect."
+        )
+        lines.append("")
+        for test_id, result in lenient_rows:
+            definition = defs.get(test_id)
+            description = definition.description if definition else ""
+            # ``lenient_rows`` keeps only rows whose ``diagnostic`` is
+            # in ``LENIENT_MODES`` (a frozenset of strings), so the
+            # value is non-``None`` here; binding it locally narrows
+            # the type for ``.get``.
+            diagnostic = result.diagnostic or ""
+            phrase = _LENIENT_FORM_PHRASE.get(
+                diagnostic,
+                f"accepted via a lenient form ({diagnostic})",
+            )
+            lines.append(f"  [REVIEW] {test_id}: {description}")
+            lines.append(f"           {phrase}")
+            lines.append(
+                f"           response: "
+                f"{_truncate(result.full_output, WARNING_RESPONSE_LIMIT)}"
+            )
+        lines.append("")
+    if handshake_failures:
+        lines.append(
+            "  These handshake rows failed. The expected values are the"
+        )
+        lines.append(
+            "  serialisation the MCP SDK emits, so a failure may be a"
+        )
+        lines.append(
+            "  participant defect or an SDK behavioural change since"
+        )
+        lines.append(
+            "  the expected values were captured. Inspect the detail"
+        )
+        lines.append("  and the JSON report before judging.")
+        lines.append("")
+        for test_id, result in handshake_failures:
+            definition = defs.get(test_id)
+            description = definition.description if definition else ""
+            lines.append(f"  [REVIEW] {test_id}: {description}")
+            lines.append(f"           {result.message}")
+            lines.append(
+                f"           response: "
+                f"{_truncate(result.full_output, WARNING_RESPONSE_LIMIT)}"
+            )
+        lines.append("")
     lines.append("=" * 70)
     return lines
 
