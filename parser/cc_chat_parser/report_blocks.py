@@ -174,7 +174,7 @@ def reliability_block(metrics: ReliabilityMetrics) -> dict[str, Any]:
 
     Only ``tool_success_rate`` is exposed here as a measurement
     leaf. The supporting ``tool_result_count`` and
-    ``tool_error_count`` values move into the diagnostics block so
+    ``tool_error_count`` values live in the diagnostics block so
     iteration over measurement metrics does not pick them up as
     hypothesis-test candidates.
     """

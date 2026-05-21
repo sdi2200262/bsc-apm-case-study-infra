@@ -162,8 +162,7 @@ class Conversation:
             ``requestId``.
         subagent_model_index: ``agentId``-keyed map of canonical model
             ids built from the sibling ``<sessionId>/subagents/``
-            directory. Empty when the directory is absent (the
-            historical submission contract excluded it).
+            directory. Empty when that directory is absent.
         steer_events: Classified user-authored enqueues with their
             delivery or abandonment outcome.
         compaction_events: ``compact_boundary`` events observed in the

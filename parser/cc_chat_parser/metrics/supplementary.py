@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from ..schema import (
+    AGENT_TOOL_NAME,
     CONTENT_BLOCK_TOOL_USE,
     RECORD_TYPE_ASSISTANT,
     RECORD_TYPE_USER,
@@ -38,8 +39,6 @@ from ..schema import (
     is_synthetic_assistant,
 )
 from ..user_prompts import is_model_invoked_skill_rendering
-
-AGENT_TOOL_NAME = "Agent"
 
 
 @dataclass(frozen=True)
@@ -71,6 +70,13 @@ def compute_supplementary_metrics(records: Iterable[Record]) -> SupplementaryMet
     aggregations; in well-formed Claude Code data the per-turn and
     full-record streams coincide for the metrics this module
     computes.
+
+    Args:
+        records: The records in scope, in any order.
+
+    Returns:
+        The subagent dispatch count, the summed subagent tool-use
+        count, and the model-invoked Skill count for the scope.
     """
     subagent_count = 0
     subagent_tool_count = 0

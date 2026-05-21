@@ -33,16 +33,20 @@ Sanitisation requires the ``CC_PARSER_SECRET`` environment
 variable (or a ``.env`` entry of the same name) to hold the
 encryption key. Use the same key for matched ``--sanitize`` and
 ``--unsanitize`` invocations.
+
+Exit codes:
+    0: Success.
+    1: Runtime failure (parse error, missing secret, write error).
+    2: Usage error (bad flags, no mode selected, missing input).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
-
-import json
 
 try:
     from dotenv import load_dotenv

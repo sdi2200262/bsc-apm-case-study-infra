@@ -60,13 +60,15 @@ from typing import Any
 
 import yaml
 
+from .errors import ParserError
+
 NOTES_FILENAME = "metrics_notes.yaml"
 METRICS_FILENAME = "metrics.json"
 
 _PATH_TOKEN = re.compile(r"\[(\d+)\]|\.?([^.\[\]]+)")
 
 
-class NotesError(Exception):
+class NotesError(ParserError):
     """Raised when a notes operation fails for a recoverable reason."""
 
 
@@ -266,56 +268,6 @@ def _read_metrics(directory: Path) -> Any:
             raise NotesError(f"{path} is not valid JSON: {error}") from error
 
 
-def _cmd_add(args: argparse.Namespace) -> int:
-    """Append one entry to the sidecar after validating its path."""
-    directory = args.metrics_dir
-    metrics = _read_metrics(directory)
-    tokens = parse_metric_path(args.path)
-    resolve_metric_path(metrics, tokens)
-    notes = load_notes(directory)
-    notes.append({"path": args.path, "note": args.note.rstrip()})
-    save_notes(directory, notes)
-    print(f"added note at {args.path} (now {len(notes)} note(s))")
-    return 0
-
-
-def _cmd_list(args: argparse.Namespace) -> int:
-    """Print every entry with its index and a freshness indicator."""
-    directory = args.metrics_dir
-    notes = load_notes(directory)
-    if not notes:
-        print(f"no notes in {directory / NOTES_FILENAME}")
-        return 0
-    metrics = _read_metrics(directory)
-    for index, entry in enumerate(notes):
-        try:
-            tokens = parse_metric_path(entry["path"])
-            resolve_metric_path(metrics, tokens)
-            status = "ok"
-        except NotesError as error:
-            status = f"stale ({error})"
-        print(f"[{index}] path={entry['path']}  status={status}")
-        for line in entry["note"].rstrip().splitlines():
-            print(f"      {line}")
-    return 0
-
-
-def _cmd_remove(args: argparse.Namespace) -> int:
-    """Remove the entry at the given index."""
-    directory = args.metrics_dir
-    notes = load_notes(directory)
-    if not notes:
-        raise NotesError(f"no notes to remove in {directory / NOTES_FILENAME}")
-    if args.index < 0 or args.index >= len(notes):
-        raise NotesError(
-            f"index {args.index} out of range; sidecar has {len(notes)} entries"
-        )
-    removed = notes.pop(args.index)
-    save_notes(directory, notes)
-    print(f"removed note at {removed['path']} (now {len(notes)} note(s))")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point.
 
@@ -400,6 +352,56 @@ def _build_parser() -> argparse.ArgumentParser:
         help="entry index as shown by `list`",
     )
     return parser
+
+
+def _cmd_add(args: argparse.Namespace) -> int:
+    """Append one entry to the sidecar after validating its path."""
+    directory = args.metrics_dir
+    metrics = _read_metrics(directory)
+    tokens = parse_metric_path(args.path)
+    resolve_metric_path(metrics, tokens)
+    notes = load_notes(directory)
+    notes.append({"path": args.path, "note": args.note.rstrip()})
+    save_notes(directory, notes)
+    print(f"added note at {args.path} (now {len(notes)} note(s))")
+    return 0
+
+
+def _cmd_list(args: argparse.Namespace) -> int:
+    """Print every entry with its index and a freshness indicator."""
+    directory = args.metrics_dir
+    notes = load_notes(directory)
+    if not notes:
+        print(f"no notes in {directory / NOTES_FILENAME}")
+        return 0
+    metrics = _read_metrics(directory)
+    for index, entry in enumerate(notes):
+        try:
+            tokens = parse_metric_path(entry["path"])
+            resolve_metric_path(metrics, tokens)
+            status = "ok"
+        except NotesError as error:
+            status = f"stale ({error})"
+        print(f"[{index}] path={entry['path']}  status={status}")
+        for line in entry["note"].rstrip().splitlines():
+            print(f"      {line}")
+    return 0
+
+
+def _cmd_remove(args: argparse.Namespace) -> int:
+    """Remove the entry at the given index."""
+    directory = args.metrics_dir
+    notes = load_notes(directory)
+    if not notes:
+        raise NotesError(f"no notes to remove in {directory / NOTES_FILENAME}")
+    if args.index < 0 or args.index >= len(notes):
+        raise NotesError(
+            f"index {args.index} out of range; sidecar has {len(notes)} entries"
+        )
+    removed = notes.pop(args.index)
+    save_notes(directory, notes)
+    print(f"removed note at {removed['path']} (now {len(notes)} note(s))")
+    return 0
 
 
 if __name__ == "__main__":

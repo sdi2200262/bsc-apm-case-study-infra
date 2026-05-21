@@ -40,6 +40,8 @@ from typing import Any
 
 import yaml
 
+from .errors import ParserError
+
 DEFAULT_RATE_TABLE_FILENAME = "rates.yaml"
 RATE_TABLE_ENV_VAR = "CC_PARSER_RATE_TABLE"
 
@@ -66,7 +68,7 @@ MODEL_ALIASES: dict[str, str] = {
 }
 
 
-class RateTableError(Exception):
+class RateTableError(ParserError):
     """Raised when the rate-table YAML file is missing fields or malformed."""
 
 
