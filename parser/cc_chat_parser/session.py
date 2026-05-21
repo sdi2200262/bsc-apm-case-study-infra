@@ -219,7 +219,7 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
     """Assemble per-conversation views for a Spec-kit submission.
 
     Spec-kit has no role concept; every conversation is labelled
-    ``unassigned-N`` for parallel structure with APM. The ratchet
+    ``conversation-N`` for parallel structure with APM. The ratchet
     walk runs over the global timestamp-sorted prompt stream so that
     a multi-conversation Spec-kit submission still produces correct
     phase assignment for prompts in any conversation; the per-record

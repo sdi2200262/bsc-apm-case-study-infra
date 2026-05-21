@@ -31,10 +31,10 @@ Code emits for typos. A user record carrying ``sourceToolUseID`` is the
 rendering of a Skill the model itself invoked via the Skill tool, which
 is model-driven content rather than a user-authored prompt.
 
-Delivered steers are still handled as before: a queued-then-delivered
-prompt reaches the model mid-turn and extends the ongoing turn rather
-than opening a new one. The set of delivered-steer dequeue records is
-provided by the loader's queue-lifecycle replay.
+A delivered steer extends the ongoing turn rather than opening a new
+one: a queued-then-delivered prompt reaches the model mid-turn. The set
+of delivered-steer dequeue records is provided by the loader's
+queue-lifecycle replay.
 
 Compact-summary user records are excluded from turn-starting
 consideration: they are Claude Code's own context-rebuild artefact, not
@@ -49,7 +49,10 @@ from typing import Iterable
 
 from .loader import STEER_FATE_DELIVERED, Conversation, SteerEvent
 from .schema import (
+    QUEUE_OP_DEQUEUE,
     RECORD_TYPE_ASSISTANT,
+    RECORD_TYPE_ATTACHMENT,
+    RECORD_TYPE_FILE_HISTORY_SNAPSHOT,
     Record,
     is_synthetic_assistant,
     queue_operation,
@@ -175,7 +178,7 @@ def _is_turn_starting(
     with no rendered body) is the ``Unknown command: ...`` error
     string Claude Code emits for a typo'd slash invocation.
 
-    Steer delivery preserves the existing semantics: when the
+    A delivered steer continues the ongoing turn: when the
     closest preceding non-attachment, non-snapshot record is a
     ``dequeue`` whose matching enqueue was resolved by the loader's
     queue-lifecycle replay, the prompt is the synthesised payload of
@@ -200,13 +203,13 @@ def _is_turn_starting(
     preceding_index = index - 1
     while preceding_index >= 0:
         preceding = all_records[preceding_index]
-        if preceding.record_type == "attachment":
+        if preceding.record_type == RECORD_TYPE_ATTACHMENT:
             preceding_index -= 1
             continue
-        if preceding.record_type == "file-history-snapshot":
+        if preceding.record_type == RECORD_TYPE_FILE_HISTORY_SNAPSHOT:
             preceding_index -= 1
             continue
-        if queue_operation(preceding) == "dequeue":
+        if queue_operation(preceding) == QUEUE_OP_DEQUEUE:
             key = (preceding.source_file, preceding.source_line_index)
             if key in matched_dequeue_keys:
                 return False

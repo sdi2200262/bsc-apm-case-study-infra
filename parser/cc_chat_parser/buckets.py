@@ -17,12 +17,10 @@ classified into exactly one of:
 * ``standard``: not a protocol input, and the text content meets
   or exceeds the configured threshold.
 
-The threshold is a tunable knob the analysis pipeline can sweep
-over to test sensitivity. The default value of 50 characters is
-intended as a starting point; an alternate value can be supplied
-via the ``--short-threshold`` flag at parse time, and a sensitivity
-sweep across candidate thresholds accompanies the primary
-analysis.
+The default threshold is 50 characters; an alternate value can be
+supplied via the ``--short-threshold`` flag at parse time. The
+candidate values for a threshold sweep are available as
+``SHORT_THRESHOLD_SWEEP``.
 """
 
 from __future__ import annotations

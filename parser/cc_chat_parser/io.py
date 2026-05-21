@@ -64,8 +64,7 @@ def is_sanitised_payload(payload: Any) -> bool:
 
     A sanitised sidecar is a JSON object with the
     ``_sanitization_meta`` key set; the raw rollout has no such
-    object at the top level (and is JSONL, not JSON). The check is
-    trivial but isolating it here keeps the calling sites readable.
+    object at the top level (and is JSONL, not JSON).
     """
     return isinstance(payload, dict) and SANITIZATION_META_KEY in payload
 

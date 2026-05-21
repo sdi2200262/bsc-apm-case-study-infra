@@ -18,10 +18,6 @@ transform if a future re-analysis needs to consult the raw text.
 The cipher uses a fresh random salt per file. Decryption requires
 the same secret used for encryption; the salt is stored alongside
 the ciphertext in the sidecar so the keystream can be regenerated.
-The construction is intentionally simple, which makes it easy to
-audit and easy to swap for a more rigorous scheme (an irreversible
-HMAC of sensitive fields only) without touching the rest of the
-pipeline.
 
 The sanitised sidecar is a JSON object with two keys:
 
@@ -51,6 +47,7 @@ from .io import (
     iter_jsonl_lines,
     read_file_text,
 )
+from .schema import SYNTHETIC_MODEL_MARKER
 
 CIPHER_MARKER = "ENC"
 SALT_LENGTH_BYTES = 16
@@ -178,7 +175,7 @@ def _collect_metadata(path: Path, plaintext: str) -> dict[str, Any]:
             message = record.get("message")
             if isinstance(message, dict):
                 model = message.get("model")
-                if isinstance(model, str) and model and model != "<synthetic>":
+                if isinstance(model, str) and model and model != SYNTHETIC_MODEL_MARKER:
                     models[model] += 1
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),

@@ -130,9 +130,9 @@ SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset(SPECKIT_PHASE_BY_COMMAND.keys
 # https://code.claude.com/docs/en/commands. The list covers every name
 # the platform ships out of the box, including bundled skills that
 # render a body to the model and local-only commands that act on the
-# CLI without sending a payload. Two recently-removed names
-# (``vim``, ``pr-comments``) are kept for transcripts captured against
-# Claude Code versions that predated their removal.
+# CLI without sending a payload. The names ``vim`` and ``pr-comments``
+# are kept for transcripts captured against Claude Code versions that
+# still shipped them.
 CLAUDE_CODE_BUILTINS: frozenset[str] = frozenset({
     "add-dir", "agents", "autofix-pr", "batch", "branch", "btw",
     "chrome", "claude-api", "clear", "color", "compact", "config",

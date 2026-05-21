@@ -59,9 +59,8 @@ in the cost figure. When a session contains one or more compaction
 events, the cost it reports is a *minimum* on the participant's
 actual API-equivalent bill; the diagnostics block surfaces the
 compaction event count so downstream analysis can flag affected
-sessions. When the session contains zero compaction events (the
-common case for case-study-sized sessions), the figure is exact for
-visible calls and the framing is moot.
+sessions. When the session contains zero compaction events, the
+figure is exact for visible calls and the framing is moot.
 """
 
 from __future__ import annotations
@@ -79,17 +78,19 @@ from ..rates import (
     RateTable,
 )
 from ..schema import (
+    AGENT_TOOL_NAME,
     CONTENT_BLOCK_TOOL_RESULT,
-    CONTENT_BLOCK_TOOL_USE,
     RECORD_TYPE_ASSISTANT,
     RECORD_TYPE_USER,
     Record,
     SYNTHETIC_MODEL_MARKER,
+    iter_agent_dispatch_blocks,
 )
 from ..session import Session
-from .cost_attribution import attribute_cost_for_records
-
-AGENT_TOOL_NAME = "Agent"
+from .cost_attribution import (
+    _token_sums_dict_from_usage,
+    attribute_cost_for_records,
+)
 
 
 @dataclass(frozen=True)
@@ -308,17 +309,6 @@ def _modal_main_model_from_records(records: list[Record]) -> str:
     return counts.most_common(1)[0][0]
 
 
-def resolve_pinned_model(session: Session) -> str:
-    """Return the modal non-synthetic ``message.model`` across the session.
-
-    Public alias for the internal helper, useful to callers that
-    need the same model identifier the cost computation uses (for
-    example, per-scope reports that share a single pinned model
-    across the session, phase, and role blocks).
-    """
-    return _resolve_pinned_model(session)
-
-
 def _sum_main_from_records(records: list[Record]) -> TokenSums:
     """Sum main-call tokens across an arbitrary record subset, deduplicated by requestId.
 
@@ -390,24 +380,10 @@ def _sum_delegated_from_records(
 def _agent_tool_use_id_index(records: list[Record]) -> dict[str, str]:
     """Return a map from Agent ``tool_use`` block id to the tool name across a record subset."""
     index: dict[str, str] = {}
-    for record in records:
-        if record.record_type != RECORD_TYPE_ASSISTANT:
-            continue
-        message = record.payload.get("message")
-        if not isinstance(message, dict):
-            continue
-        if message.get("model") == SYNTHETIC_MODEL_MARKER:
-            continue
-        for block in message.get("content", []):
-            if not isinstance(block, dict):
-                continue
-            if block.get("type") != CONTENT_BLOCK_TOOL_USE:
-                continue
-            if block.get("name") != AGENT_TOOL_NAME:
-                continue
-            tool_use_id = block.get("id")
-            if isinstance(tool_use_id, str):
-                index[tool_use_id] = AGENT_TOOL_NAME
+    for _record, block in iter_agent_dispatch_blocks(records):
+        tool_use_id = block.get("id")
+        if isinstance(tool_use_id, str):
+            index[tool_use_id] = AGENT_TOOL_NAME
     return index
 
 
@@ -434,49 +410,23 @@ def _matches_agent_dispatch(
 
 
 def _token_sums_from_usage(usage: dict[str, Any]) -> TokenSums:
-    """Extract the five-category ``TokenSums`` from one ``message.usage`` block."""
-    cache_creation = usage.get("cache_creation")
-    if isinstance(cache_creation, dict):
-        cache_5m = _int_or_zero(cache_creation.get("ephemeral_5m_input_tokens"))
-        cache_1h = _int_or_zero(cache_creation.get("ephemeral_1h_input_tokens"))
-    else:
-        cache_5m = 0
-        cache_1h = 0
-    return TokenSums(
-        input=_int_or_zero(usage.get("input_tokens")),
-        output=_int_or_zero(usage.get("output_tokens")),
-        cache_read=_int_or_zero(usage.get("cache_read_input_tokens")),
-        cache_5m=cache_5m,
-        cache_1h=cache_1h,
-    )
+    """Extract the five-category ``TokenSums`` from one ``message.usage`` block.
 
+    Thin adapter over ``cost_attribution._token_sums_dict_from_usage``:
+    the shared core does the extraction and this wrapper repackages
+    the category-keyed dict into the typed ``TokenSums`` dataclass.
 
-def _int_or_zero(value: Any) -> int:
-    """Return ``value`` when it is an int, otherwise ``0``."""
-    return value if isinstance(value, int) else 0
+    Args:
+        usage: One ``message.usage`` block.
 
-
-def _resolve_pinned_model(session: Session) -> str:
-    """Return the modal non-synthetic ``message.model`` across the session.
-
-    Sessions are expected to pin one model across both framework
-    sessions per participant; in the rare case where mid-session
-    drift produces multiple values, the modal value is taken and the
-    drift can be flagged separately by a downstream check that
-    inspects every distinct model observed.
+    Returns:
+        A ``TokenSums`` carrying the five per-category totals.
     """
-    counts: Counter[str] = Counter()
-    for view in session.views:
-        for record in view.conversation.records:
-            if record.record_type != RECORD_TYPE_ASSISTANT:
-                continue
-            message = record.payload.get("message")
-            if not isinstance(message, dict):
-                continue
-            model = message.get("model")
-            if not isinstance(model, str) or model == SYNTHETIC_MODEL_MARKER:
-                continue
-            counts[model] += 1
-    if not counts:
-        raise KeyError("session contains no non-synthetic assistant records; cannot resolve model")
-    return counts.most_common(1)[0][0]
+    sums = _token_sums_dict_from_usage(usage)
+    return TokenSums(
+        input=sums[CATEGORY_INPUT],
+        output=sums[CATEGORY_OUTPUT],
+        cache_read=sums[CATEGORY_CACHE_READ],
+        cache_5m=sums[CATEGORY_CACHE_5M],
+        cache_1h=sums[CATEGORY_CACHE_1H],
+    )

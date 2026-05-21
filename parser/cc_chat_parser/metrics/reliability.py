@@ -20,19 +20,18 @@ involved (they emit no tool calls); subagent-internal tool calls
 are not in this denominator (they live in the subagent's own
 transcript, which the parser does not consume) and therefore the
 metric reflects reliability at the surface visible to the calling
-agent. The thesis methodology declares this measurement boundary:
-internal recoveries within a delegated subagent dispatch are
+agent. Internal recoveries within a delegated subagent dispatch are
 attributed to whatever ``is_error`` flag the parent ``Agent`` tool
 result carries. The rate is reported as a supplementary descriptor:
 its value is dominated by the underlying model's tool-use
-capability rather than by framework choice, so it is not entered
-into the paired hypothesis testing.
+capability rather than by framework choice, so it is reported
+descriptively rather than hypothesis-tested.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 from ..schema import (
     CONTENT_BLOCK_TOOL_RESULT,
@@ -92,7 +91,7 @@ def compute_reliability_metrics(records: Iterable[Record]) -> ReliabilityMetrics
     )
 
 
-def _tool_result_blocks(record: Record) -> list[dict]:
+def _tool_result_blocks(record: Record) -> list[dict[str, Any]]:
     """Return every ``tool_result`` content block on a user record."""
     return [
         block

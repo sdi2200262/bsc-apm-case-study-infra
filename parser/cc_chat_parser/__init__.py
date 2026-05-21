@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
@@ -19,9 +18,9 @@ from .buckets import (
     BUCKET_STANDARD,
     BUCKETS,
     DEFAULT_SHORT_THRESHOLD,
-    SHORT_THRESHOLD_SWEEP,
     classify_bucket,
 )
+from .errors import ParserError
 from .commands import (
     FRAMEWORK_APM,
     FRAMEWORK_SPECKIT,
@@ -40,14 +39,12 @@ from .loader import (
     SteerEvent,
     discover_conversation_files,
     load_conversation,
-    load_conversations,
 )
 from .io import (
     SANITIZATION_META_KEY,
     is_sanitised_payload,
     iter_jsonl_lines,
     load_json,
-    looks_like_jsonl,
     read_file_text,
     write_file_text,
     write_json,
@@ -57,7 +54,6 @@ from .metrics.economic import (
     TokenSums,
     compute_economic_for_records,
     compute_session_economic,
-    resolve_pinned_model,
 )
 from .metrics.reliability import ReliabilityMetrics, compute_reliability_metrics
 from .metrics.supplementary import SupplementaryMetrics, compute_supplementary_metrics
@@ -95,6 +91,7 @@ __all__ = [
     "PHASE_IMPLEMENTATION",
     "PHASE_OTHER",
     "PHASE_PLANNING",
+    "ParserError",
     "ROLE_MANAGER",
     "ROLE_PLANNER",
     "ROLE_UNASSIGNED",
@@ -105,7 +102,6 @@ __all__ = [
     "ReliabilityMetrics",
     "RequestUsageIndex",
     "SANITIZATION_META_KEY",
-    "SHORT_THRESHOLD_SWEEP",
     "SchemaError",
     "Session",
     "SteerEvent",
@@ -128,16 +124,13 @@ __all__ = [
     "is_sanitised_payload",
     "iter_jsonl_lines",
     "load_conversation",
-    "load_conversations",
     "load_json",
     "load_rate_table",
     "load_session",
-    "looks_like_jsonl",
+    "rates_for_model",
     "read_file_text",
-    "resolve_pinned_model",
     "sanitise_jsonl_file",
     "unsanitise_to_text",
     "write_file_text",
     "write_json",
-    "rates_for_model",
 ]

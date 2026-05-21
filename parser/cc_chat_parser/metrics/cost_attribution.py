@@ -28,12 +28,12 @@ Two populations are priced separately:
   model. The canonical case-study submission ships a sibling
   ``<sessionId>/subagents/agent-<agentId>.jsonl`` with every main
   session JSONL and the subagent's actual ``message.model`` is read
-  from there via ``SubagentModelIndex``. Some submissions arrived
-  without those sibling files; for those dispatches the parser
-  consults ``subagents.resolve_unindexed_subagent_model`` (the
-  documented fallback resolver) which returns a deterministic model
-  for every subagent type the registry recognises and a
-  ``(haiku, opus)`` bracket for any unknown custom subagent. A
+  from there via ``SubagentModelIndex``. When the sibling files are
+  absent, the dispatch is resolved through
+  ``subagents.resolve_unindexed_subagent_model``, which returns a
+  deterministic model for every subagent type the registry
+  recognises and a ``(haiku, opus)`` bracket for any unknown custom
+  subagent. A
   bracketed dispatch's tokens contribute to per-bound cost sums
   rather than a single point figure.
 
@@ -54,39 +54,24 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..rates import (
+    CATEGORY_CACHE_1H,
+    CATEGORY_CACHE_5M,
+    CATEGORY_CACHE_READ,
+    CATEGORY_INPUT,
+    CATEGORY_OUTPUT,
     RateTable,
     canonical_model_id,
     cost_in_usd,
 )
 from ..schema import (
     CONTENT_BLOCK_TOOL_RESULT,
-    CONTENT_BLOCK_TOOL_USE,
     RECORD_TYPE_ASSISTANT,
     RECORD_TYPE_USER,
     Record,
     SYNTHETIC_MODEL_MARKER,
+    iter_agent_dispatch_blocks,
 )
 from ..subagents import resolve_unindexed_subagent_model
-
-AGENT_TOOL_NAME = "Agent"
-
-
-@dataclass(frozen=True)
-class _DispatchContext:
-    """Context for one Agent dispatch needed by the unindexed-model resolver.
-
-    Attributes:
-        subagent_type: ``input.subagent_type`` on the dispatch's
-            tool_use block, or ``None`` when the field was omitted.
-        input_model: ``input.model`` on the dispatch's tool_use
-            block, or ``None`` when the field was not set.
-        parent_main_model: The ``message.model`` of the assistant
-            record that emitted the dispatch.
-    """
-
-    subagent_type: str | None
-    input_model: str | None
-    parent_main_model: str
 
 
 @dataclass(frozen=True)
@@ -172,7 +157,7 @@ def attribute_cost_for_records(
         bracketed.
 
     Raises:
-        rates.RateTableError: When a resolved model is not present
+        RateTableError: When a resolved model is not present
             in ``rate_table.models``.
     """
     main_cost, main_dist = _cost_main_per_call(records, rate_table)
@@ -198,6 +183,24 @@ def attribute_cost_for_records(
         dispatches_resolved_without_index=delegated.dispatches_resolved_without_index,
         dispatches_bracketed=delegated.dispatches_bracketed,
     )
+
+
+@dataclass(frozen=True)
+class _DispatchContext:
+    """Context for one Agent dispatch needed by the unindexed-model resolver.
+
+    Attributes:
+        subagent_type: ``input.subagent_type`` on the dispatch's
+            tool_use block, or ``None`` when the field was omitted.
+        input_model: ``input.model`` on the dispatch's tool_use
+            block, or ``None`` when the field was not set.
+        parent_main_model: The ``message.model`` of the assistant
+            record that emitted the dispatch.
+    """
+
+    subagent_type: str | None
+    input_model: str | None
+    parent_main_model: str
 
 
 @dataclass(frozen=True)
@@ -361,39 +364,27 @@ def _build_dispatch_contexts(records: list[Record]) -> dict[str, _DispatchContex
     in the ``SubagentModelIndex``.
     """
     contexts: dict[str, _DispatchContext] = {}
-    for record in records:
-        if record.record_type != RECORD_TYPE_ASSISTANT:
+    for record, block in iter_agent_dispatch_blocks(records):
+        parent_model = record.payload["message"].get("model")
+        if not isinstance(parent_model, str):
             continue
-        message = record.payload.get("message")
-        if not isinstance(message, dict):
+        tool_use_id = block.get("id")
+        if not isinstance(tool_use_id, str):
             continue
-        parent_model = message.get("model")
-        if not isinstance(parent_model, str) or parent_model == SYNTHETIC_MODEL_MARKER:
-            continue
-        for block in message.get("content", []):
-            if not isinstance(block, dict):
-                continue
-            if block.get("type") != CONTENT_BLOCK_TOOL_USE:
-                continue
-            if block.get("name") != AGENT_TOOL_NAME:
-                continue
-            tool_use_id = block.get("id")
-            if not isinstance(tool_use_id, str):
-                continue
-            inputs = block.get("input")
-            if not isinstance(inputs, dict):
-                inputs = {}
-            subagent_type = inputs.get("subagent_type")
-            if not isinstance(subagent_type, str):
-                subagent_type = None
-            input_model = inputs.get("model")
-            if not isinstance(input_model, str):
-                input_model = None
-            contexts[tool_use_id] = _DispatchContext(
-                subagent_type=subagent_type,
-                input_model=input_model,
-                parent_main_model=parent_model,
-            )
+        inputs = block.get("input")
+        if not isinstance(inputs, dict):
+            inputs = {}
+        subagent_type = inputs.get("subagent_type")
+        if not isinstance(subagent_type, str):
+            subagent_type = None
+        input_model = inputs.get("model")
+        if not isinstance(input_model, str):
+            input_model = None
+        contexts[tool_use_id] = _DispatchContext(
+            subagent_type=subagent_type,
+            input_model=input_model,
+            parent_main_model=parent_model,
+        )
     return contexts
 
 
@@ -429,20 +420,19 @@ def _matched_dispatch_tool_use_id(
 def _token_sums_dict_from_usage(usage: dict[str, Any]) -> dict[str, int]:
     """Extract the five-category token bag from a ``message.usage`` block.
 
-    Returns a dict keyed by the ``rates.CATEGORY_*`` constants ready
-    to hand to ``cost_in_usd``. Mirrors
-    ``economic._token_sums_from_usage`` but skips the intermediate
-    ``TokenSums`` dataclass since the caller does not need
-    per-category typed access.
-    """
-    from ..rates import (
-        CATEGORY_CACHE_1H,
-        CATEGORY_CACHE_5M,
-        CATEGORY_CACHE_READ,
-        CATEGORY_INPUT,
-        CATEGORY_OUTPUT,
-    )
+    This is the shared extraction core for the economic dimension.
+    It returns a dict keyed by the ``rates.CATEGORY_*`` constants,
+    ready to hand to ``cost_in_usd``. ``economic._token_sums_from_usage``
+    adapts this dict into a ``TokenSums`` dataclass for callers that
+    need per-category typed access.
 
+    Args:
+        usage: One ``message.usage`` block. Missing or non-integer
+            fields contribute zero.
+
+    Returns:
+        A dict with one entry per ``rates.CATEGORY_*`` constant.
+    """
     cache_creation = usage.get("cache_creation")
     if isinstance(cache_creation, dict):
         cache_5m = _int_or_zero(cache_creation.get("ephemeral_5m_input_tokens"))

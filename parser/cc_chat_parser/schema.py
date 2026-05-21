@@ -39,6 +39,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from .errors import ParserError
+
 RECORD_TYPE_ASSISTANT = "assistant"
 RECORD_TYPE_USER = "user"
 RECORD_TYPE_ATTACHMENT = "attachment"
@@ -69,6 +71,8 @@ CONTENT_BLOCK_TOOL_USE = "tool_use"
 CONTENT_BLOCK_TOOL_RESULT = "tool_result"
 CONTENT_BLOCK_IMAGE = "image"
 
+AGENT_TOOL_NAME = "Agent"
+
 QUEUE_OP_ENQUEUE = "enqueue"
 QUEUE_OP_DEQUEUE = "dequeue"
 QUEUE_OP_REMOVE = "remove"
@@ -79,7 +83,7 @@ ATTACHMENT_TYPE_QUEUED_COMMAND = "queued_command"
 SYNTHETIC_MODEL_MARKER = "<synthetic>"
 
 
-class SchemaError(Exception):
+class SchemaError(ParserError):
     """Raised when a JSONL line does not match the expected record shape.
 
     Carries the source file and line index in its message so the caller
@@ -167,13 +171,12 @@ def parse_record(line: str, source_file: str, line_index: int) -> Record:
         )
     # Unknown record types are tolerated. Claude Code adds new record
     # types over time (``pr-link`` for the GitHub integration is one
-    # such addition that was not present in earlier rollouts). Any
-    # downstream helper here dispatches on the specific known types it
-    # cares about; an unknown type is naturally inert for every metric
-    # because no helper fires for it. The set of known types is kept
-    # as the constant ``KNOWN_RECORD_TYPES`` so callers that want to
-    # surface "unrecognised types observed" in diagnostics can compute
-    # the difference.
+    # such addition). Any downstream helper here dispatches on the
+    # specific known types it cares about; an unknown type is naturally
+    # inert for every metric because no helper fires for it. The set of
+    # known types is kept as the constant ``KNOWN_RECORD_TYPES`` so
+    # callers that want to surface "unrecognised types observed" in
+    # diagnostics can compute the difference.
     subtype_raw = payload.get("subtype")
     subtype = subtype_raw if isinstance(subtype_raw, str) else None
     timestamp = _parse_timestamp(payload.get("timestamp"))
@@ -367,6 +370,27 @@ def iter_assistant_tool_use_blocks(records: Iterable[Record]) -> Iterable[tuple[
         for block in assistant_content_blocks(record):
             if block.get("type") == CONTENT_BLOCK_TOOL_USE:
                 yield record, block
+
+
+def iter_agent_dispatch_blocks(records: Iterable[Record]) -> Iterable[tuple[Record, dict[str, Any]]]:
+    """Yield ``(record, block)`` pairs for every non-synthetic Agent dispatch.
+
+    An Agent dispatch is a ``tool_use`` content block whose ``name``
+    is the ``Agent`` tool. This narrows ``iter_assistant_tool_use_blocks``
+    to that single tool, keeping the synthetic-assistant exclusion.
+    Each yielded ``record`` is the assistant record that emitted the
+    dispatch (its ``message.model`` is the parent main model) and
+    each ``block`` is the dispatch's ``tool_use`` block.
+
+    Args:
+        records: The records to scan.
+
+    Yields:
+        ``(record, block)`` pairs for each Agent ``tool_use`` block.
+    """
+    for record, block in iter_assistant_tool_use_blocks(records):
+        if block.get("name") == AGENT_TOOL_NAME:
+            yield record, block
 
 
 def _parse_timestamp(value: Any) -> datetime | None:

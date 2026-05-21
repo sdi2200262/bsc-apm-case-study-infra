@@ -188,8 +188,7 @@ def is_user_authored_prompt(record: Record) -> bool:
 
     Records returned as ``False``:
 
-    * Tool-result returns and compact summaries (already excluded
-      by the existing predicates).
+    * Tool-result returns and compact summaries.
     * Local-command caveats and stdout/stderr.
     * Platform-rendered slash bodies. The marker is the anchor for
       user-paired ones; model-invoked ones are not user-authored
