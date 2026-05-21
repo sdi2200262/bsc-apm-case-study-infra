@@ -2,187 +2,367 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-Course-announcements protocol assertions.
+Course-announcements protocol assertions (P.2.x / C.3.x).
 
-Each function tests one P.2 / C.3 row from the rubric against a
-freshly-spawned MCP server. The functions take ``impl`` as the
-first parameter so the Python and C aggregators drive the same
-body through either implementation.
+Each function tests one rubric row against a freshly-spawned MCP server.
+Principal: ``student_courses``. Return shape is always a 5-tuple
+``(ok, msg, detail, leak_tuple|None, mode|None)``; ``leak_tuple`` is
+``None`` when ``memcheck=False`` and ``mode`` is the ``matching``
+mode the row was accepted under (``None`` for a failed match).
 
-Strict-tier assertions check exact equality against the documented
-error and empty-result strings. Implementation-tier and anchor-
-tier assertions exercise the per-course endpoint at varying
-``days_back`` values, asserting the seed-derived count preamble
-and the verbatim body of every in-scope announcement.
-
-The seeded test course is ``CS101`` (announcements at ``days_ago``
-0, 15, 30, 60); the empty course is ``MATH201`` (no
-announcements).
+Leak-verdict pattern: functional result is saved inside the ``with``
+block; :func:`leak_after` is called after the block exits so
+``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
 """
 
 from __future__ import annotations
 
-import json
+import datetime
 from pathlib import Path
 
-from ..seed import SEED, course_announcements_in_window
-from ._announcements_assertions import (
-    assert_count_and_bodies,
+from ..seed import SEED, course_announcements_in_window, user
+from ._assertion_support import (
+    Result5,
+    SERVER_START_FAIL,
+    leak_after,
+)
+from .expected import (
+    ERR_BAD_COURSE_URL,
+    ERR_NEGATIVE_DAYS_BACK,
+    ERR_NOT_LOGGED_IN,
+    NO_ANNOUNCEMENTS,
+    course_entries,
+    course_response,
     course_url,
 )
+from .matching import match_announcements, match_exact
 from .runner import (
+    ServerProcess,
     call_tool,
     extract_text,
     initialize_server,
     spawn_server,
-    tool_exists,
 )
 
+_PRINCIPAL = user(SEED, "student_courses")
 TOOL_NAME = "get_course_announcements"
-TEST_COURSE = "CS101"
-EMPTY_COURSE = "MATH201"
-DEFAULT_DAYS_BACK = 30
 
-ERR_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
-ERR_BAD_URL = "Error: Could not extract course code."
-ERR_BAD_DAYS = "Error: days_back must be a non-negative integer."
-EMPTY_RESULT = "No announcements found."
 
-SERVER_START_FAIL = (False, "Could not start server", "Server failed to start")
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_courses principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username,
+            "ECLASS_PASSWORD": _PRINCIPAL.password}
 
 
 def test_course_not_logged_in(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.1 / C.3.1: tool without a prior login returns the not-logged-in error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        response = call_tool(server, TOOL_NAME, {"course_url": course_url(TEST_COURSE)})
-        text = extract_text(response)
-        if text == ERR_NOT_LOGGED_IN:
-            return True, "exact not-logged-in error matched", text
-        return False, f"expected exact '{ERR_NOT_LOGGED_IN}', got: '{text}'", text
-
-
-def test_course_invalid_url(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.2 / C.3.2: an unparseable ``course_url`` returns the extract-code error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        response = call_tool(server, TOOL_NAME, {"course_url": "invalid-url"})
-        text = extract_text(response)
-        if text == ERR_BAD_URL:
-            return True, "exact extract-code error matched", text
-        return False, f"expected exact '{ERR_BAD_URL}', got: '{text}'", text
-
-
-def test_course_negative_days(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.3 / C.3.3: a negative ``days_back`` returns the positive-integer error."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        response = call_tool(
-            server,
-            TOOL_NAME,
-            {"course_url": course_url(TEST_COURSE), "days_back": -5},
-        )
-        text = extract_text(response)
-        if text == ERR_BAD_DAYS:
-            return True, "exact positive-integer error matched", text
-        return False, f"expected exact '{ERR_BAD_DAYS}', got: '{text}'", text
-
-
-def test_course_empty_course(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.4 / C.3.4: a course with no announcements returns the empty-result string."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        response = call_tool(server, TOOL_NAME, {"course_url": course_url(EMPTY_COURSE)})
-        text = extract_text(response)
-        if text == EMPTY_RESULT:
-            return True, "exact empty-result string matched", text
-        return False, f"expected exact '{EMPTY_RESULT}', got: '{text}'", text
-
-
-def test_course_days_zero(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.5 / C.3.5: ``days_back=0`` returns the day-zero announcement only."""
-    return _impl_window_test(impl, eclass_dir, mock_root, debug, days_back=0)
-
-
-def test_course_days_15(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.6 / C.3.6: ``days_back=15`` returns the two in-scope announcements."""
-    return _impl_window_test(impl, eclass_dir, mock_root, debug, days_back=15)
-
-
-def test_course_default(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.7 / C.3.7: default ``days_back`` returns the three in-scope announcements."""
-    return _impl_window_test(
-        impl, eclass_dir, mock_root, debug, days_back=DEFAULT_DAYS_BACK
-    )
-
-
-def test_course_days_60(
-    impl: str, eclass_dir: Path, mock_root: Path, debug: bool
-) -> tuple[bool, str, str]:
-    """P.2.8 / C.3.8: ``days_back=60`` returns all four announcements."""
-    return _impl_window_test(impl, eclass_dir, mock_root, debug, days_back=60)
-
-
-def _impl_window_test(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
     debug: bool,
-    days_back: int,
-) -> tuple[bool, str, str]:
-    """Drive the implementation-tier window assertion at one ``days_back`` value."""
-    with spawn_server(impl, eclass_dir, mock_root, debug) as server:
-        if server is None:
-            return SERVER_START_FAIL
-        initialize_server(server)
-        if not tool_exists(server, TOOL_NAME):
-            return _missing_tool_failure()
-        call_tool(server, "login", {})
-        args: dict = {"course_url": course_url(TEST_COURSE)}
-        if days_back != DEFAULT_DAYS_BACK:
-            args["days_back"] = days_back
-        response = call_tool(server, TOOL_NAME, args)
-        text = extract_text(response)
-        if not text:
-            return False, "empty or invalid response", json.dumps(response)
-        expected = course_announcements_in_window(SEED, TEST_COURSE, days_back)
-        ok, message = assert_count_and_bodies(text, expected)
-        return ok, message, text
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.1 / C.3.1: tool without login returns the not-logged-in error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(impl, eclass_dir, mock_root, debug, memcheck=memcheck) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            text = extract_text(call_tool(server, TOOL_NAME,
+                                          {"course_url": course_url("CS101")}))
+            mode = match_exact(text, ERR_NOT_LOGGED_IN)
+            ok = mode is not None
+            msg = "exact not-logged-in error matched" if ok else (
+                f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def _missing_tool_failure() -> tuple[bool, str, str]:
-    """Return the structured failure tuple for an unimplemented tool."""
-    return False, f"{TOOL_NAME} tool not implemented", "Tool not found in tools/list"
+def test_course_bad_url(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.2 / C.3.2: unparseable course_url returns the extract-code error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME,
+                                          {"course_url": "not-a-valid-url"}))
+            mode = match_exact(text, ERR_BAD_COURSE_URL)
+            ok = mode is not None
+            msg = "exact extract-code error matched" if ok else (
+                f"expected {ERR_BAD_COURSE_URL!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_negative_days(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.3 / C.3.3: days_back=-1 returns the non-negative-integer error."""
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {
+                "course_url": course_url("PHYS150"), "days_back": -1,
+            }))
+            mode = match_exact(text, ERR_NEGATIVE_DAYS_BACK)
+            ok = mode is not None
+            msg = "exact negative-days error matched" if ok else (
+                f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_empty_window(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.4 / C.3.4: MATH201 at default window returns the empty-window string.
+
+    MATH201's only announcement is at 45 days; the default 30-day
+    window excludes it, exercising the window filter rather than a
+    zero-announcement course.
+    """
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME,
+                                          {"course_url": course_url("MATH201")}))
+            mode = match_exact(text, NO_ANNOUNCEMENTS)
+            ok = mode is not None
+            msg = "exact empty-window string matched" if ok else (
+                f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_days_zero(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.5 / C.3.5: CS101 with days_back=0 returns the single relative-date item."""
+    assert instant is not None, "instant is required for this row"
+    anns = course_announcements_in_window(SEED, "CS101", 0)
+    expected = course_response(instant, anns)
+    expected_entries = course_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {
+                "course_url": course_url("CS101"), "days_back": 0,
+            }))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "relative-date announcement response accepted" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_zero_absolute(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.6 / C.3.6: PHYS150 with days_back=0 returns the empty-window string.
+
+    Distinguishes ``days_back=0`` honoured as a true zero window from
+    the window-filter case (P.2.4/C.3.4). PHYS150 has absolute items
+    at 2/8/30/31 days; none are within the zero window.
+    """
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {
+                "course_url": course_url("PHYS150"), "days_back": 0,
+            }))
+            mode = match_exact(text, NO_ANNOUNCEMENTS)
+            ok = mode is not None
+            msg = "exact empty-window string matched (days_back=0 honoured)" if ok else (
+                f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_default(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.7 / C.3.7: PHYS150 with days_back omitted returns the default-window response.
+
+    Default window = 30; PHYS150 has items at 2, 8, 30 (in), 31 (out).
+    Returns 3 items newest-first with absolute date strings.
+    """
+    assert instant is not None, "instant is required for this row"
+    anns = course_announcements_in_window(SEED, "PHYS150", 30)
+    expected = course_response(instant, anns)
+    expected_entries = course_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME,
+                                          {"course_url": course_url("PHYS150")}))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "default-window announcement response accepted (3 items)" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_days_10(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.8 / C.3.8: PHYS150 with days_back=10 returns 2 in-scope items."""
+    assert instant is not None, "instant is required for this row"
+    anns = course_announcements_in_window(SEED, "PHYS150", 10)
+    expected = course_response(instant, anns)
+    expected_entries = course_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {
+                "course_url": course_url("PHYS150"), "days_back": 10,
+            }))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "days_back=10 announcement response accepted (2 items)" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def test_course_days_40(
+    impl: str,
+    eclass_dir: Path,
+    mock_root: Path,
+    debug: bool,
+    instant: datetime.datetime | None = None,
+    memcheck: bool = False,
+) -> Result5:
+    """P.2.9 / C.3.9: PHYS150 with days_back=40 returns all 4 items.
+
+    Verifies that ``days_back`` above 30 is accepted and widens the
+    window without a ``[0,30]`` cap (unlike the general tool).
+    """
+    assert instant is not None, "instant is required for this row"
+    anns = course_announcements_in_window(SEED, "PHYS150", 40)
+    expected = course_response(instant, anns)
+    expected_entries = course_entries(instant, anns)
+    srv: ServerProcess | None = None
+    ok, msg, detail = SERVER_START_FAIL
+    mode: str | None = None
+    with spawn_server(
+        impl, eclass_dir, mock_root, debug,
+        env_overrides=_creds(), memcheck=memcheck,
+    ) as server:
+        srv = server
+        if server is not None:
+            initialize_server(server)
+            call_tool(server, "login", {})
+            text = extract_text(call_tool(server, TOOL_NAME, {
+                "course_url": course_url("PHYS150"), "days_back": 40,
+            }))
+            mode = match_announcements(text, expected, expected_entries, len(anns))
+            ok = mode is not None
+            msg = "days_back=40 announcement response accepted (4 items)" if ok else (
+                f"expected constructed response, got {text[:200]!r}"
+            )
+            detail = text
+    return ok, msg, detail, leak_after(srv, memcheck), mode

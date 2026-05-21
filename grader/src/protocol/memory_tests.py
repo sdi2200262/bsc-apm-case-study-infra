@@ -2,40 +2,41 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-Memory-leak scenarios for the C replica.
+Multi-step memory-leak scenarios for the C replica (C.5.1 through C.5.3).
 
-The C replica is exercised under
-``valgrind --leak-check=full --error-exitcode=99`` driven by a
-scripted JSON-RPC sequence. Each scenario is a tuple of tool
-calls; the runner assembles the JSON-RPC frames, pipes them on
-stdin, parses the leak summary on stderr, and asserts that
-``definitely lost`` and ``indirectly lost`` are both zero bytes
-and that valgrind exits cleanly.
+Each scenario drives the C binary once under valgrind
+``--leak-check=full --show-leak-kinds=all --track-origins=yes
+--error-exitcode=99`` with a scripted JSON-RPC sequence piped on
+stdin. The runner parses the valgrind leak summary on stderr and
+asserts that ``definitely lost`` and ``indirectly lost`` are both
+zero bytes and that valgrind exits cleanly (exit code != 99).
 
-The four scenarios cover, in order, the login lifecycle, the
-course-announcement tool across argument variations, the general-
-announcement tool across argument variations, and a full-session
-integration that exercises both feature tools across two login
-sessions.
+All three scenarios authenticate as ``student_courses``; content of
+announcement responses is not asserted in these multi-step runs
+(leak hygiene and responsiveness only).
 
-Each scenario carries a ``gates_on`` tuple naming the rubric
-rows whose call shapes it exercises. The phase aggregator
-(``c_memory.run``) skips a scenario whose gates have not all
-passed when the memory phase runs, because valgrind on a feature
-path the participant did not implement correctly verifies leaks
-on a short-circuited error path rather than on the path the
-rubric awards points for.
+Scenario gate logic: a scenario whose ``gates_on`` are not all in
+the caller-supplied ``passed_tests`` set is skipped (recorded as a
+zero-point fail) because valgrind on a feature path the participant
+did not implement correctly verifies leaks on a short-circuited
+error path, not the path the rubric awards points for.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from ._memcheck import (
+    VALGRIND_STDERR_TAIL_LINES,
+    classify_leak_verdict,
+    tail_lines,
+)
+from .expected import course_url
 from .runner import (
     BASELINE_TOOL_NAMES,
     CLIENT_NAME,
@@ -43,30 +44,34 @@ from .runner import (
     PROTOCOL_VERSION,
     mcp_server_env,
 )
-from ._announcements_assertions import course_url
+from ..seed import SEED, user
 
 VALGRIND_TIMEOUT_SECONDS = 120
-VALGRIND_LEAK_OK_EXIT = 0
 
+_PRINCIPAL = user(SEED, "student_courses")
 
-ToolCall = tuple[str, dict]
+ToolCall = tuple[str, dict[str, Any]]
+
+# Sentinel used in a scenario's call sequence to issue a bare
+# ``tools/list`` request rather than a ``tools/call``. The handshake
+# already emits ``initialize``; this lets a scenario list the tool
+# surface as an explicit step.
+TOOLS_LIST_METHOD = "tools/list"
 
 
 @dataclass(frozen=True)
 class MemoryScenario:
-    """One C.5 scenario.
+    """One C.5 multi-step scenario.
 
     Attributes:
-        scenario_id: Rubric identifier (``"C.5.1"``, etc.) the
-            scenario records its result under.
+        scenario_id: Rubric identifier (``"C.5.1"``, etc.).
         description: Short description for the report writer.
-        calls: Ordered tool-call sequence the scenario drives,
-            after the initialize and initialized handshake.
-        gates_on: Rubric identifiers whose call shapes the
-            scenario exercises. The phase aggregator skips the
-            scenario unless every named row passed; a scenario
-            whose gates are not met records as a zero-point skip
-            with a structured message naming the missing rows.
+        calls: Ordered request sequence after the initialize and
+            initialized handshake; the :data:`TOOLS_LIST_METHOD`
+            sentinel issues a ``tools/list``, every other entry a
+            ``tools/call``.
+        gates_on: Rubric identifiers whose call shapes the scenario
+            exercises; all must have passed for the scenario to run.
     """
 
     scenario_id: str
@@ -78,75 +83,47 @@ class MemoryScenario:
 SCENARIOS: tuple[MemoryScenario, ...] = (
     MemoryScenario(
         scenario_id="C.5.1",
-        description="login lifecycle",
+        description="full tool surface across one session",
         calls=(
+            (TOOLS_LIST_METHOD, {}),
             ("login", {}),
-            ("login", {}),
+            ("authstatus", {}),
+            ("get_courses", {}),
+            ("get_course_announcements", {"course_url": course_url("PHYS150")}),
+            ("get_general_announcements", {}),
             ("logout", {}),
-            ("logout", {}),
-            ("login", {}),
-            ("logout", {}),
+            ("authstatus", {}),
         ),
-        gates_on=("C.2.2", "C.2.3", "C.2.5", "C.2.6"),
+        gates_on=(
+            "C.2.4", "C.2.5", "C.2.8", "C.3.7", "C.4.7", "C.2.9", "C.2.10",
+        ),
     ),
     MemoryScenario(
         scenario_id="C.5.2",
-        description="course-announcement variations",
+        description="session-state replacement and idempotent teardown",
         calls=(
             ("login", {}),
-            ("get_courses", {}),
-            ("get_course_announcements", {"course_url": course_url("CS101")}),
-            ("get_course_announcements", {"course_url": course_url("MATH201")}),
-            ("get_course_announcements", {"course_url": course_url("CS101"), "days_back": 0}),
-            ("get_course_announcements", {"course_url": course_url("CS101"), "days_back": 60}),
+            ("login", {}),
             ("logout", {}),
+            ("logout", {}),
+            ("authstatus", {}),
         ),
-        gates_on=("C.2.2", "C.2.5", "C.2.7", "C.3.4", "C.3.5", "C.3.7", "C.3.8"),
+        gates_on=(
+            "C.2.4", "C.2.6", "C.2.9", "C.2.12", "C.2.3",
+        ),
     ),
     MemoryScenario(
         scenario_id="C.5.3",
-        description="general-announcement variations",
+        description="baseline tool surface only, decoupled from announcement tools",
         calls=(
             ("login", {}),
-            ("get_courses", {}),
-            ("get_general_announcements", {}),
-            ("get_general_announcements", {"days_back": 0}),
-            ("get_general_announcements", {"days_back": 15}),
-            ("logout", {}),
-        ),
-        gates_on=("C.2.2", "C.2.5", "C.2.7", "C.4.4", "C.4.5", "C.4.6"),
-    ),
-    MemoryScenario(
-        scenario_id="C.5.4",
-        description="full lifecycle integration with both features",
-        calls=(
-            ("login", {}),
-            ("get_courses", {}),
-            ("get_course_announcements", {"course_url": course_url("CS101")}),
-            ("get_course_announcements", {"course_url": course_url("CS101"), "days_back": 60}),
-            ("get_course_announcements", {"course_url": course_url("MATH201")}),
-            ("get_general_announcements", {}),
-            ("get_general_announcements", {"days_back": 15}),
-            ("get_general_announcements", {"days_back": 0}),
             ("authstatus", {}),
+            ("get_courses", {}),
             ("logout", {}),
-            ("login", {}),
-            ("get_course_announcements", {"course_url": course_url("CS101"), "days_back": 0}),
-            ("get_general_announcements", {"days_back": 15}),
-            ("logout", {}),
+            ("authstatus", {}),
         ),
         gates_on=(
-            "C.2.2",
-            "C.2.5",
-            "C.2.7",
-            "C.2.9",
-            "C.3.4",
-            "C.3.5",
-            "C.3.7",
-            "C.3.8",
-            "C.4.4",
-            "C.4.5",
-            "C.4.6",
+            "C.2.4", "C.2.5", "C.2.8", "C.2.9", "C.2.10",
         ),
     ),
 )
@@ -159,16 +136,13 @@ def run_scenario(
 
     Args:
         scenario: Scenario to drive.
-        eclass_root: Resolved path to the eclass-mcp-server checkout
-            (the C replica lives at ``c-replica/`` beneath it).
-        mock_root: Resolved path to the testing environment install
-            whose env vars the C binary reads.
+        eclass_root: Resolved path to the eclass-mcp-server checkout.
+        mock_root: Resolved testing environment install path.
 
     Returns:
         Tuple of ``(ok, summary, detail)``. ``ok`` is ``True`` only
-        when valgrind exits cleanly and both ``definitely lost`` and
-        ``indirectly lost`` report zero bytes; ``detail`` carries
-        the captured valgrind stderr on failure.
+        when valgrind exits cleanly and both lost counts are zero;
+        ``detail`` carries the captured valgrind stderr.
     """
     eclass_root = Path(eclass_root).resolve()
     mock_root = Path(mock_root).resolve()
@@ -184,16 +158,24 @@ def run_scenario(
 
     try:
         subprocess.run(["valgrind", "--version"], capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except FileNotFoundError:
         return (
             False,
-            f"{scenario.scenario_id}: valgrind not on PATH",
-            "valgrind not on PATH",
+            f"{scenario.scenario_id}: valgrind not found on PATH",
+            "valgrind not found on PATH",
+        )
+    except subprocess.CalledProcessError as error:
+        return (
+            False,
+            f"{scenario.scenario_id}: valgrind --version returned non-zero",
+            f"valgrind --version returned exit {error.returncode}",
         )
 
     sequence = _build_sequence(scenario.calls)
     env = os.environ.copy()
     env.update(mcp_server_env(mock_root))
+    env["ECLASS_USERNAME"] = _PRINCIPAL.username
+    env["ECLASS_PASSWORD"] = _PRINCIPAL.password
 
     try:
         result = subprocess.run(
@@ -219,58 +201,45 @@ def run_scenario(
             f"valgrind timed out after {VALGRIND_TIMEOUT_SECONDS} seconds",
         )
 
-    output = result.stderr
-    definitely_lost = _parse_leak(output, "definitely lost")
-    indirectly_lost = _parse_leak(output, "indirectly lost")
-
-    if result.returncode != VALGRIND_LEAK_OK_EXIT:
-        return (
-            False,
-            f"{scenario.scenario_id}: valgrind exit {result.returncode} "
-            f"({definitely_lost} bytes definitely lost, "
-            f"{indirectly_lost} bytes indirectly lost)",
-            output,
-        )
-    if definitely_lost != 0 or indirectly_lost != 0:
-        return (
-            False,
-            f"{scenario.scenario_id}: leaks present "
-            f"({definitely_lost} bytes definitely lost, "
-            f"{indirectly_lost} bytes indirectly lost)",
-            output,
-        )
-    return (
-        True,
-        f"{scenario.scenario_id}: clean run, 0 bytes leaked",
-        output,
+    return classify_valgrind_run(
+        scenario.scenario_id, result.returncode, result.stderr, result.stdout
     )
 
 
 def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
     """Return the newline-framed JSON-RPC sequence for a scenario.
 
-    The sequence opens with ``initialize`` and the
-    ``notifications/initialized`` notification, then issues one
-    ``tools/call`` request per entry in ``calls``. Baseline tools
-    receive the ``random_string`` parameter the upstream reference
-    declares so the C replica's input contract matches Python's.
+    Opens with ``initialize`` and the ``notifications/initialized``
+    notification, then issues one request per entry in ``calls``: a
+    ``tools/list`` request for the :data:`TOOLS_LIST_METHOD`
+    sentinel, otherwise a ``tools/call``. Baseline tools receive the
+    ``random_string`` parameter.
     """
-    frames: list[str] = []
-    frames.append(json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
-        },
-    }))
-    frames.append(json.dumps({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized",
-    }))
+    frames: list[str] = [
+        json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
+            },
+        }),
+        json.dumps({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+        }),
+    ]
     for index, (tool, args) in enumerate(calls, start=2):
+        if tool == TOOLS_LIST_METHOD:
+            frames.append(json.dumps({
+                "jsonrpc": "2.0",
+                "id": index,
+                "method": "tools/list",
+                "params": {},
+            }))
+            continue
         merged = dict(args)
         if tool in BASELINE_TOOL_NAMES and "random_string" not in merged:
             merged["random_string"] = "test"
@@ -283,20 +252,37 @@ def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
     return "\n".join(frames) + "\n"
 
 
-def _parse_leak(output: str, leak_type: str) -> int:
-    """Return the byte count for ``leak_type`` from valgrind stderr.
+def classify_valgrind_run(
+    scenario_id: str,
+    returncode: int,
+    stderr: str,
+    stdout: str = "",
+) -> tuple[bool, str, str]:
+    """Classify one valgrind run's verdict from its exit code and streams.
+
+    Thin wrapper around :func:`._memcheck.classify_leak_verdict`: the
+    shared classifier decides clean-or-not from ``(returncode,
+    stderr)``; this function prefixes the scenario identifier onto
+    the reason and assembles the ``detail`` field with the bounded
+    stderr and stdout tails the multi-step report writer prints.
 
     Args:
-        output: Captured valgrind stderr.
-        leak_type: One of ``"definitely lost"``, ``"indirectly lost"``,
-            ``"possibly lost"``, ``"still reachable"``.
+        scenario_id: Rubric identifier prefixed onto the summary and
+            detail lines.
+        returncode: ``result.returncode`` from the valgrind run; can
+            be negative when the run was killed by a signal.
+        stderr: Captured valgrind stderr (carries the leak summary).
+        stdout: Captured server stdout; included as a bounded tail in
+            the detail field for diagnostic context.
 
     Returns:
-        The byte count for that leak category, or ``0`` when the
-        line is absent.
+        ``(ok, summary, detail)`` where ``detail`` carries the
+        bounded valgrind stderr tail and, when non-empty, the bounded
+        server stdout tail.
     """
-    pattern = rf"{leak_type}:\s*([\d,]+)\s*bytes"
-    match = re.search(pattern, output, re.IGNORECASE)
-    if match:
-        return int(match.group(1).replace(",", ""))
-    return 0
+    detail = tail_lines(stderr, VALGRIND_STDERR_TAIL_LINES)
+    if stdout:
+        stdout_tail = tail_lines(stdout, VALGRIND_STDERR_TAIL_LINES)
+        detail = f"{detail}\n--- stdout tail ---\n{stdout_tail}".strip()
+    clean, reason = classify_leak_verdict(returncode, stderr)
+    return clean, f"{scenario_id}: {reason}", detail

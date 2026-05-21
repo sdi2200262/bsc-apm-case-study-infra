@@ -2,19 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """
-C configuration-surface phase aggregator: C.1.3 and C.1.4.
+C configuration-surface phase aggregator: C.1.5 and C.1.6.
 
-Runs the two configuration-surface probes in order (env-var, then
-verbatim documented ``.env``) and, regardless of either outcome,
-leaves the eclass tree dual-provisioned for the downstream
-functional and memory suites: the testing environment's own
-``.env`` and ``certs/`` copied verbatim into the checkout, with
-``mcp_server_env`` (the ``ECLASS_*`` values plus the TLS trust
-anchors) additionally injected on every spawn by the runner. A
-server is therefore measured by C.2 through C.5 whichever surface
-it reads, and a C.1.3 or C.1.4 failure does not gate the suite;
-only a C.1.1 compile failure cascade-skips. Restoring here keeps
-the surface decoupling local to this module.
+Runs the two positive configuration-surface probes in order
+(env-var, then verbatim documented ``.env``) and, regardless of
+either outcome, leaves the eclass tree dual-provisioned for the
+downstream functional and memory suites by restoring the verbatim
+``.env`` and ``certs/`` in ``finally``. A surface probe failure does
+not gate the suite; only a C.1.1 compile failure cascade-skips.
 """
 
 from __future__ import annotations
@@ -27,18 +22,8 @@ from . import config_surface
 
 def run(
     eclass_dir: Path, mock_root: Path, debug: bool = False
-) -> dict[str, tuple[bool, str, str]]:
+) -> dict[str, tuple[bool, str, str, str | None]]:
     """Run the two configuration-surface probes and restore provisioning.
-
-    The env-var probe runs first (it removes ``.env`` for its
-    isolation), then the verbatim-``.env`` probe (it copies the
-    testing environment's ``.env`` and ``certs/`` in). After both,
-    the verbatim ``.env`` and ``certs/`` are restored
-    unconditionally so the dual-provisioned on-disk state holds for
-    the functional and memory phases even when a probe failed or
-    raised. The per-spawn ``ECLASS_*``-plus-TLS injection is the
-    runner's responsibility and happens for every spawned server
-    regardless.
 
     Args:
         eclass_dir: Resolved eclass-mcp-server checkout path.
@@ -46,17 +31,21 @@ def run(
         debug: When ``True``, server stdio is echoed to stdout.
 
     Returns:
-        Mapping of rubric identifier to ``(passed, summary, detail)``
-        for C.1.3 and C.1.4.
+        Mapping of rubric identifier to ``(passed, summary, detail,
+        mode)`` for ``C.1.5`` and ``C.1.6``. ``mode`` is ``None``: a
+        configuration-surface probe is a login-succeeded verdict,
+        not a string match.
     """
-    results: dict[str, tuple[bool, str, str]] = {}
+    results: dict[str, tuple[bool, str, str, str | None]] = {}
     try:
-        results["C.1.3"] = config_surface.test_env_var_config_surface(
+        env_ok, env_msg, env_detail = config_surface.test_env_var_config_surface(
             eclass_dir, mock_root, debug
         )
-        results["C.1.4"] = config_surface.test_dotenv_config_surface(
+        results["C.1.5"] = (env_ok, env_msg, env_detail, None)
+        dot_ok, dot_msg, dot_detail = config_surface.test_dotenv_config_surface(
             eclass_dir, mock_root, debug
         )
+        results["C.1.6"] = (dot_ok, dot_msg, dot_detail, None)
     finally:
         provision(eclass_dir, mock_root)
     return results

@@ -9,12 +9,10 @@ per-test pass-or-fail status, points awarded against the rubric, and
 diagnostic messages. This module reads such an artifact and prints
 either a one-shot summary (with optional flags for category breakdown
 and per-test detail) or an interactive menu for browsing test
-results during development and grading review.
+results.
 
-Counterpart to ``cc_chat_parser/inspect.py``, which renders the
-parser's metrics artifact in the same style; the two utilities share
-no code but share a single mental model: an inspect tool that lives
-next to the producer of the artifact it inspects.
+A sibling utility under ``../parser/`` renders the parser's metrics
+artifact in the same style.
 
 Invocation:
     ./inspect.py <results.json>                  # interactive
@@ -144,9 +142,10 @@ def print_summary(data: dict[str, Any]) -> None:
                 continue
             print(f"  {target.upper()}:")
             for cat, cat_scores in sorted(cats.items()):
-                # Tuples in the JSON written by Scorer.to_dict round-trip
-                # as two-element lists; the dict branch tolerates older
-                # results files that wrote {"score","max"} mappings.
+                # The category scores round-trip from JSON as a
+                # [score, max] list; the dict branch also accepts a
+                # {"score": ..., "max": ...} mapping written by a
+                # results file in that alternative shape.
                 if isinstance(cat_scores, list) and len(cat_scores) == 2:
                     print(f"    {cat:15s} {cat_scores[0]:2d}/{cat_scores[1]:2d}")
                 elif isinstance(cat_scores, dict):
@@ -160,7 +159,7 @@ def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False)
 
     Args:
         test_id: Test identifier, used as the key in the results
-            mapping (e.g. ``"P.1.4"``, ``"C.5.4"``).
+            mapping (e.g. ``"P.1.4"``, ``"C.5.3"``).
         test_data: Test result data for ``test_id``.
         show_full: When ``True``, prints the complete ``full_output``
             field with line wrapping; otherwise prints only the short
@@ -329,15 +328,16 @@ Usage Examples:
     ./inspect.py results.json --list-categories
 
   Pipe full output for processing:
-    ./inspect.py results.json -o C.5.4 | python3 -m json.tool
+    ./inspect.py results.json -o C.5.3 | python3 -m json.tool
 
 Test IDs:
-  Python: P.1.1 to P.1.10, P.2.1 to P.2.8, P.3.1 to P.3.6
-  C:      C.1.1, C.1.2, C.2.1 to C.2.10, C.3.1 to C.3.8,
-          C.4.1 to C.4.6, C.5.1 to C.5.4
+  Python: P.1.1 to P.1.11, P.2.1 to P.2.9, P.3.1 to P.3.7
+  C:      C.1.1 to C.1.6, C.2.1 to C.2.12, C.3.1 to C.3.9,
+          C.4.1 to C.4.7, C.5.1 to C.5.3
+  C .mem: <C.2.3..C.2.12>.mem, <C.3.1..C.3.9>.mem, <C.4.1..C.4.7>.mem
 
 Categories:
-  protocol, course, general, build, stack, memory
+  protocol, course, general, build, stack, config, memory
         """,
     )
 
@@ -354,7 +354,7 @@ Categories:
     parser.add_argument(
         "--test", "-t",
         metavar="ID",
-        help="Show details for a specific test ID (e.g., P.1.4, P.2.5, C.5.4)",
+        help="Show details for a specific test ID (e.g., P.1.4, P.2.5, C.5.3)",
     )
     parser.add_argument(
         "--failed", "-f",
@@ -386,7 +386,14 @@ Categories:
 
 
 def main() -> int:
-    """Entry point. Returns ``0`` on success, ``1`` on input errors."""
+    """Run the CLI: parse args, load the results file, dispatch the action.
+
+    Returns:
+        Process exit code: ``0`` on success or any informational
+        path (summary, list, filter, full output, interactive);
+        ``1`` when the results file is missing, invalid JSON,
+        unreadable, or names a test ID not present in the file.
+    """
     parser = create_parser()
     args = parser.parse_args()
 

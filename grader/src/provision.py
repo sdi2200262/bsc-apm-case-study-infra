@@ -12,18 +12,35 @@ avoids a ``git apply --check`` collision with a pre-created
 ``certs/``) and resets per submission so no wiring leaks between
 runs. The ``ECLASS_*`` env-var surface parses the same ``.env``
 (:mod:`grader.src.env_file`), so both config surfaces carry
-identical values by construction.
+identical values by construction. When a behavioural scenario
+switches principal, the principal is projected onto both surfaces
+together (:func:`set_dotenv_credentials` for the on-disk ``.env``,
+env-var overrides for the other), so that invariant holds across
+the switch and a server reading either surface authenticates as
+the scenario's principal.
 """
 
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Callable
+
+from .errors import GraderError
 
 DOTENV_FILENAME = ".env"
 CERTS_DIRNAME = "certs"
 SSO_CERT_FILENAME = "sso_cert.pem"
 CREDENTIAL_KEYS = ("ECLASS_USERNAME", "ECLASS_PASSWORD")
+
+
+class ProvisioningError(GraderError):
+    """Raised when dev-environment provisioning cannot complete.
+
+    Triggered when the testing environment install is incomplete
+    (its ``.env`` or its ``certs/`` is absent); the message names
+    the missing path and the operator action that resolves it.
+    """
 
 
 def preflight_provisioning(mock_root: Path) -> None:
@@ -129,18 +146,40 @@ def blank_dotenv_credentials(eclass_root: Path) -> None:
         FileNotFoundError: When the checkout has no ``.env``; a
             verbatim copy must be written before blanking.
     """
-    eclass_root = Path(eclass_root).resolve()
-    dotenv_path = eclass_root / DOTENV_FILENAME
-    rewritten: list[str] = []
-    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key = stripped.partition("=")[0].strip()
-            if key in CREDENTIAL_KEYS:
-                rewritten.append(f"{key}=")
-                continue
-        rewritten.append(line)
-    dotenv_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+    _rewrite_credentials(eclass_root, lambda _key: "")
+
+
+def set_dotenv_credentials(
+    eclass_root: Path, username: str, password: str
+) -> None:
+    """Project a principal onto the checkout's ``.env`` credentials, in place.
+
+    Rewrites only the two :data:`CREDENTIAL_KEYS` lines to the given
+    principal; every other line (comments, ordering, all
+    non-credential keys) is preserved verbatim, so the dotenv
+    surface stays otherwise valid. A server that reads only the
+    on-disk ``.env`` then authenticates as the same principal the
+    env-var surface carries, so the behavioural suites test
+    behaviour rather than the participant's credential-surface
+    choice.
+
+    Args:
+        eclass_root: Resolved patched eclass-mcp-server checkout path.
+        username: Value written for ``ECLASS_USERNAME``.
+        password: Value written for ``ECLASS_PASSWORD``.
+
+    Raises:
+        FileNotFoundError: When the checkout has no ``.env``. The
+            verbatim ``.env`` is written by :func:`provision` before
+            any principal is projected, so a missing file is a real
+            precondition failure surfaced loudly, not a silent
+            fallback.
+    """
+    replacements = {
+        "ECLASS_USERNAME": username,
+        "ECLASS_PASSWORD": password,
+    }
+    _rewrite_credentials(eclass_root, replacements.__getitem__)
 
 
 def reset_provisioning(eclass_root: Path) -> None:
@@ -159,10 +198,39 @@ def reset_provisioning(eclass_root: Path) -> None:
     shutil.rmtree(certs_dir, ignore_errors=True)
 
 
-class ProvisioningError(Exception):
-    """Raised when dev-environment provisioning cannot complete.
+def _rewrite_credentials(
+    eclass_root: Path, value_for: Callable[[str], str]
+) -> None:
+    """Rewrite the :data:`CREDENTIAL_KEYS` lines of the checkout's ``.env``.
 
-    Triggered when the testing environment install is incomplete
-    (its ``.env`` or its ``certs/`` is absent); the message names
-    the missing path and the operator action that resolves it.
+    Walks the file line by line and replaces only the lines whose key
+    is in :data:`CREDENTIAL_KEYS`; every other line (comments, blank
+    lines, ordering, all non-credential keys) is preserved verbatim.
+    The new value for a matched key is supplied by ``value_for``,
+    which lets the blanking and principal-projection callers share
+    one loop without touching one another's docstrings.
+
+    Args:
+        eclass_root: Resolved patched eclass-mcp-server checkout path.
+        value_for: Callable mapping a credential key to the value
+            written after the ``=``.
+
+    Raises:
+        FileNotFoundError: When the checkout has no ``.env``; the
+            verbatim ``.env`` must be written by :func:`provision`
+            before any rewrite.
     """
+    eclass_root = Path(eclass_root).resolve()
+    dotenv_path = eclass_root / DOTENV_FILENAME
+    rewritten: list[str] = []
+    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.partition("=")[0].strip()
+            if key in CREDENTIAL_KEYS:
+                rewritten.append(f"{key}={value_for(key)}")
+                continue
+        rewritten.append(line)
+    dotenv_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+
+

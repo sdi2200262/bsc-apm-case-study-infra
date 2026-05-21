@@ -4,51 +4,102 @@
 """
 Seed-data loader for grader assertions.
 
-The testing environment's seed values are the ground truth every
-implementation-tier assertion checks against: which courses are
-enrolled, which announcements each course carries, which admin
-announcements are posted, and at what relative ages. The grader
-ships a pinned snapshot of the env package's ``seed/seed.yaml`` at
-``grader/seed.yaml``; this module loads that file at import time
-and exposes the values plus a few derived helpers.
+Loads the grading environment's ``grader-env/seed/seed.yaml``, which
+defines the users, courses, and announcements the rubric assertions
+are built from. The grader and the grading environment ship in the
+same repository, so this module reads the seed file directly rather
+than a transcribed copy.
 
-Boundary semantics: ``days_back=N`` is inclusive against a
-calendar-based cutoff at midnight of ``today - N days``. An
-announcement at ``days_ago=K`` is in scope iff ``K <= N``.
+The seed carries two users with disjoint enrolment. The grader
+authenticates as one of them per scenario group (the course and
+baseline suites as ``student_courses``, the general suite as
+``student_general``); a scenario selects its principal and the
+loader answers per-principal enrolment and window queries.
 
-The general-announcement endpoint additionally enforces a hardcoded
-30-day backend floor; the helpers here clamp the window to 30 so a
-caller asking for ``days_back=60`` on the general side still sees
-only the announcements within 30.
+Boundary semantics: ``days_back=N`` is an inclusive filter on
+``days_ago``. An announcement at ``days_ago=K`` is in scope iff
+``K <= N``. The per-course endpoint applies no backend date floor,
+matching openeclass, whose per-course announcements page filters on
+visibility only, so the course helper is a straight ``K <= N``.
+
+The general endpoint is different. openeclass builds the general
+view from a portfolio query that floors every row at
+``date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)``, a MySQL
+calendar-month subtraction whose span is 28 to 31 days depending on
+the month, not a flat 30. The general helper models that floor as a
+flat ``GENERAL_BACKEND_FLOOR_DAYS``-day clamp. That is a deliberate
+approximation, exact for this seed because the general view's union
+(the system-wide announcements plus the general principal's
+enrolled-course announcements) has its oldest member at 20 days,
+inside even the shortest 28-day (February) calendar month, so the
+flat clamp and the calendar-month floor select the same set for
+every seed-apply date. The approximation holds only while the
+oldest general-union announcement stays below the 28-to-31-day
+band; a seed that places a general-union announcement in that band
+would make this model and openeclass diverge, and the helper would
+then have to implement the calendar-month floor itself.
+
+Ordering: announcements are ordered newest first, i.e. by
+``days_ago`` ascending. The general endpoint orders the union of
+system-wide and enrolled-course announcements newest first across
+both sources, not source-blocked.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
-DEFAULT_SEED_FILENAME = "seed.yaml"
+# Flat-day stand-in for openeclass's calendar-month general-view
+# floor (``DATE_SUB(CURDATE(), INTERVAL 1 MONTH)``, 28 to 31 days).
+# Exact for this seed only; see the module docstring for the
+# invariant that keeps it exact and when it must be replaced.
 GENERAL_BACKEND_FLOOR_DAYS = 30
+
+# The grading environment's seed lives beside the grader in the same
+# repository: <infra>/grader-env/seed/seed.yaml, three parents up
+# from this file (grader/src/seed.py -> grader/src -> grader -> infra).
+_GRADER_ENV_SEED = (
+    Path(__file__).resolve().parent.parent.parent
+    / "grader-env"
+    / "seed"
+    / "seed.yaml"
+)
 
 
 class SeedError(Exception):
-    """Raised when ``seed.yaml`` is missing, malformed, or incomplete."""
+    """Raised when the seed file is missing, malformed, or incomplete."""
+
+
+@dataclass(frozen=True)
+class User:
+    """One seeded principal.
+
+    Attributes:
+        username: CAS / openeclass login name.
+        password: CAS password for that user.
+    """
+
+    username: str
+    password: str
 
 
 @dataclass(frozen=True)
 class Announcement:
-    """One seeded announcement, course or admin.
+    """One seeded announcement, course or system-wide.
 
     Attributes:
         course_code: Course code the announcement belongs to, or
-            ``None`` for an admin (system) announcement.
+            ``None`` for a system-wide (admin) announcement.
         days_ago: Age of the announcement in whole days. Matches
-            the seed YAML's ``days_ago`` field.
+            the seed YAML's ``days_ago`` field; the seed loader at
+            reset time anchors the row date to
+            ``NOW() - days_ago days``.
         title: Title text as seeded.
-        body: Body text as seeded; the grader's verbatim-body
-            assertions check for this string in the response.
+        body: Body text as seeded.
     """
 
     course_code: str | None
@@ -58,34 +109,49 @@ class Announcement:
 
 
 @dataclass(frozen=True)
-class SeedData:
-    """Parsed contents of ``seed.yaml``.
+class Course:
+    """One seeded course.
 
     Attributes:
-        username: CAS / openeclass login name for the seeded user.
-        password: CAS password for the seeded user.
-        enrolled_course_codes: Course codes the seeded user is
-            enrolled in, in the order they appear in the YAML.
-        course_announcements: Mapping of course code to the
-            announcements seeded for that course, ordered by
-            ``days_ago`` ascending.
-        admin_announcements: Admin (system) announcements ordered
-            by ``days_ago`` ascending.
+        code: Course code (``"CS101"``).
+        title: Human course title as seeded; the expected
+            ``get_courses`` response lists courses alphabetically by
+            this value.
+        enrolled_users: Usernames enrolled in the course, in seed
+            order.
+        announcements: The course's announcements, ordered by
+            ``days_ago`` ascending (newest first).
     """
 
-    username: str
-    password: str
-    enrolled_course_codes: tuple[str, ...]
-    course_announcements: dict[str, tuple[Announcement, ...]]
+    code: str
+    title: str
+    enrolled_users: tuple[str, ...]
+    announcements: tuple[Announcement, ...]
+
+
+@dataclass(frozen=True)
+class SeedData:
+    """Parsed contents of the grading environment seed.
+
+    Attributes:
+        users: Mapping of username to :class:`User`.
+        courses: Mapping of course code to :class:`Course`, in seed
+            order of insertion.
+        admin_announcements: System-wide announcements ordered by
+            ``days_ago`` ascending (newest first).
+    """
+
+    users: dict[str, User]
+    courses: dict[str, Course]
     admin_announcements: tuple[Announcement, ...]
 
 
 def load_seed(path: Path | None = None) -> SeedData:
-    """Load the seed YAML and return a :class:`SeedData`.
+    """Load the grading-environment seed YAML and return a :class:`SeedData`.
 
     Args:
-        path: Optional path to a seed file. Defaults to
-            ``seed.yaml`` next to the ``grader`` package root.
+        path: Optional path to a seed file. Defaults to the
+            in-repository ``grader-env/seed/seed.yaml``.
 
     Returns:
         Parsed seed data.
@@ -94,7 +160,7 @@ def load_seed(path: Path | None = None) -> SeedData:
         SeedError: When the file is missing, cannot be parsed, or
             does not carry the required keys.
     """
-    seed_path = path or _default_seed_path()
+    seed_path = path or _GRADER_ENV_SEED
     if not seed_path.is_file():
         raise SeedError(f"seed file not found: {seed_path}")
     try:
@@ -106,13 +172,57 @@ def load_seed(path: Path | None = None) -> SeedData:
     return _build_seed_data(raw)
 
 
+def user(seed: SeedData, username: str) -> User:
+    """Return the seeded :class:`User` for ``username``.
+
+    Args:
+        seed: Loaded seed data.
+        username: The principal to look up.
+
+    Returns:
+        The matching user.
+
+    Raises:
+        SeedError: When the seed carries no such user.
+    """
+    found = seed.users.get(username)
+    if found is None:
+        raise SeedError(f"seed: no user {username!r}")
+    return found
+
+
+def enrolled_courses(seed: SeedData, username: str) -> tuple[Course, ...]:
+    """Return the courses ``username`` is enrolled in, ``get_courses`` order.
+
+    The openeclass 4.3.3 portfolio course-link list the reference parser
+    walks is alphabetical by course title, so the expected
+    ``get_courses`` response orders the user's courses by title;
+    this helper returns them in that order.
+
+    Args:
+        seed: Loaded seed data.
+        username: The enrolled principal.
+
+    Returns:
+        The user's courses ordered alphabetically by title.
+    """
+    courses = [
+        course
+        for course in seed.courses.values()
+        if username in course.enrolled_users
+    ]
+    courses.sort(key=lambda c: c.title)
+    return tuple(courses)
+
+
 def course_announcements_in_window(
     seed: SeedData, course_code: str, days_back: int
 ) -> tuple[Announcement, ...]:
-    """Return the announcements visible for one course at ``days_back``.
+    """Return one course's announcements visible at ``days_back``.
 
-    The per-course endpoint applies no backend floor, so the helper
-    is a straight inclusive filter on ``days_ago <= days_back``.
+    openeclass's per-course announcements page floors on visibility
+    only, with no date cutoff, so the helper is a straight inclusive
+    filter on ``days_ago <= days_back``.
 
     Args:
         seed: Loaded seed data.
@@ -121,84 +231,99 @@ def course_announcements_in_window(
 
     Returns:
         Tuple of announcements in scope, ordered by ``days_ago``
-        ascending. Empty when the course has no seed entries or
-        every seed entry is older than the window.
+        ascending (newest first). Empty when the course has no seed
+        entries or every entry is older than the window.
     """
-    announcements = seed.course_announcements.get(course_code, ())
-    return tuple(a for a in announcements if a.days_ago <= days_back)
+    course = seed.courses.get(course_code)
+    if course is None:
+        return ()
+    return tuple(a for a in course.announcements if a.days_ago <= days_back)
 
 
 def general_announcements_in_window(
-    seed: SeedData, days_back: int
+    seed: SeedData, username: str, days_back: int
 ) -> tuple[Announcement, ...]:
-    """Return admin + enrolled-course announcements at ``days_back``.
+    """Return the general-endpoint union for ``username`` at ``days_back``.
 
-    The general endpoint applies a hardcoded 30-day backend floor
-    and filters to the user's enrolled courses; the helper clamps
-    the effective window to 30 to mirror the backend.
+    openeclass floors the general view at a calendar month
+    (``DATE_SUB(CURDATE(), INTERVAL 1 MONTH)``); this helper uses the
+    flat ``GENERAL_BACKEND_FLOOR_DAYS``-day approximation the module
+    docstring describes, then unions the system-wide announcements
+    with the announcements of every course the user is enrolled in,
+    ordered newest first across both sources.
 
     Args:
         seed: Loaded seed data.
+        username: The authenticated principal whose enrolment
+            scopes the course side of the union.
         days_back: Inclusive upper bound on ``days_ago``, clamped
             to ``GENERAL_BACKEND_FLOOR_DAYS``.
 
     Returns:
-        Tuple of announcements in scope, admin entries first then
-        each enrolled course's entries in enrollment order; each
-        block is ordered by ``days_ago`` ascending.
+        Tuple of announcements in scope, ordered by ``days_ago``
+        ascending (newest first) across system-wide and
+        enrolled-course entries together.
     """
     effective = min(days_back, GENERAL_BACKEND_FLOOR_DAYS)
     in_scope: list[Announcement] = [
         a for a in seed.admin_announcements if a.days_ago <= effective
     ]
-    for code in seed.enrolled_course_codes:
-        in_scope.extend(
-            a
-            for a in seed.course_announcements.get(code, ())
-            if a.days_ago <= effective
-        )
+    for course in seed.courses.values():
+        if username in course.enrolled_users:
+            in_scope.extend(
+                a for a in course.announcements if a.days_ago <= effective
+            )
+    in_scope.sort(key=lambda a: a.days_ago)
     return tuple(in_scope)
 
 
-def expected_count_course(
-    seed: SeedData, course_code: str, days_back: int
-) -> int:
-    """Return the number of announcements expected from the course endpoint."""
-    return len(course_announcements_in_window(seed, course_code, days_back))
+def _build_seed_data(raw: dict[str, Any]) -> SeedData:
+    """Validate the parsed YAML and construct a :class:`SeedData`.
 
+    Args:
+        raw: The YAML mapping at the seed file's top level.
 
-def expected_count_general(seed: SeedData, days_back: int) -> int:
-    """Return the number of announcements expected from the general endpoint."""
-    return len(general_announcements_in_window(seed, days_back))
+    Returns:
+        The validated :class:`SeedData`.
 
+    Raises:
+        SeedError: When any required key is missing, malformed, or
+            of the wrong type.
+    """
+    raw_users = raw.get("users")
+    if not isinstance(raw_users, list) or not raw_users:
+        raise SeedError("seed: 'users' must be a non-empty list")
+    users: dict[str, User] = {}
+    for index, entry in enumerate(raw_users):
+        if not isinstance(entry, dict):
+            raise SeedError(f"seed: users[{index}] must be a mapping")
+        location = f"users[{index}]"
+        username = _require_str(entry, "username", parent=location)
+        password = _require_str(entry, "cas_password", parent=location)
+        users[username] = User(username=username, password=password)
 
-def _default_seed_path() -> Path:
-    """Return the default ``seed.yaml`` path next to the grader package root."""
-    return Path(__file__).resolve().parent.parent / DEFAULT_SEED_FILENAME
-
-
-def _build_seed_data(raw: dict) -> SeedData:
-    """Validate the parsed YAML and construct a :class:`SeedData`."""
-    user = _require_mapping(raw, "user")
-    username = _require_str(user, "username", parent="user")
-    password = _require_str(user, "cas_password", parent="user")
-
-    courses = raw.get("courses")
-    if not isinstance(courses, list):
+    raw_courses = raw.get("courses")
+    if not isinstance(raw_courses, list):
         raise SeedError("seed: 'courses' must be a list")
-
-    enrolled_codes: list[str] = []
-    course_map: dict[str, tuple[Announcement, ...]] = {}
-    for index, course in enumerate(courses):
-        if not isinstance(course, dict):
+    courses: dict[str, Course] = {}
+    for index, entry in enumerate(raw_courses):
+        if not isinstance(entry, dict):
             raise SeedError(f"seed: courses[{index}] must be a mapping")
-        code = _require_str(course, "code", parent=f"courses[{index}]")
-        if course.get("enrolled") is True:
-            enrolled_codes.append(code)
-        course_map[code] = _parse_announcements(
-            course.get("announcements") or [],
-            course_code=code,
-            parent=f"courses[{index}].announcements",
+        location = f"courses[{index}]"
+        code = _require_str(entry, "code", parent=location)
+        title = _require_str(entry, "title", parent=location)
+        enrolled = entry.get("enrolled_users") or []
+        if not isinstance(enrolled, list):
+            raise SeedError(f"seed: {location}.enrolled_users must be a list")
+        courses[code] = Course(
+            code=code,
+            title=title,
+            enrolled_users=tuple(str(u) for u in enrolled),
+            announcements=_parse_announcements(
+                entry.get("announcements") or [],
+                course_code=code,
+                parent=f"{location}.announcements",
+            ),
         )
 
     admin = _parse_announcements(
@@ -208,20 +333,33 @@ def _build_seed_data(raw: dict) -> SeedData:
     )
 
     return SeedData(
-        username=username,
-        password=password,
-        enrolled_course_codes=tuple(enrolled_codes),
-        course_announcements=course_map,
+        users=users,
+        courses=courses,
         admin_announcements=admin,
     )
 
 
 def _parse_announcements(
-    entries: list,
+    entries: list[Any],
     course_code: str | None,
     parent: str,
 ) -> tuple[Announcement, ...]:
-    """Parse a list of announcement entries into ordered ``Announcement`` tuples."""
+    """Parse announcement entries into ``Announcement`` tuples, newest first.
+
+    Args:
+        entries: Raw announcement entries from the YAML.
+        course_code: Course code each entry belongs to, or ``None``
+            for system-wide entries.
+        parent: Dotted path used in error messages.
+
+    Returns:
+        The parsed announcements ordered by ``days_ago`` ascending
+        (newest first).
+
+    Raises:
+        SeedError: When any entry is missing required fields or has
+            a malformed ``days_ago``/``title``/``body``.
+    """
     if not isinstance(entries, list):
         raise SeedError(f"seed: {parent} must be a list")
     parsed: list[Announcement] = []
@@ -234,30 +372,32 @@ def _parse_announcements(
             raise SeedError(
                 f"seed: {location}.days_ago must be a non-negative integer"
             )
-        title = _require_str(entry, "title", parent=location)
-        body = _require_str(entry, "body", parent=location)
         parsed.append(
             Announcement(
                 course_code=course_code,
                 days_ago=days_ago,
-                title=title,
-                body=body,
+                title=_require_str(entry, "title", parent=location),
+                body=_require_str(entry, "body", parent=location),
             )
         )
     parsed.sort(key=lambda a: a.days_ago)
     return tuple(parsed)
 
 
-def _require_mapping(raw: dict, key: str) -> dict:
-    """Return ``raw[key]`` if it is a mapping; raise otherwise."""
-    value = raw.get(key)
-    if not isinstance(value, dict):
-        raise SeedError(f"seed: '{key}' must be a mapping")
-    return value
+def _require_str(mapping: dict[str, Any], key: str, parent: str) -> str:
+    """Return ``mapping[key]`` if it is a non-empty string; raise otherwise.
 
+    Args:
+        mapping: Parent YAML mapping the value is read from.
+        key: Required key.
+        parent: Dotted path used in error messages.
 
-def _require_str(mapping: dict, key: str, parent: str) -> str:
-    """Return ``mapping[key]`` if it is a non-empty string; raise otherwise."""
+    Returns:
+        The string value at ``mapping[key]``.
+
+    Raises:
+        SeedError: When the value is missing, not a string, or empty.
+    """
     value = mapping.get(key)
     if not isinstance(value, str) or not value:
         raise SeedError(f"seed: {parent}.{key} must be a non-empty string")

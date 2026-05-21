@@ -1,253 +1,319 @@
 # Scoring Rubric
 
-Total: 100 points
+Total: 100 points across 90 atomic rows. The Python implementation
+contributes 30 points across 27 rows; the C replica contributes 70
+points across 63 rows (37 functional/infrastructure rows plus 26
+per-scenario memory sub-assertions). The grader (`grader/src/scoring.py`)
+declares every row and asserts the tier budget at import; a numeric
+drift between this document and the code is a bug in this document.
 
-The grader is a JSON-RPC black box: it observes only the `text` content of
-each tool response and scores against the assertions tabulated below.
-Strict tests assert exact equality with the response text. Implementation
-tests assert the `Found N announcement(s):` substring with a seed-derived
-`N` plus the verbatim body string of every in-scope announcement; the
-general-announcement implementation rows additionally assert the
-per-source attribution distribution. Across all implementation tests,
-`days_back=N` is interpreted inclusively against a calendar-based cutoff
-at midnight of `(today - N days)`: an announcement whose timestamp falls
-at or after that cutoff is in scope.
+The grader is a JSON-RPC black box: it observes only the `text`
+content of each tool response and the dynamic-link stack of the C
+binary. It does not read the participant's source.
 
-## Python Implementation (41 points)
+## Assertion model
 
-### Baseline (10 points)
+Every announcement and `get_courses` response, every error string,
+and every empty-window response is asserted against a full
+constructed string. There are no substring matches.
 
-The four tools `login`, `logout`, `get_courses`, `authstatus` already
-exist in the upstream `eclass-mcp-server` reference. The participant
-inherits working implementations and must not break them while adding
-`get_course_announcements` and `get_general_announcements` to the
-server. P.1.1 confirms the protocol handshake and the registration
-of every tool the rubric grades; the remaining nine rows confirm the
-four pre-existing tools' behaviour against the seeded user
-(`student1`) and the three enrolled courses (`CS101`, `PHYS150`,
-`MATH201`).
+Two strictness modes apply to the fixed-string rows (errors and
+empty-window responses):
 
-| ID | Points | Description |
-|----|--------|-------------|
-| P.1.1 | 1 | `initialize` shape and `tools/list` return all six tools |
-| P.1.2 | 1 | Login with valid credentials succeeds |
-| P.1.3 | 1 | Second login while authenticated reports already-logged-in |
-| P.1.4 | 1 | Login with empty credentials reports the missing-credentials error |
-| P.1.5 | 1 | Logout while authenticated succeeds |
-| P.1.6 | 1 | Logout without prior login is a no-op |
-| P.1.7 | 1 | `get_courses` while authenticated returns the enrolled courses |
-| P.1.8 | 1 | `get_courses` without authentication reports not-logged-in |
-| P.1.9 | 1 | `authstatus` while authenticated reports logged-in with the username |
-| P.1.10 | 1 | `authstatus` without authentication reports not-logged-in |
+- `byte-exact`: the response equals the constructed expected string
+  byte for byte.
+- `whitespace-normalized`: the response equals the constructed
+  expected string after the non-breaking space family (U+00A0,
+  U+2007, U+2009, U+202F) is mapped to an ASCII space on both sides.
+  The participant testing environment renders dates with U+202F
+  before the meridiem under recent CLDR; the PRD's whitespace rule
+  treats normalised whitespace as equivalent, so this mode records
+  that the acceptance relied on that rule.
 
-### Feature: Course Announcements (17 points)
+Two acceptance forms apply to the announcement success rows and to
+`get_courses`, because the PRD specifies the response format and
+content but not a presentation order or a single layout:
 
-The new tool `get_course_announcements` fetches a single course's
-announcements and applies a client-side `days_back` filter. The seeded
-test course `CS101` carries four announcements at days_ago 0, 15, 30, 60;
-the empty course `MATH201` carries none. The per-course endpoint applies
-no backend date floor, so every announcement is visible to a client and
-all filtering is the participant's responsibility. Each window-size step
-adds exactly one in-scope announcement, so the expected count grows
-monotonically with `days_back`.
+- Announcements (per-course and general):
+  - Form 1 `announcements-ordered`: the response equals the
+    openeclass-derived ordered string (per-course rows ordered
+    date-descending; general rows ordered across the system-wide and
+    enrolled-course union, newest first) under
+    `whitespace-normalized`.
+  - Form 2 `announcements-unordered`: the response parses by the
+    PRD's announcement grammar into the same multiset of byte-exact
+    entries (after whitespace normalisation) with the same count, but
+    the sequence and the per-entry index number are not enforced.
+- `get_courses`:
+  - Form 1 `get-courses-faithful`: the openeclass-formatted layout
+    (a course title followed by the openeclass-version-specific
+    layout glue and the `(code)` suffix).
+  - Form 2 `get-courses-documented`: the documented-clean layout per
+    `tools-reference.md` (the bare course title).
 
-| ID | Points | Description |
-|----|--------|-------------|
-| P.2.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
-| P.2.2 | 1 | Strict: an unparseable `course_url` returns `"Error: Could not extract course code."` |
-| P.2.3 | 1 | Strict: a negative `days_back` returns `"Error: days_back must be a non-negative integer."` |
-| P.2.4 | 1 | Strict: MATH201 with default `days_back` returns `"No announcements found."` |
-| P.2.5 | 3 | Implementation: `days_back=0` returns the day-zero announcement only (count = 1) |
-| P.2.6 | 3 | Implementation: `days_back=15` returns the two in-scope announcements (count = 2) |
-| P.2.7 | 4 | Implementation: default `days_back=30` returns the three in-scope announcements (count = 3) |
-| P.2.8 | 3 | Implementation: `days_back=60` returns all four announcements (count = 4); catches reliance on a backend cap that the per-course endpoint does not enforce |
+The `initialize` row (C.2.1) follows the same two-form pattern, with
+byte-exact `protocolVersion` and `serverInfo` plus one of two
+accepted `capabilities` objects:
 
-### Feature: General Announcements (14 points)
+- Form 1 `capabilities-faithful`: the object the MCP SDK serialises
+  for a low-level tools-only server.
+- Form 2 `capabilities-documented`: the object the project's
+  wire-protocol reference (`eclass-mcp-server/docs/reference/
+  wire-protocol.md`) literally documents.
 
-The new tool `get_general_announcements` aggregates system-wide and
-course-specific announcements into a single response with source
-attribution. The endpoint that fans these out (`myannouncements.php`)
-applies a hardcoded 30-day backend floor and filters to the user's
-enrolled courses; the participant's `days_back` is therefore valid only
-within `[0, 30]` and never reaches non-enrolled courses. Within that
-window the seed places three admin announcements (days_ago 0, 15, 30),
-three `CS101` announcements (0, 15, 30), and three `PHYS150` announcements
-(0, 15, 30), totalling nine. Each window-size step adds three in-scope
-announcements (one admin + one `CS101` + one `PHYS150`), so the expected
-count grows by three per step.
+The two differ; both are accepted because a participant who uses
+the SDK ends up at the faithful shape and a participant who reads
+the wire-protocol reference and transcribes it ends up at the
+documented shape.
 
-Every implementation-tier row asserts the count preamble, every
-in-scope body verbatim, and the per-attribution count
-distribution derived from the seed: the response must carry one
-`Source: <value>` line per entry, with the value being `System`
-for admin entries and the course code (`CS101`, `PHYS150`) for
-course entries. The expected per-attribution counts at the three
-window probes are 1/1/1, 2/2/2, and 3/3/3 for
-`System`/`CS101`/`PHYS150` respectively. The Python
-default-`days_back` row (`P.3.6`) carries the largest point weight
-in its tier, reflecting coverage of the path with the largest
-expected count; the C general rows are weighted equally.
+The accepted form is recorded as the row's diagnostic. The lenient
+second form in each pair (`announcements-unordered`,
+`get-courses-documented`, `capabilities-documented`) prints a
+WARNINGS line to stdout at the end of grading that names the row
+and shows its response, prompting the operator to review the row
+and decide any manual deduction recorded in `results_notes.yaml`.
+The Python reference accepts only the openeclass-derived forms for
+the announcement and `get_courses` rows; the C replica accepts
+either, because both are legitimate readings of the published task
+materials.
 
-PRD §5 documents `"No announcements found."` as the response when
-the window is empty. The seed places at least one entry in each
-of admin, `CS101`, and `PHYS150` at `days_ago=0`, so any
-`days_back ∈ [0, 30]` returns at least three entries and the
-empty-window path is unreachable for the general endpoint through
-the seeded mock. The per-course endpoint exercises the same
-constant string via `MATH201` (P.2.4 / C.3.4) through the
-participant's shared empty-response emit path, so the string is
-verified end-to-end; the general endpoint's specific reachability
-gap is acknowledged here rather than worked around by reshaping
-the seed.
+The `tools/list` row (P.1.1 / C.2.2) is one byte-exact contract for
+both implementations: every tool object's `name`, `description`, and
+`inputSchema` must equal the constructed expected values byte for
+byte, order-insensitive, with no extra tools, and every advertised
+entry itself must be a JSON object with a string `name`. Per-tool
+divergence (an extra schema keyword, a regenerated description, a
+different serialised shape, a non-object entry) fails this row.
 
-| ID | Points | Description |
-|----|--------|-------------|
-| P.3.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
-| P.3.2 | 1 | Strict: a negative `days_back` returns `"Error: days_back must be a non-negative integer."` |
-| P.3.3 | 1 | Strict: `days_back=31` returns `"Error: Cannot retrieve announcements older than 30 days."` |
-| P.3.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements (count = 3) with source attribution |
-| P.3.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements (count = 6) with source attribution |
-| P.3.6 | 5 | Implementation: default `days_back=30` returns the nine in-scope announcements (count = 9) with source attribution |
+The handshake rows (P.1.1, C.2.1, C.2.2) compare against
+SDK-emitted serialisation. A failure here may reflect a participant
+defect OR an SDK behavioural change since the expected values were
+captured; the WARNINGS block surfaces handshake-row failures
+alongside the lenient acceptances so the reviewer can inspect the
+detail before judging.
 
-## C Replica Implementation (59 points)
+## Boundary semantics
 
-### Build, Technical Stack, and Configuration Surfaces (10 points)
+`days_back=N` is an inclusive filter on the announcement's age in
+whole days. An announcement at `days_ago=K` is in scope iff
+`K <= N`. The per-course endpoint applies no backend date floor; the
+general endpoint clamps `days_back` to 30, matching the openeclass
+portfolio query's calendar-month floor on the seeded data.
 
-The C implementation is a separate program living under
-`eclass-mcp-server/c-replica/`. It is built by a participant-supplied
-`Makefile` and invoked by the grader as a subprocess. The technical
-stack constraint is: `libcurl` and `libxml2` are required; no JSON-parsing
-library is permitted; the participant parses JSON-RPC manually. Standard
-system runtime libraries and the transitive system dependencies of
-`libcurl` and `libxml2` are unrestricted.
+The C functional scenarios (C.2 through C.4) run under
+`valgrind --leak-check=full --show-leak-kinds=all
+--track-origins=yes --error-exitcode=99` driven by the same JSON-RPC
+client as the Python rows. Each row records a functional verdict
+under `<id>` and a memory sub-assertion under `<id>.mem` scored only
+when the functional row passes AND valgrind ran to completion with
+zero `definitely lost` bytes and zero `indirectly lost` bytes. The
+`.mem` sub-assertions cover C.2.3 through C.2.12, C.3.1 through
+C.3.9, and C.4.1 through C.4.7 (26 rows in total). C.2.1, C.2.2, and
+the C.1 infrastructure rows carry no `.mem` sub-assertion.
 
-A participant server reads its configuration from one of two surfaces:
-the documented `.env` at the eclass package root, or the `ECLASS_*`
-process environment variables. C.1.3 and C.1.4 award each surface
-independently. C.1.3 (env-var surface) spawns the server with no `.env`
-on disk and the `ECLASS_*` values injected into the environment; the
-grader-side TLS trust-anchor variables are also present as transport
-plumbing. C.1.4 (verbatim documented `.env` surface) copies that same
-`.env` and the testing environment's `certs/` directory verbatim into
-the package root and passes no `ECLASS_*` or TLS variables: the copied
-`.env` carries the relative cert paths and the copied `certs/` makes
-them resolve. Each probe additionally drives one authenticated `login`,
-because a bare `initialize` does not exercise configuration.
+The C multi-step memory rows (C.5) drive the C binary once under
+valgrind with a scripted JSON-RPC sequence per scenario; each scenario
+names the functional rows whose call shapes it exercises and is
+skipped when any of those rows did not pass.
 
-C.1.3 and C.1.4 are decoupled from the functional and memory suites: a
-server that fails either probe still has C.2 through C.5 attempted under
-a dual-provisioned environment (verbatim `.env` and `certs/` on disk
-plus `ECLASS_*`-and-TLS per spawn), so the implementation is measured
-regardless of which surface it reads. Only a C.1.1 compile failure
-cascade-skips the dependent C rows.
+## Python Implementation (30 points across 27 rows)
 
-C.2.4 extends the per-surface principle to the negative contract.
-Missing-credential handling is billed per implemented surface:
-each surface is deprived of credentials in isolation and must
-return the exact missing-credentials error. A surface a
-participant did not implement is penalised once at C.1.3 or C.1.4
-and is not billed again here, so C.2.4 is scored only on the
-surfaces the recorded C.1.3/C.1.4 verdicts show implemented; when
-neither is implemented the loss is attributed to C.1.3/C.1.4.
-C.2.4 reading those verdicts is a narrow attribution dependency,
-not a return to the removed config cascade: the row still runs and
-the rest of the suite stays decoupled.
+The Python implementation extends the upstream `eclass-mcp-server`
+reference with the two announcement tools the task PRD specifies.
+The baseline tier runs the four inherited tools against the seeded
+`student_courses` principal; the feature tiers run the two new tools
+against the principal's enrolled courses.
+
+### Baseline (11 points across 11 rows)
 
 | ID | Points | Description |
 |----|--------|-------------|
-| C.1.1 | 3 | `make c-server` exits 0 and produces the `server` binary |
-| C.1.2 | 2 | `ldd server` lists `libcurl.so` and `libxml2.so` among its dependencies, and lists no library whose SO name matches the forbidden JSON-parsing patterns: any name beginning with `libjson`, `libcjson`, `libjansson`, `libyajl`, `libjq`, or `libparson` |
-| C.1.3 | 3 | Env-var configuration surface: the server completes the JSON-RPC `initialize` handshake and authenticates with the seeded credentials when configured purely via `ECLASS_*` environment variables with no `.env` file present |
-| C.1.4 | 2 | Verbatim documented `.env` surface: the server completes the handshake and authenticates with the testing environment's own `.env` and `certs/` copied verbatim into the package root and no `ECLASS_*` or TLS environment variables present |
+| P.1.1 | 1 | `tools/list` exposes all six tools with exact name, description, and schema |
+| P.1.2 | 1 | `authstatus` before login reports not-logged-in |
+| P.1.3 | 1 | login with valid credentials succeeds |
+| P.1.4 | 1 | `authstatus` on the live session reports the logged-in user |
+| P.1.5 | 1 | second login while authenticated reports already-logged-in |
+| P.1.6 | 1 | login with every credential surface deprived reports missing-credentials |
+| P.1.7 | 1 | `get_courses` while logged in returns the faithful course list |
+| P.1.8 | 1 | logout while authenticated succeeds |
+| P.1.9 | 1 | `authstatus` after logout reports not-logged-in |
+| P.1.10 | 1 | `get_courses` without authentication reports not-logged-in |
+| P.1.11 | 1 | logout without a prior login is a no-op |
 
-### Baseline (10 points)
+### Feature: Course Announcements (11 points across 9 rows)
 
-The C replica must implement the four baseline tools from scratch. There
-is no upstream C reference to inherit. Each row below mirrors a P.1
-behaviour, executed against the C binary instead of the Python server.
-
-| ID | Points | Description |
-|----|--------|-------------|
-| C.2.1 | 1 | `initialize` shape and `tools/list` return all six tools |
-| C.2.2 | 1 | Login with valid credentials succeeds |
-| C.2.3 | 1 | Second login while authenticated reports already-logged-in |
-| C.2.4 | 1 | Missing-credentials error reported on every implemented configuration surface, each surface deprived of credentials in isolation; scored only on the surfaces the recorded C.1.3/C.1.4 verdicts show implemented (a surface penalised there is not billed again) |
-| C.2.5 | 1 | Logout while authenticated succeeds |
-| C.2.6 | 1 | Logout without prior login is a no-op |
-| C.2.7 | 1 | `get_courses` while authenticated returns the enrolled courses |
-| C.2.8 | 1 | `get_courses` without authentication reports not-logged-in |
-| C.2.9 | 1 | `authstatus` while authenticated reports logged-in with the username |
-| C.2.10 | 1 | `authstatus` without authentication reports not-logged-in |
-
-### Feature: Course Announcements (15 points)
-
-Mirror of P.2 against the C binary. The seed values, boundary semantics,
-and assertion style match the Python feature section above; the only
-difference is which executable serves the JSON-RPC.
+`get_course_announcements` fetches a single course's announcements
+and applies a client-side `days_back` filter. The per-course endpoint
+applies no backend date floor, so every seeded announcement is
+visible and all filtering is the participant's responsibility.
 
 | ID | Points | Description |
 |----|--------|-------------|
-| C.3.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
-| C.3.2 | 1 | Strict: an unparseable `course_url` returns the extract-course-code error |
-| C.3.3 | 1 | Strict: a negative `days_back` returns the non-negative-integer error |
-| C.3.4 | 1 | Strict: MATH201 with default `days_back` returns the no-announcements message |
-| C.3.5 | 3 | Implementation: `days_back=0` returns the day-zero announcement only |
-| C.3.6 | 3 | Implementation: `days_back=15` returns the two in-scope announcements |
-| C.3.7 | 3 | Implementation: default `days_back=30` returns the three in-scope announcements |
-| C.3.8 | 2 | Implementation: `days_back=60` returns all four announcements |
+| P.2.1 | 1 | course tool without login returns the not-logged-in error |
+| P.2.2 | 1 | unparseable `course_url` returns the extract-code error |
+| P.2.3 | 1 | negative `days_back` returns the non-negative-integer error |
+| P.2.4 | 1 | out-of-window course returns the empty-window string |
+| P.2.5 | 2 | `days_back=0` returns the single relative-date announcement |
+| P.2.6 | 1 | `days_back=0` on an absolute-only course returns the empty-window string |
+| P.2.7 | 2 | default window returns the three in-scope announcements newest first |
+| P.2.8 | 1 | `days_back=10` slices the explicit non-default window |
+| P.2.9 | 1 | `days_back=40` widens past the default with no upper cap |
 
-### Feature: General Announcements (12 points)
+### Feature: General Announcements (8 points across 7 rows)
 
-Mirror of P.3 against the C binary. Seed values, the backend's 30-day
-floor, the enrollment filter, and the assertion style match the Python
-feature section above; every implementation-tier row asserts the
-per-attribution count distribution described under the Python feature
-section. The same empty-window reachability gap on the general endpoint
-applies here.
-
-| ID | Points | Description |
-|----|--------|-------------|
-| C.4.1 | 1 | Strict: not logged in returns the standard not-logged-in error |
-| C.4.2 | 1 | Strict: a negative `days_back` returns the non-negative-integer error |
-| C.4.3 | 1 | Strict: `days_back=31` returns the older-than-30-days error |
-| C.4.4 | 3 | Implementation: `days_back=0` returns the three day-zero announcements with source attribution |
-| C.4.5 | 3 | Implementation: `days_back=15` returns the six in-scope announcements with source attribution |
-| C.4.6 | 3 | Implementation: default `days_back=30` returns the nine in-scope announcements with source attribution |
-
-### Memory (12 points)
-
-Each scenario runs the C binary under
-`valgrind --leak-check=full --error-exitcode=99` driven by a scripted
-JSON-RPC client. A scenario passes when the run finishes with zero
-definitely-lost bytes, zero indirectly-lost bytes, and exit 0. The
-scenarios cover, in order, session-state allocations, per-tool
-allocations across argument variations on each feature tool, and
-inter-tool state across a realistic full-session sequence; the four
-scenarios carry equal weight.
-
-Each scenario names the feature rows whose call shapes it
-exercises and is run only when every named row has already
-passed. A scenario whose feature gates have not all passed
-records as a zero-point skip with a message naming the missing
-rows, rather than driving valgrind on a path that short-circuits
-through the participant's error handling on a broken feature.
+`get_general_announcements` unions the system-wide announcements
+with the announcements of every course the authenticated principal
+is enrolled in and orders the result newest first across both
+sources. The endpoint clamps `days_back` to 30. The general suite
+runs against the `student_general` principal (enrolled disjoint from
+the baseline and course suites) so the union covers both sources at
+the documented window probes.
 
 | ID | Points | Description |
 |----|--------|-------------|
-| C.5.1 | 3 | Login lifecycle: login -> login (already-logged-in) -> logout -> logout (no-op) -> login -> logout |
-| C.5.2 | 3 | Course-announcement variations: login -> get_courses -> four `get_course_announcements` calls (CS101 default, MATH201 default, CS101 `days_back=0`, CS101 `days_back=60`) -> logout |
-| C.5.3 | 3 | General-announcement variations: login -> get_courses -> three `get_general_announcements` calls (default, `days_back=0`, `days_back=15`) -> logout |
-| C.5.4 | 3 | Full lifecycle integration with both features: login -> get_courses -> get_course_announcements (CS101 default) -> get_course_announcements (CS101 `days_back=60`) -> get_course_announcements (MATH201 default) -> get_general_announcements (default) -> get_general_announcements (`days_back=15`) -> get_general_announcements (`days_back=0`) -> authstatus -> logout -> login -> get_course_announcements (CS101 `days_back=0`) -> get_general_announcements (`days_back=15`) -> logout |
+| P.3.1 | 1 | general tool without login returns the not-logged-in error |
+| P.3.2 | 1 | negative `days_back` returns the non-negative-integer error |
+| P.3.3 | 1 | `days_back=31` returns the older-than-30-days error |
+| P.3.4 | 1 | `days_back=0` returns the empty-window string |
+| P.3.5 | 1 | `days_back=5` returns the lone in-scope course entry with its source |
+| P.3.6 | 2 | `days_back=8` returns the system and course union with both source forms |
+| P.3.7 | 1 | default window returns the full union ordered across sources |
 
-## Expected Scores
+## C Replica (70 points across 63 rows)
 
-| Submission Type | Python Baseline | Python Features | C Replica | Total |
-|-----------------|-----------------|-----------------|-----------|-------|
-| No patch (baseline only) | 9/10 | 0/31 | 0/59 | 9/100 |
-| Python implementation only | 10/10 | 31/31 | 0/59 | 41/100 |
-| Complete implementation | 10/10 | 31/31 | 59/59 | 100/100 |
+The C replica is a separate program under
+`<eclass-mcp-server>/c-replica/`. It is built by a participant-supplied
+Makefile and invoked by the grader as a subprocess. The technical
+stack constraint: `libcurl` and `libxml2` are required; no
+JSON-parsing library is permitted; the participant parses JSON-RPC
+manually. Transitive system dependencies of `libcurl` and `libxml2`
+are unrestricted.
 
-The no-patch row earns nine of ten on Python baseline because
-P.1.1 (which confirms `tools/list` registers all six tools) requires
-the patch's tool additions; the other nine baseline rows already
-pass against the upstream reference.
+### Build, technical stack, and configuration surfaces (6 points across 6 rows)
+
+C.1.1 is the sole hard gate: on fail, every other C row (including
+all `.mem` sub-assertions and the C.5 multi-step memory rows) is
+skip-recorded. C.1.2 through C.1.6 run independently with no
+cascade. The two configuration surfaces (C.1.5, C.1.6) are scored
+each on its own deliberate deprivation: C.1.5 deprives the on-disk
+`.env` and supplies the `ECLASS_*` values only as process
+environment variables; C.1.6 deprives the environment variables and
+supplies the values only as the verbatim `<mock-root>/.env` copied
+into the package root. Each probe drives one authenticated `login`
+to exercise the surface; a participant that implements only one
+surface is penalised once at the row that probes the missing
+surface, not in the behavioural suites.
+
+| ID | Points | Description |
+|----|--------|-------------|
+| C.1.1 | 1 | `make c-server` exits 0 and produces the server binary |
+| C.1.2 | 1 | dynamic dependencies include libcurl |
+| C.1.3 | 1 | dynamic dependencies include libxml2 |
+| C.1.4 | 1 | dynamic dependencies exclude any JSON-parsing library |
+| C.1.5 | 1 | serves a tool configured by environment variables only |
+| C.1.6 | 1 | serves a tool configured by the package-root `.env` only |
+
+The forbidden JSON-parser library names match the regex
+`^lib(json|cjson|jansson|yajl|jq|parson)`. The behavioural suites
+(C.2 through C.5) run with both configuration surfaces provisioned
+so a participant who implements only one surface is still measured
+on every behaviour.
+
+### Baseline (13 points across 12 rows)
+
+The C replica must implement the four baseline tools from scratch
+plus the two announcement tools the PRD adds. There is no upstream
+C reference to inherit. Each row mirrors a P.1 behaviour, executed
+against the C binary. C.2.1 (the constructed initialize frame) is
+worth 2 points because it asserts the entire handshake contract.
+
+| ID | Points | Description |
+|----|--------|-------------|
+| C.2.1 | 2 | the hand-written initialize frame (protocolVersion, capabilities, serverInfo) |
+| C.2.2 | 1 | `tools/list` exposes all six tools with exact name, description, and schema |
+| C.2.3 | 1 | `authstatus` before login reports not-logged-in |
+| C.2.4 | 1 | login with valid credentials succeeds |
+| C.2.5 | 1 | `authstatus` on the live session reports the logged-in user |
+| C.2.6 | 1 | second login while authenticated reports already-logged-in |
+| C.2.7 | 1 | login with every credential surface deprived reports missing-credentials |
+| C.2.8 | 1 | `get_courses` while logged in returns an accepted course-list form |
+| C.2.9 | 1 | logout while authenticated succeeds |
+| C.2.10 | 1 | `authstatus` after logout reports not-logged-in |
+| C.2.11 | 1 | `get_courses` without authentication reports not-logged-in |
+| C.2.12 | 1 | logout without a prior login is a no-op |
+
+### Feature: Course Announcements (11 points across 9 rows)
+
+| ID | Points | Description |
+|----|--------|-------------|
+| C.3.1 | 1 | course tool without login returns the not-logged-in error |
+| C.3.2 | 1 | unparseable `course_url` returns the extract-code error |
+| C.3.3 | 1 | negative `days_back` returns the non-negative-integer error |
+| C.3.4 | 1 | out-of-window course returns the empty-window string |
+| C.3.5 | 2 | `days_back=0` returns the single relative-date announcement |
+| C.3.6 | 1 | `days_back=0` on an absolute-only course returns the empty-window string |
+| C.3.7 | 2 | default window returns the three in-scope announcements newest first |
+| C.3.8 | 1 | `days_back=10` slices the explicit non-default window |
+| C.3.9 | 1 | `days_back=40` widens past the default with no upper cap |
+
+### Feature: General Announcements (8 points across 7 rows)
+
+| ID | Points | Description |
+|----|--------|-------------|
+| C.4.1 | 1 | general tool without login returns the not-logged-in error |
+| C.4.2 | 1 | negative `days_back` returns the non-negative-integer error |
+| C.4.3 | 1 | `days_back=31` returns the older-than-30-days error |
+| C.4.4 | 1 | `days_back=0` returns the empty-window string |
+| C.4.5 | 1 | `days_back=5` returns the lone in-scope course entry with its source |
+| C.4.6 | 2 | `days_back=8` returns the system and course union with both source forms |
+| C.4.7 | 1 | default window returns the full union ordered across sources |
+
+### Multi-step memory (6 points across 3 scenarios)
+
+The multi-step memory scenarios drive the C binary once under
+valgrind with a scripted JSON-RPC sequence. A scenario passes when
+valgrind reports zero `definitely lost` and zero `indirectly lost`
+bytes and the run completes (no signal exit, leak summary present,
+exit code not the error sentinel 99). Each scenario names the
+functional rows whose call shapes it exercises in its `gates_on`
+tuple; a scenario whose gates have not all passed is recorded as a
+zero-point skip rather than driving valgrind on a path that
+short-circuits through the participant's error handling.
+
+| ID | Points | Description |
+|----|--------|-------------|
+| C.5.1 | 2 | session-spanning allocation and free across the full tool surface |
+| C.5.2 | 2 | session-state replacement on re-login and idempotent teardown |
+| C.5.3 | 2 | leak and responsiveness on the pure baseline regression surface |
+
+### Per-scenario memory sub-assertions (26 points across 26 rows)
+
+Every C functional scenario from C.2.3 through C.4.7 also records a
+one-point memory sub-assertion under `<id>.mem` derived from the
+same valgrind run that produced the functional verdict. The
+sub-assertion is awarded only when the functional row passed AND
+valgrind reported a clean leak verdict; a server that fails the
+functional contract receives no `.mem` credit, and a leak under a
+passing functional row deducts the `.mem` point without affecting
+the functional verdict.
+
+The 26 paired ids are: C.2.3 through C.2.12, C.3.1 through C.3.9,
+and C.4.1 through C.4.7. The pairing is mechanical (every
+behavioural row that runs under valgrind carries a `.mem`); the
+single per-row point allocation is the rubric's even weighting of
+correctness against leak hygiene on the same execution.
+
+## Expected score upper bounds
+
+| Submission shape | Score |
+|---|---|
+| No patch (baseline run against the unmodified upstream) | the rubric's deterministic reference; verified at instrument rebuild and reproducible by re-running `python -m grader --no-patch` |
+| Python implementation only (no C replica produced) | 30/100 (C.1.1 fails its sole hard gate; every other C row skip-records) |
+| Complete correct implementation | 100/100 |
+
+The no-patch numeric is not asserted here because it is a property
+of the live grading environment (the unmodified upstream's
+behaviour against the seeded mock) and is verified empirically when
+the grading VM is rebuilt; this document keeps only the mechanical
+maxima that are derivable from the rubric table in
+`grader/src/scoring.py` without a live run.

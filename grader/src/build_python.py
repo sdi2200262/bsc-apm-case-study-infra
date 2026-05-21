@@ -54,4 +54,8 @@ def build(eclass_root: Path) -> tuple[bool, str, str]:
 
     if result.returncode == 0:
         return True, "uv sync completed successfully", result.stdout or "uv sync completed"
-    return False, f"uv sync failed: {result.stderr[:300]}", result.stderr
+    combined = (result.stderr + "\n" + result.stdout).strip()
+    if result.returncode < 0:
+        summary = f"uv sync killed by signal {-result.returncode}"
+        return False, summary, combined or summary
+    return False, f"uv sync failed: {combined[:300]}", combined

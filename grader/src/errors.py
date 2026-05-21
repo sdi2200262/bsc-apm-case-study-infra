@@ -5,13 +5,15 @@
 Exception hierarchy for the grader package.
 
 Each grader module raises the appropriate ``GraderError`` subclass
-on failure; the top-level ``grade`` script catches the base
-``GraderError`` and reports a structured error to stderr before
-returning a non-zero exit code. Custom exception types make the
-failure mode visible in the source: a configuration miss raises
-``GraderConfigError``; an unreachable testing environment raises
-``PreflightError``; a reset script that returns non-zero raises
-``ResetError``.
+on failure; the grader CLI entry point (``python -m grader``)
+catches the base ``GraderError`` and reports a structured error to
+stderr before returning a non-zero exit code. Custom exception
+types make the failure mode visible in the source: a configuration
+miss raises ``GraderConfigError``; an unreachable testing
+environment raises ``PreflightError``; a reset script that returns
+non-zero raises ``ResetError``; ``provision.ProvisioningError``
+covers a missing testing-environment artefact;
+``calibration.CalibrationError`` covers a failed seed-instant query.
 
 Every exception message includes the failing component, the path
 or URL involved when applicable, and the operator action that
