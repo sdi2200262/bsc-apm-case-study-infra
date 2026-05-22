@@ -357,11 +357,16 @@ def _build_parser() -> argparse.ArgumentParser:
 def _cmd_add(args: argparse.Namespace) -> int:
     """Append one entry to the sidecar after validating its path."""
     directory = args.metrics_dir
+    note_text = args.note.strip()
+    if not note_text:
+        print("error: note text cannot be empty", file=sys.stderr)
+        return 1
+
     metrics = _read_metrics(directory)
     tokens = parse_metric_path(args.path)
     resolve_metric_path(metrics, tokens)
     notes = load_notes(directory)
-    notes.append({"path": args.path, "note": args.note.rstrip()})
+    notes.append({"path": args.path, "note": note_text})
     save_notes(directory, notes)
     print(f"added note at {args.path} (now {len(notes)} note(s))")
     return 0

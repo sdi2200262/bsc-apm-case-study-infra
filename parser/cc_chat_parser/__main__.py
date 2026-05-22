@@ -239,9 +239,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: metrics build failed: {error}", file=sys.stderr)
             return 1
         if args.output is not None:
-            with args.output.open("w", encoding="utf-8") as sink:
-                json.dump(artifact, sink, indent=2, ensure_ascii=False)
-            print(f"metrics written to {args.output}", file=sys.stderr)
+            try:
+                with args.output.open("w", encoding="utf-8") as sink:
+                    json.dump(artifact, sink, indent=2, ensure_ascii=False)
+                print(f"metrics written to {args.output}", file=sys.stderr)
+            except OSError as error:
+                print(f"error: could not write to {args.output}: {error}", file=sys.stderr)
+                return 1
         else:
             json.dump(artifact, sys.stdout, indent=2, ensure_ascii=False)
             print()

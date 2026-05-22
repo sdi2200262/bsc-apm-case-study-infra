@@ -202,8 +202,7 @@ def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationVie
     for conversation, base_role, first_command, first_record, first_ts in initial:
         counters[base_role] = counters.get(base_role, 0) + 1
         role_key = f"{base_role}-{counters[base_role]}"
-        phase = APM_PHASE_BY_ROLE.get(base_role, PHASE_OTHER)
-        phase_by_uuid = _phase_by_uuid_constant(conversation.records, phase)
+        phase_by_uuid = _phase_by_uuid_apm_walker(conversation.records, base_role)
         views.append(ConversationView(
             conversation=conversation,
             role=role_key,
@@ -334,6 +333,35 @@ def _ratchet_phase_assignments(conversations: list[Conversation]) -> dict[str, s
     return phase_by_uuid
 
 
+def _phase_by_uuid_apm_walker(records: tuple[Record, ...], base_role: str) -> dict[str, str]:
+    """Return a mapping of prompt UUID to phase for an APM conversation.
+
+    Walks the records sequentially. Every genuine user prompt is
+    assigned ``PHASE_OTHER`` until a role-initiating command is
+    found. Once an initiator appears, that prompt and every
+    subsequent prompt in the conversation are assigned to the
+    real phase associated with ``base_role``.
+    """
+    result: dict[str, str] = {}
+    current_phase = PHASE_OTHER
+    real_phase = APM_PHASE_BY_ROLE.get(base_role, PHASE_OTHER)
+
+    for record in records:
+        if not is_user_authored_prompt(record):
+            continue
+        if record.uuid is None:
+            continue
+
+        if current_phase == PHASE_OTHER:
+            for command in extract_command_names(user_prompt_text(record)):
+                if role_from_initiate_command(command) != ROLE_UNASSIGNED:
+                    current_phase = real_phase
+                    break
+
+        result[record.uuid] = current_phase
+    return result
+
+
 def _phase_by_uuid_constant(records: tuple[Record, ...], phase: str) -> dict[str, str]:
     """Stamp every genuine user prompt record's uuid with the same phase label."""
     result: dict[str, str] = {}
@@ -347,26 +375,22 @@ def _phase_by_uuid_constant(records: tuple[Record, ...], phase: str) -> dict[str
 
 
 def _first_slash_command(conversation: Conversation) -> tuple[str, Record | None]:
-    """Return the verbatim first framework command in a conversation.
+    """Return the first role-initiating framework command in a conversation.
 
     Walks the conversation's records in document order. The first
-    genuine user prompt that carries at least one APM or Spec-kit
-    command in its ``<command-name>`` markers contributes the first
-    such command as the conversation's first command. Claude Code
-    built-ins such as ``/clear``, ``/exit``, ``/usage``, ``/compact``,
-    and ``/model`` are skipped: they are platform vocabulary, not
-    framework participation, and would mis-classify a Manager or
-    Worker conversation as unassigned simply because the participant
-    issued a built-in before the framework command. When no framework
-    command appears anywhere in the conversation, the empty string
-    and ``None`` are returned and the caller assigns the unassigned
-    role.
+    genuine user prompt that carries an APM role-initiating command
+    (``apm-1/2/3``) defines the conversation's role. Commands that
+    precede the initiator (including recovery or status commands)
+    do not trigger role assignment; those conversations remain
+    unassigned until an initiator is encountered. Claude Code
+    built-ins are ignored. When no initiator appears anywhere in the
+    conversation, returns an empty string and ``None``.
     """
     for record in conversation.records:
         if not is_user_authored_prompt(record):
             continue
         for command in extract_command_names(user_prompt_text(record)):
-            if classify_command(command):
+            if role_from_initiate_command(command) != ROLE_UNASSIGNED:
                 return command, record
     return "", None
 

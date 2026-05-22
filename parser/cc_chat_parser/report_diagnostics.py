@@ -135,26 +135,6 @@ def build_diagnostics(
         "auth_mode_valid": auth_value == EXPECTED_AUTH_MODE,
         "turns_with_missing_uuid": turns_with_missing_uuid,
         "invariant_checks": invariants,
-        "notes": [
-            "cost is the API-equivalent cost from visible API calls "
-            "and excludes the synthesis cost of compaction events when present.",
-            "cost is summed call by call: each main call priced at its own "
-            "message.model, each delegated dispatch priced at the subagent's "
-            "model. The model is read from the sibling subagents/ directory "
-            "when shipped, otherwise resolved by the documented fallback in "
-            "subagents.resolve_unindexed_subagent_model.",
-            "the cost shape is conditional: a single cost_usd leaf when every "
-            "delegated dispatch was priced deterministically, a "
-            "(cost_usd_lower_bound, cost_usd_upper_bound) pair when at least "
-            "one dispatch was bracketed by the resolver.",
-            "synthetic_assistant_records_excluded counts placeholder assistant "
-            "records the local Claude Code client writes around session "
-            "boundaries and adjacent to compaction events to keep the "
-            "user-assistant alternation balanced. Their emission is "
-            "independent of compaction event count: a session can produce "
-            "more, fewer, or the same number of synthetic placeholders as "
-            "compaction events, and the two should not be read as paired.",
-        ],
     }
 
 

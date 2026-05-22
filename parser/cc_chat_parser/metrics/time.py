@@ -82,6 +82,7 @@ def compute_time_metrics(
     turns: Iterable[Turn],
     scope_start: datetime | None = None,
     scope_end: datetime | None = None,
+    inter_turn_time_override: float | None = None,
 ) -> TimeMetrics:
     """Compute time metrics over a set of turns.
 
@@ -90,9 +91,7 @@ def compute_time_metrics(
     Callers that need the scope to extend beyond the outermost
     turn boundaries (a session whose first or last record is not a
     turn record, for example) supply explicit ``scope_start`` and
-    ``scope_end``; ``inter_turn_time`` is then computed against the
-    explicit bounds, capturing any wall-clock gap between the
-    scope's true edges and the outermost turn.
+    ``scope_end``.
 
     Args:
         turns: The turns to aggregate over. Order does not matter;
@@ -102,6 +101,10 @@ def compute_time_metrics(
             start when ``None``.
         scope_end: Optional explicit end. Falls back to the latest
             turn end when ``None``.
+        inter_turn_time_override: Optional explicit inter-turn time.
+            When provided, ``duration`` is calculated as the sum of
+            turn time and this override. Used to partition
+            session-wide gaps across interleaved phases (BUG-4).
 
     Returns:
         A populated ``TimeMetrics``.
@@ -113,11 +116,17 @@ def compute_time_metrics(
         (turn.start_timestamp, turn.end_timestamp)
         for turn in turn_list
     ]
-    effective_start = scope_start if scope_start is not None else min(start for start, _ in intervals)
-    effective_end = scope_end if scope_end is not None else max(end for _, end in intervals)
-    duration_seconds = max(0.0, (effective_end - effective_start).total_seconds())
     turn_time, turn_time_solo, turn_time_concurrent = _decompose_intervals(intervals)
-    inter_turn_time = max(0.0, duration_seconds - turn_time)
+
+    if inter_turn_time_override is not None:
+        inter_turn_time = inter_turn_time_override
+        duration_seconds = turn_time + inter_turn_time
+    else:
+        effective_start = scope_start if scope_start is not None else min(start for start, _ in intervals)
+        effective_end = scope_end if scope_end is not None else max(end for _, end in intervals)
+        duration_seconds = max(0.0, (effective_end - effective_start).total_seconds())
+        inter_turn_time = max(0.0, duration_seconds - turn_time)
+
     durations = [
         max(0.0, (end - start).total_seconds())
         for start, end in intervals

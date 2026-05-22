@@ -331,6 +331,8 @@ def _sum_main_from_records(records: list[Record]) -> TokenSums:
             continue
         if message.get("model") == SYNTHETIC_MODEL_MARKER:
             continue
+        if record.payload.get("isApiErrorMessage") is True:
+            continue
         request_id = record.payload.get("requestId")
         if not isinstance(request_id, str):
             continue
