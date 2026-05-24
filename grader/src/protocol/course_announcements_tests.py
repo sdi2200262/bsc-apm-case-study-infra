@@ -207,7 +207,7 @@ def test_course_days_zero(
             text = extract_text(call_tool(server, TOOL_NAME, {
                 "course_url": course_url("CS101"), "days_back": 0,
             }))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "relative-date announcement response accepted" if ok else (
                 f"expected constructed response, got {text[:200]!r}"
@@ -283,7 +283,7 @@ def test_course_default(
             call_tool(server, "login", {})
             text = extract_text(call_tool(server, TOOL_NAME,
                                           {"course_url": course_url("PHYS150")}))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "default-window announcement response accepted (3 items)" if ok else (
                 f"expected constructed response, got {text[:200]!r}"
@@ -319,7 +319,7 @@ def test_course_days_10(
             text = extract_text(call_tool(server, TOOL_NAME, {
                 "course_url": course_url("PHYS150"), "days_back": 10,
             }))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "days_back=10 announcement response accepted (2 items)" if ok else (
                 f"expected constructed response, got {text[:200]!r}"
@@ -359,7 +359,7 @@ def test_course_days_40(
             text = extract_text(call_tool(server, TOOL_NAME, {
                 "course_url": course_url("PHYS150"), "days_back": 40,
             }))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "days_back=40 announcement response accepted (4 items)" if ok else (
                 f"expected constructed response, got {text[:200]!r}"

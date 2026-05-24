@@ -60,9 +60,12 @@ caller treats ``None`` as a failed row and records no diagnostic.
 
 from __future__ import annotations
 
+import datetime as _datetime
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable
+
+from dateutil import parser as _dateparser
 
 from ..seed import Course
 from .expected import (
@@ -265,60 +268,79 @@ def match_announcements(
     expected_ordered: str,
     expected_entries: tuple[str, ...],
     expected_count: int,
+    instant: _datetime.datetime,
 ) -> str | None:
     """Return the accepted announcement form, or ``None``.
 
-    The PRD specifies the response format and content but not a
-    presentation order, so two forms are accepted:
+    Two forms are accepted; both compare entries with each
+    ``Date:`` line canonicalised to a calendar date (PRD §2 leaves
+    the rendered date string as an unspecified ``<Date String>``
+    placeholder, so any rendering whose parsed date matches the
+    expected calendar date is a legitimate accept):
 
-    - Form 1 (``ANNOUNCEMENTS_ORDERED``): the response equals the
-      openeclass-derived ordered string under :func:`match_response`
-      (byte-exact, or equal after the non-breaking space family is
-      normalised).
-    - Form 2 (``ANNOUNCEMENTS_UNORDERED``): the response parses by
-      the PRD grammar into the same multiset of byte-exact entries
-      (after the same space-family normalisation) with the same
-      count, but the sequence and the per-entry index number are not
-      enforced. Form 2 enforces every other field exactly: a wrong
-      title, body, date value, source, a missing or extra or
-      duplicated entry, a wrong count grammar, or a malformed entry
-      still fails.
+    - ``ANNOUNCEMENTS_ORDERED``: the response equals the
+      openeclass-derived ordered string after each side's
+      ``Date:`` line is replaced by its parsed calendar date and
+      the non-breaking space family is normalised.
+    - ``ANNOUNCEMENTS_UNORDERED``: the response parses by the PRD
+      grammar into the same multiset of entries (same
+      canonicalisation), but the sequence and the per-entry index
+      number are not enforced. Every other field (title, body,
+      source, count, grammar) is still enforced; a wrong calendar
+      date, a missing/extra/duplicated entry, a malformed entry,
+      or a ``Date:`` value that does not parse all fail.
 
-    Form 1 is tried first; the matched form is the recorded
-    diagnostic. A second-form acceptance is warned for human review
-    at end of grading (see :mod:`grader.src.reporting`).
+    The matched form is the recorded diagnostic; the unordered
+    form is lenient and is warned for human review at end of
+    grading (see :mod:`grader.src.reporting`).
 
     Args:
         text: The tool's response text.
         expected_ordered: The constructed openeclass-derived ordered
-            response (the Form-1 expected string).
+            response.
         expected_entries: The index-free per-entry blocks the
-            response must contain as a multiset (the Form-2 expected
-            entries), single-sourced from :mod:`.expected`.
+            response must contain as a multiset, single-sourced
+            from :mod:`.expected`.
         expected_count: The number of in-window entries the preamble
             must declare and the response must carry.
+        instant: The run's seed-apply instant. Resolves the
+            openeclass-rendered ``today, h:mm AM/PM`` relative form.
 
     Returns:
         ``ANNOUNCEMENTS_ORDERED`` or ``ANNOUNCEMENTS_UNORDERED`` for
-        the accepted form, ``None`` when neither form matches.
+        the accepted form, ``None`` when neither matches.
     """
-    def _accepts_unordered() -> bool:
-        # Form 2 uses a different mechanism from Form 1: parse the
-        # populated-response grammar, then compare as a multiset.
+    def _accepts_ordered() -> bool:
+        # Form 1: parse the response by the PRD grammar (so we can
+        # canonicalise the same per-entry date line as Form 2),
+        # then check both the entries and their order against
+        # expected.
         parsed = _parse_announcement_entries(text, expected_count)
         if parsed is None:
             return False
-        expected_multiset = Counter(
-            normalize_response(entry) for entry in expected_entries
+        canon_parsed = _canonicalise_entries(parsed, instant)
+        canon_expected = _canonicalise_entries(
+            [normalize_response(e) for e in expected_entries], instant,
         )
-        return Counter(parsed) == expected_multiset
+        if canon_parsed is None or canon_expected is None:
+            return False
+        return canon_parsed == canon_expected
+
+    def _accepts_unordered() -> bool:
+        parsed = _parse_announcement_entries(text, expected_count)
+        if parsed is None:
+            return False
+        canon_parsed = _canonicalise_entries(parsed, instant)
+        canon_expected = _canonicalise_entries(
+            [normalize_response(e) for e in expected_entries], instant,
+        )
+        if canon_parsed is None or canon_expected is None:
+            return False
+        return Counter(canon_parsed) == Counter(canon_expected)
 
     return _try_forms(
         [
-            (
-                ANNOUNCEMENTS_ORDERED,
-                lambda: match_response(text, expected_ordered) is not None,
-            ),
+            (ANNOUNCEMENTS_ORDERED, _accepts_ordered),
             (ANNOUNCEMENTS_UNORDERED, _accepts_unordered),
         ]
     )
@@ -480,3 +502,52 @@ def _parse_announcement_entries(
             return None
         entries.append(block[index_prefix.end():])
     return entries
+
+
+_DATE_LINE_RE = re.compile(r"^( {4}Date: )(.+)$", re.MULTILINE)
+
+
+def _parse_date_to_calendar(
+    value: str, instant: _datetime.datetime,
+) -> tuple[int, int, int] | None:
+    """Parse ``value`` to ``(year, month, day)``, or ``None``.
+
+    PRD §2 leaves the rendered date string unspecified, so accept
+    whatever ``dateutil.parser.parse`` accepts (RFC 2822, ISO
+    8601, the openeclass absolute form, locale-formatted
+    variants, common compact shapes). ``instant`` resolves the
+    openeclass-rendered ``today, h:mm AM/PM`` relative form,
+    which dateutil treats as a word rather than a date.
+    """
+    s = value.strip()
+    if s.lower().startswith("today"):
+        d = instant.date()
+        return (d.year, d.month, d.day)
+    try:
+        d = _dateparser.parse(s).date()
+        return (d.year, d.month, d.day)
+    except (ValueError, OverflowError, TypeError):
+        return None
+
+
+def _canonicalise_entries(
+    entries: list[str], instant: _datetime.datetime,
+) -> list[str] | None:
+    """Return ``entries`` with each ``Date:`` line rewritten to YYYY-MM-DD.
+
+    Returns ``None`` if any entry lacks a parseable ``Date:`` line;
+    that fails the match. Every other byte is preserved so title,
+    body, source, and indentation are still byte-asserted.
+    """
+    out: list[str] = []
+    for entry in entries:
+        match = _DATE_LINE_RE.search(entry)
+        if match is None:
+            return None
+        calendar = _parse_date_to_calendar(match.group(2), instant)
+        if calendar is None:
+            return None
+        year, month, day = calendar
+        canonical = f"{match.group(1)}{year:04d}-{month:02d}-{day:02d}"
+        out.append(entry[:match.start()] + canonical + entry[match.end():])
+    return out

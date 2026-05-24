@@ -188,7 +188,7 @@ def test_general_days_5(
             initialize_server(server)
             call_tool(server, "login", {})
             text = extract_text(call_tool(server, TOOL_NAME, {"days_back": 5}))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "days_back=5 announcement response accepted (1 item)" if ok else (
                 f"expected constructed response, got {text[:200]!r}"
@@ -226,7 +226,7 @@ def test_general_days_8(
             initialize_server(server)
             call_tool(server, "login", {})
             text = extract_text(call_tool(server, TOOL_NAME, {"days_back": 8}))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "days_back=8 union announcement response accepted (2 items)" if ok else (
                 f"expected constructed response, got {text[:200]!r}"
@@ -264,7 +264,7 @@ def test_general_default(
             initialize_server(server)
             call_tool(server, "login", {})
             text = extract_text(call_tool(server, TOOL_NAME, {}))
-            mode = match_announcements(text, expected, expected_entries, len(anns))
+            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
             ok = mode is not None
             msg = "default-window announcement response accepted (4 items)" if ok else (
                 f"expected constructed response, got {text[:200]!r}"
