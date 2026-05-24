@@ -45,10 +45,14 @@ The second, lenient form in each pair (``ANNOUNCEMENTS_UNORDERED``,
 :data:`LENIENT_MODES`) is warned for human review at end of grading
 (see :mod:`grader.src.reporting`).
 
-The ``tools/list`` row (:func:`match_tools_list`) is one byte-exact
-contract for both implementations and records no mode at all; its
-result is a pass/fail with a reason, and the row's recorded mode is
-``None``.
+The ``tools/list`` row (:func:`match_tools_list`) splits the
+contract by tool source: byte-exact ``name``, ``description``, and
+``inputSchema`` for the four baseline tools, byte-exact ``name``
+and ``inputSchema`` plus a presence-only ``description`` for the
+two announcement tools. The row records
+``DESCRIPTION_PRESENCE_ONLY`` whenever the presence check accepted
+at least one announcement-tool description, surfacing it in the
+WARNINGS block for manual semantic review.
 
 A matcher returns ``None`` when the response is not accepted; the
 caller treats ``None`` as a failed row and records no diagnostic.
@@ -62,6 +66,7 @@ from collections.abc import Callable, Iterable
 
 from ..seed import Course
 from .expected import (
+    BASELINE_TOOL_NAMES,
     CAPABILITIES_DOCUMENTED,
     CAPABILITIES_FAITHFUL,
     INITIALIZE_PROTOCOL_VERSION,
@@ -96,12 +101,22 @@ ANNOUNCEMENTS_UNORDERED = "announcements-unordered"
 GET_COURSES_FAITHFUL = "get-courses-faithful"
 GET_COURSES_DOCUMENTED = "get-courses-documented"
 
+# Recorded on the ``tools/list`` row when at least one announcement
+# tool's ``description`` was accepted via the presence check; see
+# :func:`match_tools_list` for the contract split.
+DESCRIPTION_PRESENCE_ONLY = "description-presence-only"
+
 # The lenient (second) accepted forms. ``reporting`` imports this
 # single set to detect, at end of grading, every row accepted only
 # via a lenient form and warn a human to review it. Adding a future
 # lenient form requires only extending this constant.
 LENIENT_MODES = frozenset(
-    {ANNOUNCEMENTS_UNORDERED, GET_COURSES_DOCUMENTED, CAP_DOCUMENTED}
+    {
+        ANNOUNCEMENTS_UNORDERED,
+        GET_COURSES_DOCUMENTED,
+        CAP_DOCUMENTED,
+        DESCRIPTION_PRESENCE_ONLY,
+    }
 )
 
 # The platform's locale date renderer emits U+202F (a narrow
@@ -348,54 +363,77 @@ def match_initialize(actual_result: dict) -> str | None:
     )
 
 
-def match_tools_list(actual: list[dict]) -> tuple[bool, str]:
-    """Return whether ``tools/list`` byte-equals the expected tool list.
+def match_tools_list(
+    actual: list[dict],
+) -> tuple[bool, str, str | None]:
+    """Return whether ``tools/list`` matches the expected tool list.
 
-    Both implementations are held to one contract: every one of the
-    six constructed tool objects is present with its ``name``,
-    ``description``, and ``inputSchema`` byte-equal to the expected
-    values, order-insensitive, and no unexpected tool. Every entry
-    in the advertised array must itself be a JSON object carrying a
-    string ``name``; a non-object entry or one without a string name
-    fails the row at the entry's index, so a malformed response
-    cannot pass by virtue of carrying enough well-formed siblings.
-    A server whose tool-schema serialisation differs from the
-    expected values (extra schema keywords, regenerated descriptions,
-    a different object shape) likewise fails this row; that
-    divergence is the intended signal.
+    The six-object contract splits by tool name (see the module
+    docstring): byte-exact on every key for the baseline tools in
+    ``BASELINE_TOOL_NAMES``, byte-exact on ``name`` and
+    ``inputSchema`` only for the announcement tools, with their
+    ``description`` accepted as a non-empty stripped string. Every
+    advertised entry must be a JSON object carrying a string
+    ``name``; a non-object entry or one without a string name fails
+    at the entry's index. The expected values are constructed.
 
     Args:
         actual: The ``tools`` array from the ``tools/list`` result.
 
     Returns:
-        ``(True, summary)`` when the contract holds, ``(False,
-        reason)`` naming the first divergence otherwise.
+        ``(True, summary, mode)`` when the contract holds, where
+        ``mode`` is :data:`DESCRIPTION_PRESENCE_ONLY` when at least
+        one announcement-tool description was accepted via the
+        presence check and ``None`` otherwise. ``(False, reason,
+        None)`` when the contract fails, naming the first divergence.
     """
     for index, tool in enumerate(actual):
         if not isinstance(tool, dict):
-            return False, f"tools/list entry {index} is not a JSON object"
+            return False, f"tools/list entry {index} is not a JSON object", None
         if not isinstance(tool.get("name"), str):
-            return False, f"tools/list entry {index} has no string name"
+            return False, f"tools/list entry {index} has no string name", None
 
     expected_tools = expected_tools_list()
     expected_names = {tool["name"] for tool in expected_tools}
     actual_by_name = {tool["name"]: tool for tool in actual}
     missing = expected_names - set(actual_by_name)
     if missing:
-        return False, f"tools/list is missing {sorted(missing)}"
+        return False, f"tools/list is missing {sorted(missing)}", None
     extra = set(actual_by_name) - expected_names
     if extra:
-        return False, f"tools/list advertises unexpected tools {sorted(extra)}"
+        return (
+            False,
+            f"tools/list advertises unexpected tools {sorted(extra)}",
+            None,
+        )
 
+    presence_only_fired = False
     for expected_tool in expected_tools:
-        got = actual_by_name[expected_tool["name"]]
-        for key in ("name", "description", "inputSchema"):
+        name = expected_tool["name"]
+        got = actual_by_name[name]
+        for key in ("name", "inputSchema"):
             if got.get(key) != expected_tool.get(key):
                 return False, (
-                    f"tools/list {expected_tool['name']}.{key} "
+                    f"tools/list {name}.{key} "
                     "differs from the expected values"
-                )
-    return True, "all 6 tool objects byte-equal the expected values"
+                ), None
+        if name in BASELINE_TOOL_NAMES:
+            if got.get("description") != expected_tool.get("description"):
+                return False, (
+                    f"tools/list {name}.description "
+                    "differs from the expected values"
+                ), None
+        else:
+            got_desc = got.get("description")
+            if not isinstance(got_desc, str) or not got_desc.strip():
+                return False, (
+                    f"tools/list {name}.description "
+                    "must be a non-empty string"
+                ), None
+            presence_only_fired = True
+
+    mode = DESCRIPTION_PRESENCE_ONLY if presence_only_fired else None
+    return True, "all 6 tool objects match the expected contract", mode
 
 
 def _parse_announcement_entries(

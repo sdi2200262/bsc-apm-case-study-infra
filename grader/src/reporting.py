@@ -24,6 +24,7 @@ from pathlib import Path
 from .protocol.matching import (
     ANNOUNCEMENTS_UNORDERED,
     CAP_DOCUMENTED,
+    DESCRIPTION_PRESENCE_ONLY,
     GET_COURSES_DOCUMENTED,
     LENIENT_MODES,
 )
@@ -54,6 +55,10 @@ _LENIENT_FORM_PHRASE = {
     ANNOUNCEMENTS_UNORDERED: "accepted via the order-insensitive announcement form",
     GET_COURSES_DOCUMENTED: "accepted via the documented-clean get_courses form",
     CAP_DOCUMENTED: "accepted via the documented initialize.capabilities form",
+    DESCRIPTION_PRESENCE_ONLY: (
+        "accepted via the presence-only description check; "
+        "review the participant's wording in the response below"
+    ),
 }
 
 # Rubric rows whose pass/fail is determined by SDK-emitted serialisation
@@ -215,10 +220,11 @@ def _warnings(scorer: Scorer) -> list[str]:
       but a reviewer may want to assess whether the divergence merits
       a manual sidecar note.
     - Handshake-row failures. A failed row in
-      :data:`HANDSHAKE_ROW_IDS` may reflect a participant defect OR
-      an SDK behavioural change since the expected values were
-      captured: the rows compare against SDK-emitted serialisation,
-      and a uniform failure across submissions points at the latter.
+      :data:`HANDSHAKE_ROW_IDS` may reflect a participant defect, an
+      SDK behavioural change since the expected values were
+      captured, or a grader-side over-specification of the PRD. The
+      rendered text lays out these candidates and the cue from
+      uniform cohort failure.
 
     Each flagged row names its id, description, the reason it was
     flagged, and a bounded tail of its retained response (the full
@@ -287,12 +293,21 @@ def _warnings(scorer: Scorer) -> list[str]:
             "  serialisation the MCP SDK emits, so a failure may be a"
         )
         lines.append(
-            "  participant defect or an SDK behavioural change since"
+            "  participant defect, an SDK behavioural change since"
         )
         lines.append(
-            "  the expected values were captured. Inspect the detail"
+            "  the expected values were captured, or a grader-side"
         )
-        lines.append("  and the JSON report before judging.")
+        lines.append(
+            "  expected value that over-specifies what the PRD"
+        )
+        lines.append(
+            "  designates. A uniform failure across submissions"
+        )
+        lines.append(
+            "  weighs against the first cause. Inspect the detail and"
+        )
+        lines.append("  the JSON report before judging.")
         lines.append("")
         for test_id, result in handshake_failures:
             definition = defs.get(test_id)

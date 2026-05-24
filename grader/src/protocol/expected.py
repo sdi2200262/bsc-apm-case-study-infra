@@ -129,6 +129,11 @@ BASELINE_TOOL_INPUT_SCHEMA = {
     "required": ["random_string"],
 }
 
+# Scopes the byte-exact ``description`` contract in ``match_tools_list``.
+BASELINE_TOOL_NAMES: frozenset[str] = frozenset(
+    {"login", "get_courses", "logout", "authstatus"}
+)
+
 # The four baseline tools, verbatim from the wire-protocol reference,
 # in its declared order.
 BASELINE_TOOLS: tuple[dict, ...] = (
@@ -154,14 +159,14 @@ BASELINE_TOOLS: tuple[dict, ...] = (
     },
 )
 
-# The two announcement tools the task adds. The wire-protocol and
-# tools reference documents cover only the four baseline tools, so
-# the sole source for these two is the task PRD section 2; their
-# name, description, and input schema are transcribed from it.
+# The two announcement tools the task adds. No ``description`` key:
+# the PRD designates only the per-parameter descriptions inside the
+# input-schema blocks, not a tool-level description field, so the
+# matcher presence-checks the participant's value rather than
+# byte-matching it.
 ANNOUNCEMENT_TOOLS: tuple[dict, ...] = (
     {
         "name": "get_course_announcements",
-        "description": "Fetches announcements for a single course, optionally filtered by recency.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -179,7 +184,6 @@ ANNOUNCEMENT_TOOLS: tuple[dict, ...] = (
     },
     {
         "name": "get_general_announcements",
-        "description": "Returns a unified view of the platform's system-wide announcements together with announcements from the authenticated user's enrolled courses, with source attribution on each entry.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -220,9 +224,9 @@ def expected_tools_list() -> tuple[dict, ...]:
     """Return the expected ``tools/list`` tool objects.
 
     Returns:
-        The six tool objects (four baseline, two announcement) in
-        declared order, each carrying ``name``, ``description``, and
-        ``inputSchema``.
+        The six tool objects in declared order. Baseline tools
+        carry ``name``, ``description``, and ``inputSchema``;
+        announcement tools omit ``description``.
     """
     return ALL_TOOL_OBJECTS
 

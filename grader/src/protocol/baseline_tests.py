@@ -78,11 +78,10 @@ def test_tools_list(
 ) -> Result5:
     """P.1.1 / C.2.2: tools/list matches the constructed expected tool list.
 
-    Both implementations are held to the same byte-exact six-object
-    contract (``name``, ``description``, ``inputSchema``) against the
-    constructed expected values, so a server whose tool schemas
-    serialise differently fails this row. This row records no string
-    mode.
+    The contract split lives in
+    :func:`grader.src.protocol.matching.match_tools_list`; this row
+    propagates its ``mode`` so a presence-only acceptance surfaces
+    in the WARNINGS block.
     """
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
@@ -104,7 +103,7 @@ def test_tools_list(
                 ok = False
                 msg = "tools/list: invalid or missing tools array"
             else:
-                ok, msg = match_tools_list(tools)
+                ok, msg, mode = match_tools_list(tools)
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
