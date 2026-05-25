@@ -16,6 +16,11 @@ Public surface:
 
 - :data:`SERVER_START_FAIL`: the three-tuple every assertion body
   returns when ``spawn_server`` yielded ``None``.
+- :data:`HANDSHAKE_FAIL`, :data:`LOGIN_FAIL`, :data:`TOOL_FAIL`: the
+  three-tuples every assertion body returns when the corresponding
+  protocol step missed a response. Row bodies branch progressively
+  on the result of each step so the row reports which step missed
+  instead of "expected X, got ''".
 - :data:`LeakTuple`, :data:`Result5`: the result type aliases the
   scenario functions advertise.
 - :func:`leak_after`: returns the leak verdict only when the
@@ -36,6 +41,24 @@ SERVER_START_FAIL: tuple[bool, str, str] = (
     False,
     "Could not start server",
     "Server failed to start",
+)
+
+HANDSHAKE_FAIL: tuple[bool, str, str] = (
+    False,
+    "server did not complete the MCP handshake",
+    "initialize returned no response",
+)
+
+LOGIN_FAIL: tuple[bool, str, str] = (
+    False,
+    "server did not respond to login",
+    "login tool call returned no response",
+)
+
+TOOL_FAIL: tuple[bool, str, str] = (
+    False,
+    "server did not respond to the tool call",
+    "scoring tool call returned no response",
 )
 
 

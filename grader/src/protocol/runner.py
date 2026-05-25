@@ -117,6 +117,9 @@ class ServerProcess:
             path. Persists after ``stop()`` for :meth:`leak_verdict`.
         _proc_exit_code: Exit code recorded at ``stop()`` time; used
             by :meth:`leak_verdict` to check the error sentinel.
+        _server_unresponsive: Sticky flag set on the first missed
+            :meth:`send_request`; subsequent calls short-circuit to
+            ``None`` without paying the per-request timeout.
     """
 
     def __init__(self, ctx: TestContext) -> None:
@@ -131,6 +134,7 @@ class ServerProcess:
         self._advertised_tools: dict[str, dict | None] | None = None
         self._valgrind_stderr_file: IO[str] | None = None
         self._proc_exit_code: int | None = None
+        self._server_unresponsive: bool = False
 
     def start(self) -> bool:
         """Spawn the server subprocess.
@@ -276,8 +280,10 @@ class ServerProcess:
         return clean, report
 
     def send_request(self, request: dict) -> dict | None:
-        """Send a JSON-RPC request; return the parsed response or ``None``."""
+        """Send a JSON-RPC request; return the parsed response or ``None`` (sticky on first miss)."""
         if self.proc is None or self.proc.stdin is None or self.proc.stdout is None:
+            return None
+        if self._server_unresponsive:
             return None
         try:
             line = json.dumps(request) + "\n"
@@ -294,6 +300,7 @@ class ServerProcess:
                 self.proc.stdout, timeout, self.ctx.debug
             )
             if not response_line:
+                self._server_unresponsive = True
                 return None
             if self.ctx.debug:
                 print(f"[debug] recv: {response_line.strip()}")
@@ -301,6 +308,7 @@ class ServerProcess:
         except (OSError, json.JSONDecodeError) as error:
             if self.ctx.debug:
                 print(f"[debug] request error: {error}")
+            self._server_unresponsive = True
             return None
 
     def send_notification(self, notification: dict) -> None:
@@ -427,9 +435,9 @@ def spawn_server(
             provision.write_dotenv(eclass_dir, mock_root)
 
 
-def initialize_server(server: ServerProcess) -> None:
-    """Send the initialize request and the initialized notification."""
-    server.send_request({
+def initialize_server(server: ServerProcess) -> bool:
+    """Initialise the server; ``True`` on success, ``False`` when the response missed or lacked ``result``."""
+    response = server.send_request({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "initialize",
@@ -439,10 +447,13 @@ def initialize_server(server: ServerProcess) -> None:
             "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
         },
     })
+    if response is None or "result" not in response:
+        return False
     server.send_notification({
         "jsonrpc": "2.0",
         "method": "notifications/initialized",
     })
+    return True
 
 
 def call_tool(server: ServerProcess, tool: str, args: dict) -> dict | None:

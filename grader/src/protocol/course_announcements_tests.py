@@ -22,8 +22,11 @@ from pathlib import Path
 
 from ..seed import SEED, course_announcements_in_window, user
 from ._assertion_support import (
+    HANDSHAKE_FAIL,
+    LOGIN_FAIL,
     Result5,
     SERVER_START_FAIL,
+    TOOL_FAIL,
     leak_after,
 )
 from .expected import (
@@ -69,15 +72,21 @@ def test_course_not_logged_in(
     with spawn_server(impl, eclass_dir, mock_root, debug, memcheck=memcheck) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            text = extract_text(call_tool(server, TOOL_NAME,
-                                          {"course_url": course_url("CS101")}))
-            mode = match_exact(text, ERR_NOT_LOGGED_IN)
-            ok = mode is not None
-            msg = "exact not-logged-in error matched" if ok else (
-                f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                tool_resp = call_tool(server, TOOL_NAME,
+                                      {"course_url": course_url("CS101")})
+                if tool_resp is None:
+                    ok, msg, detail = TOOL_FAIL
+                else:
+                    text = extract_text(tool_resp)
+                    mode = match_exact(text, ERR_NOT_LOGGED_IN)
+                    ok = mode is not None
+                    msg = "exact not-logged-in error matched" if ok else (
+                        f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
+                    )
+                    detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -99,16 +108,25 @@ def test_course_bad_url(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME,
-                                          {"course_url": "not-a-valid-url"}))
-            mode = match_exact(text, ERR_BAD_COURSE_URL)
-            ok = mode is not None
-            msg = "exact extract-code error matched" if ok else (
-                f"expected {ERR_BAD_COURSE_URL!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME,
+                                          {"course_url": "not-a-valid-url"})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, ERR_BAD_COURSE_URL)
+                        ok = mode is not None
+                        msg = "exact extract-code error matched" if ok else (
+                            f"expected {ERR_BAD_COURSE_URL!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -130,17 +148,26 @@ def test_course_negative_days(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME, {
-                "course_url": course_url("PHYS150"), "days_back": -1,
-            }))
-            mode = match_exact(text, ERR_NEGATIVE_DAYS_BACK)
-            ok = mode is not None
-            msg = "exact negative-days error matched" if ok else (
-                f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME, {
+                        "course_url": course_url("PHYS150"), "days_back": -1,
+                    })
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, ERR_NEGATIVE_DAYS_BACK)
+                        ok = mode is not None
+                        msg = "exact negative-days error matched" if ok else (
+                            f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -167,16 +194,25 @@ def test_course_empty_window(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME,
-                                          {"course_url": course_url("MATH201")}))
-            mode = match_exact(text, NO_ANNOUNCEMENTS)
-            ok = mode is not None
-            msg = "exact empty-window string matched" if ok else (
-                f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME,
+                                          {"course_url": course_url("MATH201")})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, NO_ANNOUNCEMENTS)
+                        ok = mode is not None
+                        msg = "exact empty-window string matched" if ok else (
+                            f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -202,17 +238,26 @@ def test_course_days_zero(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME, {
-                "course_url": course_url("CS101"), "days_back": 0,
-            }))
-            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
-            ok = mode is not None
-            msg = "relative-date announcement response accepted" if ok else (
-                f"expected constructed response, got {text[:200]!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME, {
+                        "course_url": course_url("CS101"), "days_back": 0,
+                    })
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        ok = mode is not None
+                        msg = "relative-date announcement response accepted" if ok else (
+                            f"expected constructed response, got {text[:200]!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -239,17 +284,26 @@ def test_course_zero_absolute(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME, {
-                "course_url": course_url("PHYS150"), "days_back": 0,
-            }))
-            mode = match_exact(text, NO_ANNOUNCEMENTS)
-            ok = mode is not None
-            msg = "exact empty-window string matched (days_back=0 honoured)" if ok else (
-                f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME, {
+                        "course_url": course_url("PHYS150"), "days_back": 0,
+                    })
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, NO_ANNOUNCEMENTS)
+                        ok = mode is not None
+                        msg = "exact empty-window string matched (days_back=0 honoured)" if ok else (
+                            f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -279,16 +333,25 @@ def test_course_default(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME,
-                                          {"course_url": course_url("PHYS150")}))
-            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
-            ok = mode is not None
-            msg = "default-window announcement response accepted (3 items)" if ok else (
-                f"expected constructed response, got {text[:200]!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME,
+                                          {"course_url": course_url("PHYS150")})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        ok = mode is not None
+                        msg = "default-window announcement response accepted (3 items)" if ok else (
+                            f"expected constructed response, got {text[:200]!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -314,17 +377,26 @@ def test_course_days_10(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME, {
-                "course_url": course_url("PHYS150"), "days_back": 10,
-            }))
-            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
-            ok = mode is not None
-            msg = "days_back=10 announcement response accepted (2 items)" if ok else (
-                f"expected constructed response, got {text[:200]!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME, {
+                        "course_url": course_url("PHYS150"), "days_back": 10,
+                    })
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        ok = mode is not None
+                        msg = "days_back=10 announcement response accepted (2 items)" if ok else (
+                            f"expected constructed response, got {text[:200]!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -354,15 +426,24 @@ def test_course_days_40(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, TOOL_NAME, {
-                "course_url": course_url("PHYS150"), "days_back": 40,
-            }))
-            mode = match_announcements(text, expected, expected_entries, len(anns), instant)
-            ok = mode is not None
-            msg = "days_back=40 announcement response accepted (4 items)" if ok else (
-                f"expected constructed response, got {text[:200]!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, TOOL_NAME, {
+                        "course_url": course_url("PHYS150"), "days_back": 40,
+                    })
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        ok = mode is not None
+                        msg = "days_back=40 announcement response accepted (4 items)" if ok else (
+                            f"expected constructed response, got {text[:200]!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode

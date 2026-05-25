@@ -26,8 +26,11 @@ from ..provision import blank_dotenv_credentials, write_dotenv
 from ..seed import SEED, enrolled_courses, user
 
 from ._assertion_support import (
+    HANDSHAKE_FAIL,
+    LOGIN_FAIL,
     Result5,
     SERVER_START_FAIL,
+    TOOL_FAIL,
     leak_after,
 )
 from .expected import ERR_NOT_LOGGED_IN, login_success
@@ -92,18 +95,23 @@ def test_tools_list(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            raw = server.send_request({
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
-            })
-            detail = json.dumps(raw)
-            result = raw.get("result") if raw else None
-            tools = result.get("tools") if isinstance(result, dict) else None
-            if not isinstance(tools, list):
-                ok = False
-                msg = "tools/list: invalid or missing tools array"
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
             else:
-                ok, msg, mode = match_tools_list(tools)
+                raw = server.send_request({
+                    "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
+                })
+                if raw is None:
+                    ok, msg, detail = TOOL_FAIL
+                else:
+                    detail = json.dumps(raw)
+                    result = raw.get("result")
+                    tools = result.get("tools") if isinstance(result, dict) else None
+                    if not isinstance(tools, list):
+                        ok = False
+                        msg = "tools/list: invalid or missing tools array"
+                    else:
+                        ok, msg, mode = match_tools_list(tools)
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -124,14 +132,20 @@ def test_authstatus_pre_login(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            text = extract_text(call_tool(server, "authstatus", {}))
-            mode = match_exact(text, AUTHSTATUS_NOT_LOGGED_IN)
-            ok = mode is not None
-            msg = "exact not-logged-in status matched" if ok else (
-                f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                tool_resp = call_tool(server, "authstatus", {})
+                if tool_resp is None:
+                    ok, msg, detail = TOOL_FAIL
+                else:
+                    text = extract_text(tool_resp)
+                    mode = match_exact(text, AUTHSTATUS_NOT_LOGGED_IN)
+                    ok = mode is not None
+                    msg = "exact not-logged-in status matched" if ok else (
+                        f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}"
+                    )
+                    detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -152,14 +166,20 @@ def test_login_success(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            text = extract_text(call_tool(server, "login", {}))
-            mode = match_exact(text, LOGIN_SUCCESS)
-            ok = mode is not None
-            msg = "exact login success string matched" if ok else (
-                f"expected {LOGIN_SUCCESS!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                tool_resp = call_tool(server, "login", {})
+                if tool_resp is None:
+                    ok, msg, detail = TOOL_FAIL
+                else:
+                    text = extract_text(tool_resp)
+                    mode = match_exact(text, LOGIN_SUCCESS)
+                    ok = mode is not None
+                    msg = "exact login success string matched" if ok else (
+                        f"expected {LOGIN_SUCCESS!r}, got {text!r}"
+                    )
+                    detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -180,15 +200,24 @@ def test_authstatus_post_login(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, "authstatus", {}))
-            mode = match_exact(text, AUTHSTATUS_LOGGED_IN)
-            ok = mode is not None
-            msg = "exact logged-in status matched" if ok else (
-                f"expected {AUTHSTATUS_LOGGED_IN!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, "authstatus", {})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, AUTHSTATUS_LOGGED_IN)
+                        ok = mode is not None
+                        msg = "exact logged-in status matched" if ok else (
+                            f"expected {AUTHSTATUS_LOGGED_IN!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -209,15 +238,24 @@ def test_login_already(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, "login", {}))
-            mode = match_exact(text, LOGIN_ALREADY)
-            ok = mode is not None
-            msg = "exact already-logged-in string matched" if ok else (
-                f"expected {LOGIN_ALREADY!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, "login", {})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, LOGIN_ALREADY)
+                        ok = mode is not None
+                        msg = "exact already-logged-in string matched" if ok else (
+                            f"expected {LOGIN_ALREADY!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -246,14 +284,20 @@ def test_missing_credentials(
         ) as server:
             srv = server
             if server is not None:
-                initialize_server(server)
-                text = extract_text(call_tool(server, "login", {}))
-                mode = match_exact(text, LOGIN_MISSING_CREDS)
-                ok = mode is not None
-                msg = "exact missing-credentials string matched" if ok else (
-                    f"expected missing-credentials error, got {text!r}"
-                )
-                detail = text
+                if not initialize_server(server):
+                    ok, msg, detail = HANDSHAKE_FAIL
+                else:
+                    tool_resp = call_tool(server, "login", {})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, LOGIN_MISSING_CREDS)
+                        ok = mode is not None
+                        msg = "exact missing-credentials string matched" if ok else (
+                            f"expected missing-credentials error, got {text!r}"
+                        )
+                        detail = text
     finally:
         write_dotenv(eclass_dir, mock_root)
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -282,18 +326,27 @@ def test_get_courses_logged_in(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, "get_courses", {}))
-            mode = match_get_courses(
-                text, _COURSES, allow_documented_clean=(impl == "c"),
-            )
-            ok = mode is not None
-            msg = "get_courses response accepted" if ok else (
-                f"get_courses did not match an accepted form; "
-                f"got {text[:200]!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, "get_courses", {})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_get_courses(
+                            text, _COURSES, allow_documented_clean=(impl == "c"),
+                        )
+                        ok = mode is not None
+                        msg = "get_courses response accepted" if ok else (
+                            f"get_courses did not match an accepted form; "
+                            f"got {text[:200]!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -314,15 +367,24 @@ def test_logout_success(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            text = extract_text(call_tool(server, "logout", {}))
-            mode = match_exact(text, LOGOUT_SUCCESS)
-            ok = mode is not None
-            msg = "exact logout success string matched" if ok else (
-                f"expected {LOGOUT_SUCCESS!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    tool_resp = call_tool(server, "logout", {})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, LOGOUT_SUCCESS)
+                        ok = mode is not None
+                        msg = "exact logout success string matched" if ok else (
+                            f"expected {LOGOUT_SUCCESS!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -343,16 +405,25 @@ def test_authstatus_post_logout(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            call_tool(server, "login", {})
-            call_tool(server, "logout", {})
-            text = extract_text(call_tool(server, "authstatus", {}))
-            mode = match_exact(text, AUTHSTATUS_NOT_LOGGED_IN)
-            ok = mode is not None
-            msg = "exact not-logged-in status after logout matched" if ok else (
-                f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                login_resp = call_tool(server, "login", {})
+                if login_resp is None:
+                    ok, msg, detail = LOGIN_FAIL
+                else:
+                    call_tool(server, "logout", {})
+                    tool_resp = call_tool(server, "authstatus", {})
+                    if tool_resp is None:
+                        ok, msg, detail = TOOL_FAIL
+                    else:
+                        text = extract_text(tool_resp)
+                        mode = match_exact(text, AUTHSTATUS_NOT_LOGGED_IN)
+                        ok = mode is not None
+                        msg = "exact not-logged-in status after logout matched" if ok else (
+                            f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}"
+                        )
+                        detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -373,14 +444,20 @@ def test_get_courses_not_logged_in(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            text = extract_text(call_tool(server, "get_courses", {}))
-            mode = match_exact(text, ERR_NOT_LOGGED_IN)
-            ok = mode is not None
-            msg = "exact not-logged-in error matched" if ok else (
-                f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                tool_resp = call_tool(server, "get_courses", {})
+                if tool_resp is None:
+                    ok, msg, detail = TOOL_FAIL
+                else:
+                    text = extract_text(tool_resp)
+                    mode = match_exact(text, ERR_NOT_LOGGED_IN)
+                    ok = mode is not None
+                    msg = "exact not-logged-in error matched" if ok else (
+                        f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
+                    )
+                    detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -401,14 +478,20 @@ def test_logout_no_op(
     ) as server:
         srv = server
         if server is not None:
-            initialize_server(server)
-            text = extract_text(call_tool(server, "logout", {}))
-            mode = match_exact(text, LOGOUT_NO_OP)
-            ok = mode is not None
-            msg = "exact logout no-op string matched" if ok else (
-                f"expected {LOGOUT_NO_OP!r}, got {text!r}"
-            )
-            detail = text
+            if not initialize_server(server):
+                ok, msg, detail = HANDSHAKE_FAIL
+            else:
+                tool_resp = call_tool(server, "logout", {})
+                if tool_resp is None:
+                    ok, msg, detail = TOOL_FAIL
+                else:
+                    text = extract_text(tool_resp)
+                    mode = match_exact(text, LOGOUT_NO_OP)
+                    ok = mode is not None
+                    msg = "exact logout no-op string matched" if ok else (
+                        f"expected {LOGOUT_NO_OP!r}, got {text!r}"
+                    )
+                    detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
@@ -452,17 +535,20 @@ def test_initialize_frame(
                     },
                 },
             })
-            result = raw.get("result") if raw else None
-            detail = json.dumps(raw)
-            if result is None:
-                ok, msg = False, "initialize: no result field"
+            if raw is None:
+                ok, msg, detail = HANDSHAKE_FAIL
             else:
-                mode = match_initialize(result)
-                ok = mode is not None
-                msg = (
-                    f"initialize frame accepted ({mode})"
-                ) if ok else (
-                    "initialize frame matched neither accepted "
-                    f"capability form: got {result!r}"
-                )
+                result = raw.get("result")
+                detail = json.dumps(raw)
+                if result is None:
+                    ok, msg = False, "initialize: no result field"
+                else:
+                    mode = match_initialize(result)
+                    ok = mode is not None
+                    msg = (
+                        f"initialize frame accepted ({mode})"
+                    ) if ok else (
+                        "initialize frame matched neither accepted "
+                        f"capability form: got {result!r}"
+                    )
     return ok, msg, detail, leak_after(srv, memcheck), mode
