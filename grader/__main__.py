@@ -40,6 +40,8 @@ the ``grader`` package on ``sys.path``.
 from __future__ import annotations
 
 import argparse
+import os
+import signal
 import sys
 from pathlib import Path
 from typing import Callable
@@ -90,6 +92,34 @@ def main() -> int:
         return 1
 
 
+def _install_cleanup_signal_handlers(eclass_root: Path) -> None:
+    """Install SIGINT and SIGTERM handlers that run the post-run cleanup before re-raising.
+
+    Python's ``try/finally`` does not fire on a SIGTERM, so without
+    these handlers a Ctrl-C or ``kill`` bypasses the cleanup in
+    :func:`_run` and leaves the checkout dirty for the next grade.
+    The handler runs :func:`provision.reset_provisioning` then
+    :func:`patch.cleanup` (both idempotent), restores the default
+    disposition, and re-raises by sending the same signal to this
+    process so the calling shell sees the correct killed-by-signal
+    exit status. SIGKILL and OOM remain uncatchable;
+    :func:`patch._prepare_clean_checkout` recovers from those.
+
+    Args:
+        eclass_root: Resolved eclass-mcp-server checkout path.
+    """
+    def handler(signum: int, _frame: object) -> None:
+        try:
+            provision.reset_provisioning(eclass_root)
+            patch.cleanup(eclass_root)
+        finally:
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+
+    signal.signal(signal.SIGINT, handler)
+    signal.signal(signal.SIGTERM, handler)
+
+
 def _run(args: argparse.Namespace) -> int:
     """Execute the grading sequence with resolved configuration.
 
@@ -109,6 +139,8 @@ def _run(args: argparse.Namespace) -> int:
     )
     mock_root = require_path(config.mock_root, "mock root", "grader")
     eclass_root = require_path(config.eclass_root, "eclass root", "grader")
+
+    _install_cleanup_signal_handlers(eclass_root)
 
     print("preflight: probing testing environment endpoints")
     preflight.run_preflight()

@@ -22,6 +22,7 @@ the grading run's own builds.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 # Commit the participant applies their patch against, per the
@@ -44,6 +45,42 @@ EXCLUDE_PATTERNS: tuple[str, ...] = (
 
 TEST_BRANCH_PREFIX = "grader-test-"
 
+# New-file roots a participant patch is allowed to introduce; the
+# sweep removes only these so unrelated operator state is preserved.
+PATCH_NEW_FILE_ROOTS: tuple[str, ...] = ("c-replica",)
+
+
+def _prepare_clean_checkout(repo_path: Path) -> None:
+    """Reset the checkout to ``PATCH_BASELINE_PIN`` if a prior grade left it dirty.
+
+    A grade killed by SIGKILL or OOM bypasses :func:`cleanup`, so
+    the next ``git apply --check`` refuses with ``already exists in
+    working directory``. When ``git status`` reports leftover state
+    AND a known patch new-file root (see
+    :data:`PATCH_NEW_FILE_ROOTS`) is present, this resets to the
+    baseline pin and runs the same ``git clean -fdx`` the post-run
+    cleanup uses, so the kill-recovery path lands in the same state
+    a normal post-run cleanup would. A clean checkout is a no-op.
+
+    Args:
+        repo_path: Resolved path to the eclass-mcp-server checkout.
+    """
+    repo_path = Path(repo_path).resolve()
+    ok, status_out = _git(
+        repo_path, "status", "--untracked-files=all", "--ignored", "--porcelain",
+    )
+    if not ok or not status_out.strip():
+        return
+    if not any(root in status_out for root in PATCH_NEW_FILE_ROOTS):
+        return
+    print(
+        f"patch: leftover detected, sweeping baseline checkout: "
+        f"{status_out.strip().splitlines()[0]!r}...",
+        file=sys.stderr,
+    )
+    _git(repo_path, "reset", "--hard", PATCH_BASELINE_PIN)
+    _git(repo_path, "clean", "-fdx")
+
 
 def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
     """Create a test branch from the pinned baseline commit and apply the patch.
@@ -62,6 +99,8 @@ def apply_patch(repo_path: Path, patch_path: Path) -> tuple[bool, str, str]:
     if not patch_path.exists():
         message = f"patch file not found: {patch_path}"
         return False, message, message
+
+    _prepare_clean_checkout(repo_path)
 
     test_branch = f"{TEST_BRANCH_PREFIX}{patch_path.stem}"
 
@@ -101,8 +140,10 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
 
     Idempotent: safe to call when no patch was applied. Checks out
     the patch baseline pin (detached HEAD) so the next grading run
-    starts from the same commit, then deletes every branch with
-    the test prefix.
+    starts from the same commit, deletes every branch with the test
+    prefix, then runs ``git clean -fdx`` so the next grade's
+    ``uv sync`` and C build start from a fresh tree (cross-grade
+    isolation; the global ``uv`` cache keeps the re-sync fast).
 
     Args:
         repo_path: Resolved path to the eclass-mcp-server checkout.
@@ -130,7 +171,7 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
                 actions.append(f"deleted {branch}")
 
     _git(repo_path, "checkout", "--", ".")
-    _git(repo_path, "clean", "-fd")
+    _git(repo_path, "clean", "-fdx")
 
     return True, "; ".join(actions) if actions else "nothing to clean"
 
