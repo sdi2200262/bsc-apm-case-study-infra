@@ -105,9 +105,11 @@ class ConversationView:
             when no slash command appears in any record.
         first_command_record: The record carrying ``first_command``,
             or ``None`` when no such record exists.
-        first_record_timestamp: Earliest timestamp across the
-            conversation's records. Used to order conversations for
-            sequential role numbering.
+        first_record_timestamp: Earliest user-authored prompt
+            timestamp in the conversation; falls back to the earliest
+            timestamped record only when no user-authored prompt
+            exists. Used to order conversations for sequential role
+            numbering.
         phase_by_record_uuid: Phase label keyed by record uuid, only
             populated for genuine user prompt records that participate
             in the per-prompt phase aggregation. Other record types
@@ -194,7 +196,7 @@ def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationVie
             base_role,
             first_command,
             first_record,
-            _earliest_timestamp(conversation.records),
+            _earliest_user_authored_timestamp(conversation.records),
         ))
     initial.sort(key=lambda item: (item[4] is None, item[4]))
     counters: dict[str, int] = {}
@@ -232,7 +234,7 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
             conversation,
             first_command,
             first_record,
-            _earliest_timestamp(conversation.records),
+            _earliest_user_authored_timestamp(conversation.records),
         ))
     initial.sort(key=lambda item: (item[3] is None, item[3]))
     phase_by_uuid_global = _ratchet_phase_assignments(conversations)
@@ -393,6 +395,31 @@ def _first_slash_command(conversation: Conversation) -> tuple[str, Record | None
             if role_from_initiate_command(command) != ROLE_UNASSIGNED:
                 return command, record
     return "", None
+
+
+def _earliest_user_authored_timestamp(records: tuple[Record, ...]) -> datetime | None:
+    """Return the earliest user-authored prompt timestamp in the records.
+
+    Falls back to :func:`_earliest_timestamp` when no user-authored
+    prompt exists.
+
+    Args:
+        records: Conversation records in load order.
+
+    Returns:
+        The timestamp, or ``None`` when no timestamped record exists.
+    """
+    earliest: datetime | None = None
+    for record in records:
+        if record.timestamp is None:
+            continue
+        if not is_user_authored_prompt(record):
+            continue
+        if earliest is None or record.timestamp < earliest:
+            earliest = record.timestamp
+    if earliest is not None:
+        return earliest
+    return _earliest_timestamp(records)
 
 
 def _earliest_timestamp(records: tuple[Record, ...]) -> datetime | None:

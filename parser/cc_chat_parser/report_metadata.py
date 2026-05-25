@@ -8,10 +8,9 @@ The session-metadata block carries the per-session descriptive
 fields the analysis layer reads before any metric: the modal
 Claude Code version, model, authentication-mode indicator,
 entrypoint, and service tier, the session start and end
-timestamps, and the per-conversation array. The modal extractors
-collapse a string field observed across every record to its most
-common value; the timestamp extractors return the earliest and
-latest non-synthetic record times.
+timestamps, and the per-conversation array. Session start is the
+earliest user-authored prompt across the session; session end is
+the latest non-synthetic record.
 
 This module is a leaf: it depends only on the session model and
 the schema vocabulary, and it is imported by ``report`` for the
@@ -30,6 +29,7 @@ from .schema import (
     is_synthetic_assistant,
 )
 from .session import Session
+from .user_prompts import is_user_authored_prompt
 
 
 def _build_session_metadata(session: Session) -> dict[str, Any]:
@@ -40,7 +40,7 @@ def _build_session_metadata(session: Session) -> dict[str, Any]:
     service_tiers = _modal_assistant_usage_field(session, "service_tier")
     models = _models_observed(session)
     pinned_model = max(models.items(), key=lambda item: item[1])[0] if models else ""
-    start = _earliest_real_timestamp_iso(session)
+    start = _iso_or_none(_session_start_timestamp(session))
     end = _latest_real_timestamp_iso(session)
     conversations = [
         {
@@ -119,6 +119,33 @@ def _models_observed(session: Session) -> dict[str, int]:
     return dict(counter)
 
 
+def _session_start_timestamp(session: Session) -> datetime | None:
+    """Return the earliest user-authored prompt timestamp across the session.
+
+    Falls back to :func:`_earliest_real_timestamp` when no
+    user-authored prompt exists anywhere in the session.
+
+    Args:
+        session: The assembled session.
+
+    Returns:
+        The session-start timestamp, or ``None`` when no timestamped
+        record exists.
+    """
+    earliest: datetime | None = None
+    for view in session.views:
+        for record in view.conversation.records:
+            if record.timestamp is None:
+                continue
+            if not is_user_authored_prompt(record):
+                continue
+            if earliest is None or record.timestamp < earliest:
+                earliest = record.timestamp
+    if earliest is not None:
+        return earliest
+    return _earliest_real_timestamp(session)
+
+
 def _earliest_real_timestamp(session: Session) -> datetime | None:
     """Return the earliest non-synthetic record timestamp across the session, or ``None``."""
     earliest = None
@@ -145,11 +172,6 @@ def _latest_real_timestamp(session: Session) -> datetime | None:
             if latest is None or record.timestamp > latest:
                 latest = record.timestamp
     return latest
-
-
-def _earliest_real_timestamp_iso(session: Session) -> str | None:
-    """Return the earliest non-synthetic record timestamp as ISO-8601, or ``None``."""
-    return _iso_or_none(_earliest_real_timestamp(session))
 
 
 def _latest_real_timestamp_iso(session: Session) -> str | None:

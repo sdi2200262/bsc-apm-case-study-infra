@@ -63,9 +63,9 @@ from .report_blocks import (
 from .report_diagnostics import build_diagnostics
 from .report_metadata import (
     _build_session_metadata,
-    _earliest_real_timestamp,
     _iso_or_none,
     _latest_real_timestamp,
+    _session_start_timestamp,
 )
 from .schema import Record
 from .session import ConversationView, Session
@@ -95,7 +95,7 @@ def build_report(
     """
     metadata = _build_session_metadata(session)
     parameters = _build_parameters(session, rate_table, short_threshold)
-    session_start_dt = _earliest_real_timestamp(session)
+    session_start_dt = _session_start_timestamp(session)
     session_end_dt = _latest_real_timestamp(session)
     session_block = _build_scope_block(
         session, session.turns, rate_table, short_threshold,
@@ -191,7 +191,7 @@ def _build_scope_block(
     """
     inter_turn_override = None
     if scope_kind == "phase" and phase_label is not None:
-        session_start = _earliest_real_timestamp(session)
+        session_start = _session_start_timestamp(session)
         session_end = _latest_real_timestamp(session)
         if session_start is not None and session_end is not None:
             inter_turn_override = _calculate_partitioned_inter_turn_time(
