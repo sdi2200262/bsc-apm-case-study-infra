@@ -157,6 +157,7 @@ class ServerProcess:
                     "valgrind",
                     "--leak-check=full",
                     "--show-leak-kinds=all",
+                    "--track-origins=yes",
                     "--error-exitcode=99",
                     server_binary,
                 ]
