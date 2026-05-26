@@ -170,24 +170,21 @@ def user_input_block(metrics: UserInputMetrics) -> dict[str, Any]:
     }
 
 
-def reliability_block(metrics: ReliabilityMetrics) -> dict[str, Any]:
-    """Render a reliability block with leaf triples.
+def supplementary_block(
+    metrics: SupplementaryMetrics,
+    reliability: ReliabilityMetrics,
+) -> dict[str, Any]:
+    """Render a supplementary block with leaf triples.
 
-    Only ``tool_success_rate`` is exposed here as a measurement
-    leaf. The supporting ``tool_result_count`` and
-    ``tool_error_count`` values live in the diagnostics block so
-    iteration over measurement metrics does not pick them up as
+    ``tool_success_rate`` lives here alongside the other Supplementary
+    measurements. Its supporting counts ``tool_result_count`` and
+    ``tool_error_count`` stay in the diagnostics block so iteration
+    over measurement metrics does not pick them up as
     hypothesis-test candidates.
     """
     return {
-        "tool_success_rate": metric_leaf(metrics.tool_success_rate, LABEL_SUPPLEMENTARY, False),
-    }
-
-
-def supplementary_block(metrics: SupplementaryMetrics) -> dict[str, Any]:
-    """Render a supplementary block with leaf triples."""
-    return {
-        "subagent_count":            metric_leaf(metrics.subagent_count,            LABEL_SUPPLEMENTARY, False),
-        "subagent_tool_count":       metric_leaf(metrics.subagent_tool_count,       LABEL_SUPPLEMENTARY, False),
-        "model_invoked_skill_count": metric_leaf(metrics.model_invoked_skill_count, LABEL_SUPPLEMENTARY, False),
+        "tool_success_rate":         metric_leaf(reliability.tool_success_rate,      LABEL_SUPPLEMENTARY, False),
+        "subagent_count":            metric_leaf(metrics.subagent_count,             LABEL_SUPPLEMENTARY, False),
+        "subagent_tool_count":       metric_leaf(metrics.subagent_tool_count,        LABEL_SUPPLEMENTARY, False),
+        "model_invoked_skill_count": metric_leaf(metrics.model_invoked_skill_count,  LABEL_SUPPLEMENTARY, False),
     }

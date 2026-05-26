@@ -272,7 +272,6 @@ def _build_row(combined: dict[str, Any], manifest_key: str) -> dict[str, Any]:
         supplementary = session["supplementary"]
         time_block = process["time"]
         user_input = process["user_input"]
-        reliability = process["reliability"]
         invariants = diagnostics["invariant_checks"]
         turn_prompts_shares = _leaf_value(user_input, "turn_prompts_bucket_shares")
         all_inputs_shares = _leaf_value(user_input, "all_inputs_bucket_shares")
@@ -325,7 +324,7 @@ def _build_row(combined: dict[str, Any], manifest_key: str) -> dict[str, Any]:
             "all_inputs_share_protocol": all_inputs_shares["protocol"],
             "all_inputs_share_short": all_inputs_shares["short"],
             "all_inputs_share_standard": all_inputs_shares["standard"],
-            "tool_success_rate": _leaf_value(reliability, "tool_success_rate"),
+            "tool_success_rate": _leaf_value(supplementary, "tool_success_rate"),
             "subagent_count": _leaf_value(supplementary, "subagent_count"),
             "subagent_tool_count": _leaf_value(supplementary, "subagent_tool_count"),
             "compaction_events_total": diagnostics["compaction_events_total"],

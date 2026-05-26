@@ -336,8 +336,8 @@ Column families, in order:
   `turn_prompts_share_short`, `turn_prompts_share_standard`,
   `all_inputs_share_protocol`, `all_inputs_share_short`,
   `all_inputs_share_standard`.
-- **Reliability** (1): `tool_success_rate`.
-- **Supplementary** (2): `subagent_count`, `subagent_tool_count`.
+- **Supplementary** (3): `tool_success_rate`, `subagent_count`,
+  `subagent_tool_count`.
 - **Diagnostics** (7): `compaction_events_total`,
   `cost_excludes_compaction_synthesis`,
   `synthetic_assistant_records_excluded`,

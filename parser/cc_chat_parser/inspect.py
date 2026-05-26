@@ -136,8 +136,6 @@ def _print_scope(label: str, block: dict[str, Any]) -> None:
     _print_leaves(block["process"]["time"], indent="    ")
     print("  process / user_input:")
     _print_leaves(block["process"]["user_input"], indent="    ")
-    print("  process / reliability:")
-    _print_leaves(block["process"]["reliability"], indent="    ")
     print("  supplementary:")
     _print_leaves(block["supplementary"], indent="    ")
 

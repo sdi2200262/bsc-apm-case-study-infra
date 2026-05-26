@@ -213,7 +213,7 @@ def print_economic(economic: EconomicSession, rate_table: RateTable) -> None:
 
 
 def print_process(session: Session, short_threshold: int) -> None:
-    """Render the session-scope process metric blocks (time, user input, reliability)."""
+    """Render the session-scope process metric blocks (time, user input) and the supplementary tool-success rate."""
     all_steers = tuple(
         event
         for view in session.views
@@ -270,7 +270,5 @@ def print_process(session: Session, short_threshold: int) -> None:
     for bucket in BUCKETS:
         print(f"      {bucket:10} {user_input_metrics.steer_delivered_magnitude_by_bucket[bucket]:.1f}")
     print()
-    print("  reliability:")
-    print(f"    tool_result_count:       {reliability_metrics.tool_result_count}")
-    print(f"    tool_error_count:        {reliability_metrics.tool_error_count}")
+    print("  supplementary:")
     print(f"    tool_success_rate:       {reliability_metrics.tool_success_rate:.4f}")

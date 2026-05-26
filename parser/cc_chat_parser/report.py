@@ -54,7 +54,6 @@ from .metrics.user_input import compute_user_input_metrics
 from .rates import RateTable
 from .report_blocks import (
     economic_block,
-    reliability_block,
     supplementary_block,
     time_block,
     time_block_role,
@@ -181,10 +180,10 @@ def _build_scope_block(
 
     ``scope_kind`` is one of ``"session"``, ``"phase"``, or
     ``"role"``. The kind controls two things: which records the
-    reliability and supplementary modules iterate (full conversation
-    walk for session and role, per-turn record concatenation for
-    phase), and whether the time block emits the full set of fields
-    (session and phase) or the role-scope subset (role). A role
+    supplementary aggregation iterates (full conversation walk for
+    session and role, per-turn record concatenation for phase), and
+    whether the time block emits the full set of fields (session and
+    phase) or the role-scope subset (role). A role
     scope's ``turn_time`` is the sum of per-turn durations rather
     than the union of intervals, reflecting that a role is one
     conversation file whose own turns do not overlap.
@@ -218,9 +217,8 @@ def _build_scope_block(
         "process": {
             "time": rendered_time,
             "user_input": user_input_block(user_input),
-            "reliability": reliability_block(reliability),
         },
-        "supplementary": supplementary_block(supplementary),
+        "supplementary": supplementary_block(supplementary, reliability),
     }
 
 
@@ -267,7 +265,7 @@ def _records_in_scope(
     scope_kind: str,
     role_view: ConversationView | None,
 ) -> list[Record]:
-    """Return the record stream for a scope's reliability/supplementary aggregation.
+    """Return the record stream for a scope's reliability and supplementary aggregation.
 
     Session scope iterates every conversation's records across
     every conversation file. Role scope iterates the records of

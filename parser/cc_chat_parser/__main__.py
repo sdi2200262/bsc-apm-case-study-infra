@@ -127,7 +127,7 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Print the process-dimension metric blocks (time, user "
-            "input, reliability) at session scope."
+            "input) and the supplementary tool-success rate at session scope."
         ),
     )
     parser.add_argument(
