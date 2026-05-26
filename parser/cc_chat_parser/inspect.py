@@ -12,7 +12,7 @@ parameters block, every measurement scope (session, each phase,
 each role for APM submissions), the per-turn record-level
 summary, and the diagnostics block.
 
-Each measurement leaf is rendered with its value, anchor, and
+Each measurement leaf is rendered with its value, label, and
 constructed flag so the reader can tell at a glance which metrics
 drive research-question claims (Primary), which support or
 decompose them (Secondary), and which are descriptive only
@@ -147,10 +147,10 @@ def _print_leaves(block: dict[str, Any], indent: str) -> None:
     name_width = max((len(name) for name in block), default=0)
     for name, leaf in block.items():
         value = leaf["value"]
-        anchor = leaf["anchor"]
+        label = leaf["label"]
         constructed = "constructed" if leaf["constructed"] else "direct"
         rendered_value = _render_value(value)
-        print(f"{indent}{name:<{name_width}}  {rendered_value:>22}  [{anchor}, {constructed}]")
+        print(f"{indent}{name:<{name_width}}  {rendered_value:>22}  [{label}, {constructed}]")
 
 
 def _render_value(value: Any) -> str:

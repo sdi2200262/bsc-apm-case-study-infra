@@ -357,8 +357,8 @@ def _leaf_value(parent: dict[str, Any], key: str) -> Any:
     """Return ``parent[key]["value"]`` for a parser-side measurement leaf.
 
     Every parser-side measurement is wrapped in a
-    ``{value, anchor, constructed}`` triple; the dataset CSV
-    captures the value only. Anchor and constructed flags travel
+    ``{value, label, constructed}`` triple; the dataset CSV
+    captures the value only. Label and constructed flags travel
     with combined.json for downstream consumers.
 
     Raises ``KeyError`` when ``parent[key]`` or its ``value`` field

@@ -7,7 +7,7 @@ Assemble the canonical scope-nested metrics artifact.
 The artifact has six top-level sections: ``session_metadata``,
 ``parameters``, ``session``, ``phases``, optional ``roles`` (APM
 only), ``turns``, and ``diagnostics``. Each measurement leaf is a
-``{value, anchor, constructed}`` triple so the analysis layer can
+``{value, label, constructed}`` triple so the analysis layer can
 iterate over Primary metrics to assemble its hypothesis-test family
 and flag every Constructed metric for the literature-grounding
 cross-check without consulting an external index.
