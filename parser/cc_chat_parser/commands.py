@@ -33,13 +33,17 @@ Two installable surfaces ship: the core template set with nine commands
 (``analyze``, ``checklist``, ``clarify``, ``constitution``,
 ``implement``, ``plan``, ``specify``, ``tasks``, ``taskstoissues``) and
 the git extension with five (``git-commit``, ``git-feature``,
-``git-initialize``, ``git-remote``, ``git-validate``). All but
-``speckit-implement``, ``speckit-git-commit``, and
-``speckit-git-validate`` are planning-side; the three exceptions sit on
-the implementation side. Phase assignment in Spec-kit is per-prompt and
-follows a forward-only ratchet with surgical exceptions: once a prompt
-advances the ratchet to ``implementation``, later ``planning`` commands
-count themselves as planning but do not move the ratchet back. The
+``git-initialize``, ``git-remote``, ``git-validate``). Of the core
+commands, only ``speckit-implement`` sits on the implementation side;
+the other eight are planning. The five git-extension commands are
+not phase-defining work: they are repo bookkeeping or out-of-band hooks
+(per the upstream extension's own description, ``speckit.git.commit``
+runs as a hook around core commands rather than as a phase event), so
+they are recognised by the known-command set but do not participate in
+phase assignment. Phase assignment in Spec-kit is per-prompt and follows
+a forward-only ratchet with surgical exceptions: once a prompt advances
+the ratchet to ``implementation``, later ``planning`` commands count
+themselves as planning but do not move the ratchet back. The
 command-to-phase table is consumed by the per-prompt classifier in the
 session assembler.
 
@@ -116,15 +120,30 @@ SPECKIT_PHASE_BY_COMMAND: dict[str, str] = {
     "speckit-specify": PHASE_PLANNING,
     "speckit-tasks": PHASE_PLANNING,
     "speckit-taskstoissues": PHASE_PLANNING,
-    "speckit-git-feature": PHASE_PLANNING,
-    "speckit-git-initialize": PHASE_PLANNING,
-    "speckit-git-remote": PHASE_PLANNING,
     "speckit-implement": PHASE_IMPLEMENTATION,
-    "speckit-git-commit": PHASE_IMPLEMENTATION,
-    "speckit-git-validate": PHASE_IMPLEMENTATION,
 }
 
-SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset(SPECKIT_PHASE_BY_COMMAND.keys())
+# The five git-extension commands are recognised as known Spec-kit
+# vocabulary so they do not pollute ``unknown_commands_observed``, but
+# they are absent from ``SPECKIT_PHASE_BY_COMMAND`` because they do not
+# define a phase event. Listing the known set as a literal frozenset
+# keeps the recognition surface stable when the phase table changes.
+SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset({
+    "speckit-analyze",
+    "speckit-checklist",
+    "speckit-clarify",
+    "speckit-constitution",
+    "speckit-plan",
+    "speckit-specify",
+    "speckit-tasks",
+    "speckit-taskstoissues",
+    "speckit-implement",
+    "speckit-git-commit",
+    "speckit-git-feature",
+    "speckit-git-initialize",
+    "speckit-git-remote",
+    "speckit-git-validate",
+})
 
 # Claude Code built-in slash commands. Source:
 # https://code.claude.com/docs/en/commands. The list covers every name
