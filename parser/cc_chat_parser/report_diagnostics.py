@@ -41,7 +41,6 @@ from .schema import (
 )
 from .session import Session
 from .user_prompts import (
-    is_model_invoked_skill_rendering,
     is_slash_command_marker,
     is_slash_command_rendered_body,
     is_user_authored_prompt,
@@ -101,7 +100,7 @@ def build_diagnostics(
         view.conversation.subagent_model_index.files_seen
         for view in session.views
     )
-    slash_markers_dropped, model_invoked_skill_renderings = _slash_invocation_counts(session)
+    slash_markers_dropped = _slash_invocation_counts(session)
     subagent_files_without_model = sum(
         view.conversation.subagent_model_index.files_without_model
         for view in session.views
@@ -125,7 +124,7 @@ def build_diagnostics(
         "subagent_dispatches_resolved_without_index": economic.dispatches_resolved_without_index,
         "subagent_dispatches_bracketed": economic.dispatches_bracketed,
         "slash_command_markers_without_rendered_body": slash_markers_dropped,
-        "model_invoked_skill_renderings": model_invoked_skill_renderings,
+        "backward_skill_invocations": list(session.backward_skill_invocations),
         "model_token_distribution": economic.model_token_distribution,
         "tool_result_count": tool_result_total,
         "tool_error_count": tool_error_total,
@@ -213,21 +212,18 @@ def _unknown_commands(session: Session) -> list[str]:
     return sorted(seen)
 
 
-def _slash_invocation_counts(session: Session) -> tuple[int, int]:
-    """Return ``(slash_markers_without_rendered_body, model_invoked_skill_renderings)``.
+def _slash_invocation_counts(session: Session) -> int:
+    """Return the count of slash markers without a paired rendered body.
 
     A slash marker without a paired rendered body in the same
     ``promptId`` group ran a local-only command or carried a typo;
     the invocation never reached the model and is dropped from
     turn-starting detection. Counting these renders the dropped
-    population visible at the diagnostics layer.
-
-    A model-invoked Skill rendering is identical in count to the
-    supplementary metric of the same name; it surfaces here for
-    parity with the other dispatch counters in this block.
+    population visible at the diagnostics layer. The model-invoked
+    Skill rendering count is surfaced through the supplementary
+    metric of the same name and is not duplicated here.
     """
     markers_dropped = 0
-    model_invoked_renderings = 0
     for view in session.views:
         promptids_with_rendered_body: set[str] = set()
         for record in view.conversation.records:
@@ -235,8 +231,6 @@ def _slash_invocation_counts(session: Session) -> tuple[int, int]:
                 promptid = record.payload.get("promptId")
                 if isinstance(promptid, str):
                     promptids_with_rendered_body.add(promptid)
-            if is_model_invoked_skill_rendering(record):
-                model_invoked_renderings += 1
         for record in view.conversation.records:
             if not is_slash_command_marker(record):
                 continue
@@ -246,4 +240,4 @@ def _slash_invocation_counts(session: Session) -> tuple[int, int]:
                 continue
             if promptid not in promptids_with_rendered_body:
                 markers_dropped += 1
-    return markers_dropped, model_invoked_renderings
+    return markers_dropped

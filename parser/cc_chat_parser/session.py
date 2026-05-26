@@ -75,6 +75,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from .commands import (
     APM_PHASE_BY_ROLE,
@@ -156,11 +157,20 @@ class Session:
         turns: Every derived turn across every conversation, in global
             timestamp order. Each turn knows its conversation file via
             ``Turn.conversation_path``.
+        backward_skill_invocations: One entry per assistant Skill
+            tool_use whose declared Spec-kit phase sits behind the
+            ratchet at the moment the event arrives, in chronological
+            order. Each entry has keys ``record_uuid``, ``timestamp``
+            (ISO string), ``skill`` (the Spec-kit command name), and
+            ``ratchet_phase_at_event`` (the ratchet phase observed
+            when the event arrived). Empty tuple for APM sessions and
+            for Spec-kit sessions with no backward Skill invocations.
     """
 
     framework: str
     views: tuple[ConversationView, ...]
     turns: tuple[Turn, ...]
+    backward_skill_invocations: tuple[dict[str, Any], ...]
 
 
 def load_session(path: Path, framework: str) -> Session:
@@ -189,12 +199,18 @@ def load_session(path: Path, framework: str) -> Session:
         )
     files = discover_conversation_files(path)
     conversations = [load_conversation(p) for p in files]
+    backward_skill_invocations: tuple[dict[str, Any], ...] = ()
     if framework == FRAMEWORK_APM:
         views = _build_apm_views(conversations)
     else:
-        views = _build_speckit_views(conversations)
+        views, backward_skill_invocations = _build_speckit_views(conversations)
     turns = _collect_turns(views)
-    return Session(framework=framework, views=views, turns=turns)
+    return Session(
+        framework=framework,
+        views=views,
+        turns=turns,
+        backward_skill_invocations=backward_skill_invocations,
+    )
 
 
 def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationView, ...]:
@@ -235,7 +251,9 @@ def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationVie
     return tuple(views)
 
 
-def _build_speckit_views(conversations: list[Conversation]) -> tuple[ConversationView, ...]:
+def _build_speckit_views(
+    conversations: list[Conversation],
+) -> tuple[tuple[ConversationView, ...], tuple[dict[str, Any], ...]]:
     """Assemble per-conversation views for a Spec-kit submission.
 
     Spec-kit has no role concept; every conversation is labelled
@@ -258,6 +276,7 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
     initial.sort(key=lambda item: (item[3] is None, item[3]))
     walk_result = assign_speckit_phases(conversations)
     phase_by_uuid_global = walk_result.phase_by_uuid
+    backward_skill_invocations = walk_result.backward_skill_invocations
     views: list[ConversationView] = []
     for index, (conversation, first_command, first_record, first_ts) in enumerate(initial, start=1):
         per_conversation: dict[str, str] = {
@@ -273,7 +292,7 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
             first_record_timestamp=first_ts,
             phase_by_record_uuid=per_conversation,
         ))
-    return tuple(views)
+    return tuple(views), backward_skill_invocations
 
 
 def _phase_by_uuid_apm_walker(records: tuple[Record, ...], base_role: str) -> dict[str, str]:
