@@ -38,6 +38,7 @@ from typing import Any
 
 from .metrics.economic import EconomicSession
 from .metrics.reliability import ReliabilityMetrics
+from .metrics.requests import RequestMetrics
 from .metrics.supplementary import SupplementaryMetrics
 from .metrics.time import TimeMetrics
 from .metrics.user_input import UserInputMetrics
@@ -52,7 +53,10 @@ def metric_leaf(value: Any, label: str, constructed: bool) -> dict[str, Any]:
     return {"value": value, "label": label, "constructed": constructed}
 
 
-def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
+def economic_block(
+    economic: EconomicSession | None,
+    requests: RequestMetrics,
+) -> dict[str, Any]:
     """Render an economic block with leaf triples.
 
     The empty-scope branch emits zero-valued leaves so the artifact's
@@ -66,10 +70,19 @@ def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
     instead emits ``cost_usd_lower_bound`` and ``cost_usd_upper_bound``
     leaves and omits ``cost_usd`` entirely; consumers that read cost
     must check for both shapes.
+
+    ``request_count`` and ``delegated_request_count`` are mirrored
+    from the process-dimension ``requests`` block: the same numeric
+    value appears in both locations because a request is a cost
+    denominator under the economic dimension and the model-action
+    count under the process dimension. Cross-referencing the value
+    would force every leaf-iterating consumer to dereference; the
+    duplication keeps the leaf-iteration contract intact.
     """
     if economic is None:
         zero_token = metric_leaf(0, LABEL_SECONDARY, False)
         zero_cost = metric_leaf(0.0, LABEL_PRIMARY, True)
+        zero_request = metric_leaf(0, LABEL_SECONDARY, False)
         token_keys = (
             f"{population}_{cat}_tokens"
             for population in ("main", "delegated", "total")
@@ -78,6 +91,8 @@ def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
         return {key: zero_token for key in token_keys} | {
             "total_prompt_tokens": zero_token,
             "cost_usd": zero_cost,
+            "request_count": zero_request,
+            "delegated_request_count": zero_request,
         }
     block: dict[str, Any] = {
         "main_input_tokens":            metric_leaf(economic.main.input,            LABEL_SECONDARY, False),
@@ -106,7 +121,29 @@ def economic_block(economic: EconomicSession | None) -> dict[str, Any]:
         block["cost_usd_upper_bound"] = metric_leaf(
             round(economic.cost_usd_upper_bound or 0.0, 4), LABEL_PRIMARY, True
         )
+    block["request_count"] = metric_leaf(requests.request_count, LABEL_SECONDARY, False)
+    block["delegated_request_count"] = metric_leaf(
+        requests.delegated_request_count, LABEL_SECONDARY, False
+    )
     return block
+
+
+def requests_block(metrics: RequestMetrics) -> dict[str, Any]:
+    """Render a process-dimension request-count block with leaf triples.
+
+    ``request_count`` is the Primary measurement: it counts model API
+    calls in scope and is the natural denominator for per-request
+    process rates. ``delegated_request_count`` and
+    ``requests_with_tool_use_count`` are Secondary decompositions of
+    the same population: the first picks out dispatches the main
+    agent routed through a subagent; the second picks out requests
+    whose response carried any tool-use action.
+    """
+    return {
+        "request_count":                metric_leaf(metrics.request_count,                LABEL_PRIMARY,   False),
+        "delegated_request_count":      metric_leaf(metrics.delegated_request_count,      LABEL_SECONDARY, False),
+        "requests_with_tool_use_count": metric_leaf(metrics.requests_with_tool_use_count, LABEL_SECONDARY, False),
+    }
 
 
 def time_block(metrics: TimeMetrics, scope_kind: str) -> dict[str, Any]:

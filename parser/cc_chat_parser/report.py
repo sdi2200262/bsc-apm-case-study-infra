@@ -48,12 +48,14 @@ from .metrics.economic import (
     compute_session_economic,
 )
 from .metrics.reliability import compute_reliability_metrics
+from .metrics.requests import compute_requests_for_records
 from .metrics.supplementary import compute_supplementary_metrics
 from .metrics.time import compute_time_metrics
 from .metrics.user_input import compute_user_input_metrics
 from .rates import RateTable
 from .report_blocks import (
     economic_block,
+    requests_block,
     supplementary_block,
     time_block,
     time_block_role,
@@ -207,16 +209,18 @@ def _build_scope_block(
     scope_records = _records_in_scope(session, turns, scope_kind, role_view)
     reliability = compute_reliability_metrics(scope_records)
     supplementary = compute_supplementary_metrics(scope_records)
+    requests = compute_requests_for_records(scope_records)
     if scope_kind == "role":
         rendered_time = time_block_role(time_metrics)
     else:
         rendered_time = time_block(time_metrics, scope_kind)
 
     return {
-        "economic": economic_block(economic),
+        "economic": economic_block(economic, requests),
         "process": {
             "time": rendered_time,
             "user_input": user_input_block(user_input),
+            "requests": requests_block(requests),
         },
         "supplementary": supplementary_block(supplementary, reliability),
     }
