@@ -39,18 +39,35 @@ loader does:
 
    * Spec-kit: phase is per-prompt and follows a forward-only
      ratchet. The ratchet starts at ``other`` and advances along
-     ``other`` -> ``planning`` -> ``implementation``. A prompt
-     carrying a recognised Spec-kit command takes that command's
-     phase as its own; the ratchet advances only when the command's
-     phase index is strictly greater than the current ratchet index.
-     A prompt with no recognised command inherits the ratchet. Once
-     implementation has begun, individual planning commands count
-     their own prompt as planning but do not move the ratchet back.
-     For a spec-kit submission with more than one conversation file
-     (uncommon, but possible if a participant diverges), the ratchet
-     is session-scoped, not per-conversation: prompts from all files
-     are merge-sorted by timestamp and the ratchet advances over the
-     global stream.
+     ``other`` -> ``planning`` -> ``implementation``. Three event
+     populations feed the ratchet: genuine user-prompt records,
+     the enqueue records of delivered user-authored steers, and
+     assistant ``Skill`` tool_use blocks whose declared skill is
+     a recognised Spec-kit phase command (the model self-invoking
+     a skill). All three are merge-sorted by timestamp; a prompt,
+     steer, or Skill tool_use carrying a recognised command takes
+     that command's phase as its own. The ratchet advances only
+     when the command's phase index is strictly greater than the
+     current ratchet index; a prompt with no recognised command
+     inherits the ratchet. Once implementation has begun,
+     individual planning commands count their own prompt as
+     planning but do not move the ratchet back. For a Skill
+     tool_use, the declared phase is tagged onto the triggering
+     assistant record and onto every record in the same
+     conversation file sharing its ``requestId`` (the full
+     streaming response of that API call), so the implementation
+     work the model performs after self-invoking the skill is
+     accounted for in the ratchet's output rather than left at
+     the prior phase. Backward Skill tool_uses (declared phase
+     behind the ratchet) still tag the request group but do not
+     move the ratchet back; the parser surfaces them in the
+     diagnostics block so a reviewer can see how often the model
+     reaches back into planning while implementing. For a spec-kit
+     submission with more than one conversation file (uncommon,
+     but possible if a participant diverges), the ratchet is
+     session-scoped, not per-conversation: events from all files
+     are merge-sorted by timestamp and the ratchet advances over
+     the global stream.
 """
 
 from __future__ import annotations
@@ -65,18 +82,15 @@ from .commands import (
     FRAMEWORK_SPECKIT,
     PHASE_OTHER,
     ROLE_UNASSIGNED,
-    classify_command,
     extract_command_names,
-    phase_index,
     role_from_initiate_command,
-    speckit_command_phase,
 )
 from .loader import (
-    STEER_FATE_DELIVERED,
     Conversation,
     discover_conversation_files,
     load_conversation,
 )
+from .phase_walker import assign_speckit_phases
 from .schema import (
     Record,
     SchemaError,
@@ -110,10 +124,15 @@ class ConversationView:
             timestamped record only when no user-authored prompt
             exists. Used to order conversations for sequential role
             numbering.
-        phase_by_record_uuid: Phase label keyed by record uuid, only
-            populated for genuine user prompt records that participate
-            in the per-prompt phase aggregation. Other record types
-            inherit phase from their containing turn at metric time.
+        phase_by_record_uuid: Phase label keyed by record uuid, covering
+            three populations: genuine user prompt records that
+            participate in the per-prompt phase aggregation, the enqueue
+            records of delivered user-authored steers, and assistant
+            records grouped by ``requestId`` around a ``Skill`` tool_use
+            naming a Spec-kit phase command (the triggering record and
+            every same-``requestId`` record share the Skill's declared
+            phase). Other record types inherit phase from their
+            containing turn at metric time.
     """
 
     conversation: Conversation
@@ -237,7 +256,8 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
             _earliest_user_authored_timestamp(conversation.records),
         ))
     initial.sort(key=lambda item: (item[3] is None, item[3]))
-    phase_by_uuid_global = _ratchet_phase_assignments(conversations)
+    walk_result = assign_speckit_phases(conversations)
+    phase_by_uuid_global = walk_result.phase_by_uuid
     views: list[ConversationView] = []
     for index, (conversation, first_command, first_record, first_ts) in enumerate(initial, start=1):
         per_conversation: dict[str, str] = {
@@ -254,85 +274,6 @@ def _build_speckit_views(conversations: list[Conversation]) -> tuple[Conversatio
             phase_by_record_uuid=per_conversation,
         ))
     return tuple(views)
-
-
-def _ratchet_phase_assignments(conversations: list[Conversation]) -> dict[str, str]:
-    """Run the Spec-kit phase ratchet over a globally-sorted prompt stream.
-
-    The stream merges two populations: genuine user-prompt records
-    and the enqueue records of delivered user-authored steers.
-    Including delivered steers is required because Claude Code
-    writes a steer's content only on the queue-operation enqueue
-    record; when the steer is dequeued, its content goes directly
-    into the model's context with no synthesised user-prompt
-    record to carry it. Without the enqueue records in the stream,
-    the ratchet would never see slash commands the participant
-    typed mid-turn.
-
-    The ratchet maintains a session-scoped current phase that
-    advances forward only along ``other`` -> ``planning`` ->
-    ``implementation``. A prompt or steer carrying a Spec-kit
-    command takes that command's phase as its own; the ratchet
-    advances only when the command's phase index is strictly
-    greater than the current ratchet index. Surgical commands
-    behind the ratchet count their own prompt as the command's
-    phase but do not move the ratchet back. Tiebreak on equal
-    timestamps is deterministic on ``(session_id, parent_uuid,
-    uuid)`` so the ratchet's output does not depend on input
-    iteration order.
-
-    Returns a map keyed by record uuid for genuine user-prompt
-    records and by enqueue record uuid for delivered steer
-    enqueues. Both populations contribute to the ratchet but only
-    the genuine prompt records' phases feed the per-record phase
-    lookup the rest of the parser uses; the steer-enqueue entries
-    are kept in the same map so the diagnostics layer can audit
-    what the ratchet saw.
-    """
-    prompt_entries: list[tuple[Record, str]] = []
-    for conversation in conversations:
-        for record in conversation.records:
-            if not is_user_authored_prompt(record):
-                continue
-            if record.timestamp is None or record.uuid is None:
-                continue
-            prompt_entries.append((record, user_prompt_text(record)))
-        for event in conversation.steer_events:
-            if not event.is_user_authored or event.fate != STEER_FATE_DELIVERED:
-                continue
-            enqueue = event.enqueue_record
-            if enqueue.timestamp is None or enqueue.uuid is None:
-                continue
-            content = enqueue.payload.get("content")
-            if not isinstance(content, str):
-                content = ""
-            prompt_entries.append((enqueue, content))
-    prompt_entries.sort(
-        key=lambda entry: (
-            entry[0].timestamp,
-            entry[0].session_id or "",
-            entry[0].parent_uuid or "",
-            entry[0].uuid or "",
-        )
-    )
-    current_phase = PHASE_OTHER
-    phase_by_uuid: dict[str, str] = {}
-    for record, text in prompt_entries:
-        commands = extract_command_names(text)
-        speckit_phases = [
-            phase
-            for command in commands
-            for phase in (speckit_command_phase(command),)
-            if phase is not None
-        ]
-        if speckit_phases:
-            prompt_phase = speckit_phases[0]
-            if phase_index(prompt_phase) > phase_index(current_phase):
-                current_phase = prompt_phase
-            phase_by_uuid[record.uuid] = prompt_phase
-        else:
-            phase_by_uuid[record.uuid] = current_phase
-    return phase_by_uuid
 
 
 def _phase_by_uuid_apm_walker(records: tuple[Record, ...], base_role: str) -> dict[str, str]:

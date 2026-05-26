@@ -68,6 +68,7 @@ participant happens to use alongside the framework they are running.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 FRAMEWORK_APM = "apm"
 FRAMEWORK_SPECKIT = "speckit"
@@ -246,6 +247,38 @@ def speckit_command_phase(name: str) -> str | None:
         names from third-party extensions).
     """
     return SPECKIT_PHASE_BY_COMMAND.get(name)
+
+
+def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
+    """Return the speckit command an assistant Skill tool_use refers to, or ``None``.
+
+    The walker treats an assistant ``Skill`` tool_use whose ``input.skill``
+    names a known Spec-kit phase command as a phase event in its own
+    right. This matches the Claude Code Skill tool: the model itself
+    invokes the skill, no user prompt is typed.
+
+    Args:
+        block: A single content block from an assistant ``message.content``
+            array.
+
+    Returns:
+        The speckit command name (e.g. ``speckit-implement``) when the
+        block is a ``Skill`` tool_use whose declared skill resolves
+        through :data:`SPECKIT_PHASE_BY_COMMAND`. ``None`` for every
+        other block, for skills outside that table, and for malformed
+        blocks.
+    """
+    if block.get("type") != "tool_use" or block.get("name") != "Skill":
+        return None
+    skill_input = block.get("input")
+    if not isinstance(skill_input, dict):
+        return None
+    skill = skill_input.get("skill")
+    if not isinstance(skill, str) or not skill.startswith("speckit-"):
+        return None
+    if skill not in SPECKIT_PHASE_BY_COMMAND:
+        return None
+    return skill
 
 
 def is_known_command(name: str) -> bool:
