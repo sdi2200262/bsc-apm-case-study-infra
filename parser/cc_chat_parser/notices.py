@@ -227,10 +227,11 @@ def print_notice_block(notices: tuple[Notice, ...]) -> None:
     When ``notices`` is empty, returns immediately without printing
     anything, so the preceding output bytes are unchanged.
 
-    Each notice is rendered as a tag line followed by a label line
-    and one or more detail lines, all indented by two spaces. No
-    separator is placed between consecutive notices of the same tag,
-    and no trailing blank line follows the final notice.
+    Each notice is rendered as a tag line, then a label line, a
+    summary line, and one or more detail lines, with the body lines
+    indented by two spaces. No separator is placed between
+    consecutive notices of the same tag, and no trailing blank line
+    follows the final notice.
 
     Args:
         notices: The ordered tuple of notices to render, as returned
@@ -246,5 +247,6 @@ def print_notice_block(notices: tuple[Notice, ...]) -> None:
     for notice in notices:
         print(f"[{notice.tag}]")
         print(f"  label: {notice.label}")
+        print(f"  {notice.summary}")
         for line in notice.detail.split("\n"):
             print(f"  {line}")
