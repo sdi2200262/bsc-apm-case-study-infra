@@ -15,59 +15,27 @@ handoff continuations).
 Two responsibilities sit here above the per-conversation work the
 loader does:
 
-1. Detect each conversation's role from its first slash command (APM
-   only) and assign role keys. Roles are numbered sequentially by
-   first-record timestamp ascending, with no parsing of participant-
-   supplied identifiers. The reasoning is that participants type
-   worker identifiers by hand on ``/apm-3-initiate-worker <id>``;
-   typos in re-invocations would split what is semantically the same
-   worker into two distinct keys (``frontend-agent`` and
-   ``fronend-agent``) if the parser tried to use the participant's id.
-   Sequential numbering avoids the trap; the verbatim first command of
-   each conversation is preserved per file so a downstream reviewer
-   can spot two role-keys with similar-but-typo-different first
-   commands and decide whether to merge them.
+1. Detect each APM conversation's role from its first slash command
+   and assign role keys. Roles are numbered sequentially by
+   first-record timestamp ascending, with no parsing of
+   participant-supplied identifiers. Participants type worker
+   identifiers by hand on ``/apm-3-initiate-worker <id>``, so typos in
+   re-invocations would split what is semantically the same worker
+   into two distinct keys (``frontend-agent`` and ``fronend-agent``)
+   if the parser tried to use the participant's id. Sequential
+   numbering avoids the trap; the verbatim first command of each
+   conversation is preserved per file so a downstream reviewer can
+   spot two role-keys with similar-but-typo-different first commands
+   and decide whether to merge them.
 
 2. Assign a phase label to every record that participates in
-   per-prompt phase aggregation. The two frameworks use different
-   phase models:
-
-   * APM: phase is a property of the conversation's role. A Planner
-     conversation is entirely planning; a Manager or Worker
-     conversation is entirely implementation. The mapping is fixed
-     per file and stamped onto every prompt in that file.
-
-   * Spec-kit: phase is per-prompt and follows a forward-only
-     ratchet. The ratchet starts at ``other`` and advances along
-     ``other`` -> ``planning`` -> ``implementation``. Three event
-     populations feed the ratchet: genuine user-prompt records,
-     the enqueue records of delivered user-authored steers, and
-     assistant ``Skill`` tool_use blocks whose declared skill is
-     a recognised Spec-kit phase command (the model self-invoking
-     a skill). All three are merge-sorted by timestamp; a prompt,
-     steer, or Skill tool_use carrying a recognised command takes
-     that command's phase as its own. The ratchet advances only
-     when the command's phase index is strictly greater than the
-     current ratchet index; a prompt with no recognised command
-     inherits the ratchet. Once implementation has begun,
-     individual planning commands count their own prompt as
-     planning but do not move the ratchet back. For a Skill
-     tool_use, the declared phase is tagged onto the triggering
-     assistant record and onto every record in the same
-     conversation file sharing its ``requestId`` (the full
-     streaming response of that API call), so the implementation
-     work the model performs after self-invoking the skill is
-     accounted for in the ratchet's output rather than left at
-     the prior phase. Backward Skill tool_uses (declared phase
-     behind the ratchet) still tag the request group but do not
-     move the ratchet back; the parser surfaces them in the
-     diagnostics block so a reviewer can see how often the model
-     reaches back into planning while implementing. For a spec-kit
-     submission with more than one conversation file (uncommon,
-     but possible if a participant diverges), the ratchet is
-     session-scoped, not per-conversation: events from all files
-     are merge-sorted by timestamp and the ratchet advances over
-     the global stream.
+   per-prompt phase aggregation. APM phase assignment is local to
+   this module (:func:`_phase_by_uuid_apm_walker`): the role's phase
+   stamps every prompt in the conversation. Spec-kit phase
+   assignment lives in
+   :func:`speckit_phase_walker.assign_speckit_phases`; this module
+   only dispatches the loaded conversations to the walker and
+   partitions its output per conversation file.
 """
 
 from __future__ import annotations
@@ -125,15 +93,12 @@ class ConversationView:
             timestamped record only when no user-authored prompt
             exists. Used to order conversations for sequential role
             numbering.
-        phase_by_record_uuid: Phase label keyed by record uuid, covering
-            three populations: genuine user prompt records that
-            participate in the per-prompt phase aggregation, the enqueue
-            records of delivered user-authored steers, and assistant
-            records grouped by ``requestId`` around a ``Skill`` tool_use
-            naming a Spec-kit phase command (the triggering record and
-            every same-``requestId`` record share the Skill's declared
-            phase). Other record types inherit phase from their
-            containing turn at metric time.
+        phase_by_record_uuid: Phase label keyed by record uuid. For
+            APM this maps each genuine user-prompt record to the
+            role's phase. For Spec-kit this is the per-conversation
+            slice of
+            :attr:`speckit_phase_walker.PhaseWalkResult.phase_by_uuid`,
+            which documents the three populations covered.
     """
 
     conversation: Conversation
@@ -157,14 +122,12 @@ class Session:
         turns: Every derived turn across every conversation, in global
             timestamp order. Each turn knows its conversation file via
             ``Turn.conversation_path``.
-        backward_skill_invocations: One entry per assistant Skill
-            tool_use whose declared Spec-kit phase sits behind the
-            ratchet at the moment the event arrives, in chronological
-            order. Each entry has keys ``record_uuid``, ``timestamp``
-            (ISO string), ``skill`` (the Spec-kit command name), and
-            ``ratchet_phase_at_event`` (the ratchet phase observed
-            when the event arrived). Empty tuple for APM sessions and
-            for Spec-kit sessions with no backward Skill invocations.
+        backward_skill_invocations: Chronological log of backward
+            Skill events from the Spec-kit walker; entry schema is
+            documented on
+            :attr:`speckit_phase_walker.PhaseWalkResult.backward_skill_invocations`.
+            Empty tuple for APM sessions and for Spec-kit sessions
+            with no backward Skill invocations.
     """
 
     framework: str
