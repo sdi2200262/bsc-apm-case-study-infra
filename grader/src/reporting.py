@@ -117,9 +117,9 @@ def print_console_summary(
             and short message under the matching section header.
     """
     print("")
-    print("=" * 50)
-    print("GRADING SUMMARY")
-    print("=" * 50)
+    print("=" * 78)
+    print("  GRADING SUMMARY")
+    print("=" * 78)
 
     if verbose:
         _print_verbose(scorer)
@@ -129,7 +129,7 @@ def print_console_summary(
     print_notice_block(collect_notices(scorer))
     print("")
     print(f"  JSON report: {paths.json_path}")
-    print("=" * 50)
+    print("=" * 78)
 
 
 def _summary_lines(scorer: Scorer) -> list[str]:
@@ -139,9 +139,6 @@ def _summary_lines(scorer: Scorer) -> list[str]:
     grand = scorer.total_score()
 
     lines: list[str] = []
-    lines.append("=" * 70)
-    lines.append("SUMMARY")
-    lines.append("=" * 70)
     for header, tests in SECTION_LAYOUT:
         section_score, section_max = _section_totals(scorer, tests)
         label = header.title()
@@ -151,7 +148,6 @@ def _summary_lines(scorer: Scorer) -> list[str]:
     lines.append(f"  C Total:           {c_total[0]:3d}/{c_total[1]:<3d}")
     lines.append(f"  TOTAL:             {grand[0]:3d}/{grand[1]:<3d}")
     lines.append("")
-    lines.append("=" * 70)
     return lines
 
 

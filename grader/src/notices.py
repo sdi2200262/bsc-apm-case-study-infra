@@ -79,10 +79,10 @@ class Notice:
 def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
     """Aggregate all review and warning notices for a grading run.
 
-    Iterates the scorer's results in deterministic sorted order.
-    REVIEW notices are collected first, then WARNING notices, so the
-    returned tuple always has all REVIEW entries before all WARNING
-    entries within the group ordering.
+    Iterates the scorer's results in check order (the order tests are
+    registered in the rubric). REVIEW notices are collected first,
+    then WARNING notices, so the returned tuple always has all REVIEW
+    entries before all WARNING entries within the group ordering.
 
     Args:
         scorer: Populated scorer whose results carry per-row
@@ -90,12 +90,12 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
 
     Returns:
         A tuple of :class:`Notice` objects, REVIEW notices before
-        WARNING notices, each group in ascending test-id order.
+        WARNING notices, each group in check order.
     """
     review: list[Notice] = []
     warning: list[Notice] = []
 
-    for test_id, result in sorted(scorer.results.items()):
+    for test_id, result in scorer.results.items():
         if result.diagnostic in LENIENT_MODES:
             diagnostic = result.diagnostic or ""
             phrase = _LENIENT_FORM_PHRASE.get(
@@ -111,7 +111,7 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
                 )
             )
 
-    for test_id, result in sorted(scorer.results.items()):
+    for test_id, result in scorer.results.items():
         if test_id in HANDSHAKE_ROW_IDS and not result.passed:
             warning.append(
                 Notice(
