@@ -187,6 +187,24 @@ def _evaluate_invariants(
             phase_sum,
             0,
         )
+    # Per-turn phase share buckets must sum to the turn's main
+    # request count. The turn renderer emits ``request_count``
+    # alongside ``phase_request_share``; the two derive from the
+    # same record sweep but are computed independently, so a
+    # divergence would indicate a builder bug. Each turn's
+    # identity is checked separately so a divergence on one turn
+    # is not masked by aggregation.
+    for index, turn in enumerate(artifact.get("turns", [])):
+        share = turn.get("phase_request_share")
+        if not isinstance(share, dict):
+            continue
+        request_count = turn.get("request_count")
+        if not isinstance(request_count, int):
+            continue
+        share_sum = sum(int(v) for v in share.values())
+        checks[f"turn_phase_request_share_sum_{index}"] = _check_close(
+            share_sum, request_count, 0,
+        )
     # Role partition only holds when every conversation in the
     # session has a real APM role. Sessions with one or more
     # ``unassigned-N`` conversations contribute tokens to the

@@ -32,7 +32,7 @@ missing keys.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any
 
 from .buckets import DEFAULT_SHORT_THRESHOLD
 from .commands import (
@@ -64,16 +64,16 @@ from .report_blocks import (
 from .report_diagnostics import build_diagnostics
 from .report_metadata import (
     _build_session_metadata,
-    _iso_or_none,
     _latest_real_timestamp,
     _session_start_timestamp,
 )
-from .schema import (
-    RECORD_TYPE_ASSISTANT,
-    SYNTHETIC_MODEL_MARKER,
-    Record,
-    assistant_request_id,
+from .report_turns import (
+    build_turn_records,
+    phase_of_turn,
+    turns_in_phase,
+    turns_in_role,
 )
+from .schema import Record
 from .session import ConversationView, Session
 from .turns import Turn
 
@@ -112,7 +112,7 @@ def build_report(
     phases_block = {
         phase: _build_scope_block(
             session,
-            tuple(_turns_in_phase(session, phase)),
+            tuple(turns_in_phase(session, phase)),
             rate_table,
             short_threshold,
             scope_kind="phase",
@@ -125,13 +125,13 @@ def build_report(
         "parameters": parameters,
         "session": session_block,
         "phases": phases_block,
-        "turns": _build_turn_records(session),
+        "turns": build_turn_records(session),
     }
     if session.framework == FRAMEWORK_APM:
         artifact["roles"] = {
             view.role: _build_scope_block(
                 session,
-                tuple(_turns_in_role(session, view.role)),
+                tuple(turns_in_role(session, view.role)),
                 rate_table,
                 short_threshold,
                 scope_kind="role",
@@ -250,18 +250,18 @@ def _calculate_partitioned_inter_turn_time(
         return 0.0
 
     # Gap before first turn: assigned to first turn's phase
-    if _phase_of_turn(session, all_turns[0]) == phase_label:
+    if phase_of_turn(session, all_turns[0]) == phase_label:
         if all_turns[0].start_timestamp > scope_start:
             total_inter_turn += (all_turns[0].start_timestamp - scope_start).total_seconds()
 
     # Gaps between turns
     for i in range(len(all_turns) - 1):
-        if _phase_of_turn(session, all_turns[i]) == phase_label:
+        if phase_of_turn(session, all_turns[i]) == phase_label:
             gap = (all_turns[i+1].start_timestamp - all_turns[i].end_timestamp).total_seconds()
             total_inter_turn += max(0.0, gap)
 
     # Gap after last turn
-    if _phase_of_turn(session, all_turns[-1]) == phase_label:
+    if phase_of_turn(session, all_turns[-1]) == phase_label:
         if scope_end > all_turns[-1].end_timestamp:
             total_inter_turn += (scope_end - all_turns[-1].end_timestamp).total_seconds()
 
@@ -350,153 +350,3 @@ def _compute_economic_for_scope(
     for view in session.views:
         subagent_models.update(view.conversation.subagent_model_index.by_agent_id)
     return compute_economic_for_records(records, rate_table, subagent_models)
-
-
-def _build_turn_records(session: Session) -> list[dict[str, Any]]:
-    """Render the per-turn record-level output array.
-
-    Each turn carries a ``phase_request_share`` dict with the three
-    phase keys (``planning``, ``implementation``, ``other``). The
-    values are integer counts of the turn's non-synthetic
-    non-API-error main requests (deduplicated by ``requestId``,
-    matching the recipe in ``metrics.economic._sum_main_from_records``)
-    bucketed by each request's phase. A request's phase is the phase
-    of its first emitting assistant record in the conversation file's
-    document order, looked up against a per-conversation phase index
-    derived from the walker output. The turn-level ``phase`` field
-    still carries the phase of the turn's starting prompt.
-    """
-    request_phase_by_conversation = _build_request_phase_index(session)
-    records: list[dict[str, Any]] = []
-    for turn in session.turns:
-        request_phase_index = request_phase_by_conversation.get(
-            turn.conversation_path, {}
-        )
-        records.append({
-            "turn_id": turn.starting_prompt.uuid,
-            "conversation_id": _conversation_session_id(session, turn.conversation_path),
-            "role_key": _role_of_turn(session, turn),
-            "phase": _phase_of_turn(session, turn),
-            "start_timestamp": _iso_or_none(turn.start_timestamp),
-            "end_timestamp": _iso_or_none(turn.end_timestamp),
-            "duration_seconds": (turn.end_timestamp - turn.start_timestamp).total_seconds(),
-            "steer_count": len(turn.steer_events),
-            "phase_request_share": _phase_request_share(turn, request_phase_index),
-        })
-    return records
-
-
-def _build_request_phase_index(session: Session) -> dict[str, dict[str, str]]:
-    """Build a per-conversation ``requestId -> phase`` index.
-
-    For each conversation file the function walks records in document
-    order and tracks a running phase: it is bumped whenever a record's
-    uuid appears in the conversation view's ``phase_by_record_uuid``
-    map (user prompts and steer enqueues set the prompt's phase;
-    Skill-tagged request groups override every same-``requestId``
-    assistant record). The phase observed at a request's first
-    assistant record becomes that request's phase. For APM the
-    running phase is set by each user prompt to the role phase, so
-    every request inherits the role's phase. For Spec-kit the phase
-    is set by the most recent prompt or steer until a Skill request
-    group rewrites it.
-    """
-    index: dict[str, dict[str, str]] = {}
-    for view in session.views:
-        per_request: dict[str, str] = {}
-        current_phase: str = PHASE_OTHER
-        for record in view.conversation.records:
-            if record.uuid is not None:
-                tagged = view.phase_by_record_uuid.get(record.uuid)
-                if tagged is not None:
-                    current_phase = tagged
-            request_id = assistant_request_id(record)
-            if request_id is None:
-                continue
-            if request_id in per_request:
-                continue
-            per_request[request_id] = current_phase
-        index[view.conversation.path] = per_request
-    return index
-
-
-def _phase_request_share(
-    turn: Turn,
-    request_phase_index: dict[str, str],
-) -> dict[str, int]:
-    """Return the per-phase request count for a turn.
-
-    The denominator is the count of unique ``requestId`` values among
-    the turn's non-synthetic non-API-error assistant records (the
-    main-call dedup recipe). Each unique requestId is bucketed by the
-    phase recorded for it in ``request_phase_index``; requests whose
-    phase falls outside the three canonical labels are dropped to
-    keep the dict shape uniform.
-    """
-    buckets: dict[str, int] = {phase: 0 for phase in PHASE_KEYS}
-    seen: set[str] = set()
-    for record in turn.records:
-        if record.record_type != RECORD_TYPE_ASSISTANT:
-            continue
-        message = record.payload.get("message")
-        if not isinstance(message, dict):
-            continue
-        if message.get("model") == SYNTHETIC_MODEL_MARKER:
-            continue
-        if record.payload.get("isApiErrorMessage") is True:
-            continue
-        request_id = record.payload.get("requestId")
-        if not isinstance(request_id, str):
-            continue
-        if request_id in seen:
-            continue
-        seen.add(request_id)
-        phase = request_phase_index.get(request_id, PHASE_OTHER)
-        if phase in buckets:
-            buckets[phase] += 1
-    return buckets
-
-
-def _turns_in_phase(session: Session, phase: str) -> Iterable[Turn]:
-    """Yield turns whose starting-prompt phase matches ``phase``."""
-    for turn in session.turns:
-        if _phase_of_turn(session, turn) == phase:
-            yield turn
-
-
-def _turns_in_role(session: Session, role_key: str) -> Iterable[Turn]:
-    """Yield turns whose conversation has the given role key."""
-    for view in session.views:
-        if view.role != role_key:
-            continue
-        for turn in session.turns:
-            if turn.conversation_path == view.conversation.path:
-                yield turn
-
-
-def _phase_of_turn(session: Session, turn: Turn) -> str:
-    """Return the phase label for a turn."""
-    starting_uuid = turn.starting_prompt.uuid
-    for view in session.views:
-        if view.conversation.path != turn.conversation_path:
-            continue
-        if starting_uuid and starting_uuid in view.phase_by_record_uuid:
-            return view.phase_by_record_uuid[starting_uuid]
-        return PHASE_OTHER
-    return PHASE_OTHER
-
-
-def _role_of_turn(session: Session, turn: Turn) -> str:
-    """Return the role key for a turn."""
-    for view in session.views:
-        if view.conversation.path == turn.conversation_path:
-            return view.role
-    return ""
-
-
-def _conversation_session_id(session: Session, conversation_path: str) -> str | None:
-    """Return the sessionId for a conversation path, or ``None`` when not found."""
-    for view in session.views:
-        if view.conversation.path == conversation_path:
-            return view.conversation.session_id
-    return None
