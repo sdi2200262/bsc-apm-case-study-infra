@@ -15,12 +15,9 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from .commands import PHASE_OTHER
+from .metrics.economic import iter_main_request_records
 from .report_metadata import _iso_or_none
-from .schema import (
-    RECORD_TYPE_ASSISTANT,
-    SYNTHETIC_MODEL_MARKER,
-    assistant_request_id,
-)
+from .schema import assistant_request_id
 from .session import Session
 from .turns import Turn
 
@@ -145,31 +142,14 @@ def _phase_request_share(
 ) -> dict[str, int]:
     """Return the per-phase request count for a turn.
 
-    The denominator is the count of unique ``requestId`` values among
-    the turn's non-synthetic non-API-error assistant records (the
-    main-call dedup recipe). Each unique requestId is bucketed by the
-    phase recorded for it in ``request_phase_index``; requests whose
+    Buckets each unique main-call ``requestId`` in the turn by the
+    phase recorded for it in ``request_phase_index``. Requests whose
     phase falls outside the three canonical labels are dropped to
     keep the dict shape uniform.
     """
     buckets: dict[str, int] = {phase: 0 for phase in PHASE_KEYS}
-    seen: set[str] = set()
-    for record in turn.records:
-        if record.record_type != RECORD_TYPE_ASSISTANT:
-            continue
-        message = record.payload.get("message")
-        if not isinstance(message, dict):
-            continue
-        if message.get("model") == SYNTHETIC_MODEL_MARKER:
-            continue
-        if record.payload.get("isApiErrorMessage") is True:
-            continue
-        request_id = record.payload.get("requestId")
-        if not isinstance(request_id, str):
-            continue
-        if request_id in seen:
-            continue
-        seen.add(request_id)
+    for record in iter_main_request_records(turn.records):
+        request_id = record.payload["requestId"]
         phase = request_phase_index.get(request_id, PHASE_OTHER)
         if phase in buckets:
             buckets[phase] += 1
@@ -179,28 +159,11 @@ def _phase_request_share(
 def _count_turn_requests(turn: Turn) -> int:
     """Return the count of unique main-call requestIds in a turn.
 
-    Independent of ``_phase_request_share``: the two walk the same
-    records under the same filter (non-synthetic, non-API-error
-    assistant records with a string ``requestId``) but compute
-    separately, so an invariant check can compare the share's sum
-    against this count to catch builder divergence.
+    Computed independently of ``_phase_request_share`` so an
+    invariant check can compare the share's sum against this count
+    and catch builder divergence.
     """
-    seen: set[str] = set()
-    for record in turn.records:
-        if record.record_type != RECORD_TYPE_ASSISTANT:
-            continue
-        message = record.payload.get("message")
-        if not isinstance(message, dict):
-            continue
-        if message.get("model") == SYNTHETIC_MODEL_MARKER:
-            continue
-        if record.payload.get("isApiErrorMessage") is True:
-            continue
-        request_id = record.payload.get("requestId")
-        if not isinstance(request_id, str):
-            continue
-        seen.add(request_id)
-    return len(seen)
+    return sum(1 for _ in iter_main_request_records(turn.records))
 
 
 def _conversation_session_id(session: Session, conversation_path: str) -> str | None:
