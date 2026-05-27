@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-LINE_WIDTH = 60
+LINE_WIDTH = 78
 MESSAGE_TRUNCATE_LIMIT = 200
 OUTPUT_LINE_WRAP = 100
 
@@ -58,7 +58,7 @@ def print_header(text: str, char: str = "=") -> None:
         char: Character to use for the separator line.
     """
     print(f"\n{char * LINE_WIDTH}")
-    print(f" {text}")
+    print(f"  {text.upper()}")
     print(f"{char * LINE_WIDTH}")
 
 

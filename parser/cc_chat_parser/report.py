@@ -7,7 +7,7 @@ Assemble the canonical scope-nested metrics artifact.
 The artifact has six top-level sections: ``session_metadata``,
 ``parameters``, ``session``, ``phases``, optional ``roles`` (APM
 only), ``turns``, and ``diagnostics``. Each measurement leaf is a
-``{value, anchor, constructed}`` triple so the analysis layer can
+``{value, label, constructed}`` triple so the analysis layer can
 iterate over Primary metrics to assemble its hypothesis-test family
 and flag every Constructed metric for the literature-grounding
 cross-check without consulting an external index.
@@ -32,7 +32,7 @@ missing keys.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any
 
 from .buckets import DEFAULT_SHORT_THRESHOLD
 from .commands import (
@@ -48,13 +48,14 @@ from .metrics.economic import (
     compute_session_economic,
 )
 from .metrics.reliability import compute_reliability_metrics
+from .metrics.requests import compute_requests_for_records
 from .metrics.supplementary import compute_supplementary_metrics
 from .metrics.time import compute_time_metrics
 from .metrics.user_input import compute_user_input_metrics
 from .rates import RateTable
 from .report_blocks import (
     economic_block,
-    reliability_block,
+    requests_block,
     supplementary_block,
     time_block,
     time_block_role,
@@ -63,9 +64,14 @@ from .report_blocks import (
 from .report_diagnostics import build_diagnostics
 from .report_metadata import (
     _build_session_metadata,
-    _iso_or_none,
     _latest_real_timestamp,
     _session_start_timestamp,
+)
+from .report_turns import (
+    build_turn_records,
+    phase_of_turn,
+    turns_in_phase,
+    turns_in_role,
 )
 from .schema import Record
 from .session import ConversationView, Session
@@ -106,7 +112,7 @@ def build_report(
     phases_block = {
         phase: _build_scope_block(
             session,
-            tuple(_turns_in_phase(session, phase)),
+            tuple(turns_in_phase(session, phase)),
             rate_table,
             short_threshold,
             scope_kind="phase",
@@ -119,13 +125,13 @@ def build_report(
         "parameters": parameters,
         "session": session_block,
         "phases": phases_block,
-        "turns": _build_turn_records(session),
+        "turns": build_turn_records(session),
     }
     if session.framework == FRAMEWORK_APM:
         artifact["roles"] = {
             view.role: _build_scope_block(
                 session,
-                tuple(_turns_in_role(session, view.role)),
+                tuple(turns_in_role(session, view.role)),
                 rate_table,
                 short_threshold,
                 scope_kind="role",
@@ -181,10 +187,10 @@ def _build_scope_block(
 
     ``scope_kind`` is one of ``"session"``, ``"phase"``, or
     ``"role"``. The kind controls two things: which records the
-    reliability and supplementary modules iterate (full conversation
-    walk for session and role, per-turn record concatenation for
-    phase), and whether the time block emits the full set of fields
-    (session and phase) or the role-scope subset (role). A role
+    supplementary aggregation iterates (full conversation walk for
+    session and role, per-turn record concatenation for phase), and
+    whether the time block emits the full set of fields (session and
+    phase) or the role-scope subset (role). A role
     scope's ``turn_time`` is the sum of per-turn durations rather
     than the union of intervals, reflecting that a role is one
     conversation file whose own turns do not overlap.
@@ -208,19 +214,20 @@ def _build_scope_block(
     scope_records = _records_in_scope(session, turns, scope_kind, role_view)
     reliability = compute_reliability_metrics(scope_records)
     supplementary = compute_supplementary_metrics(scope_records)
+    requests = compute_requests_for_records(scope_records)
     if scope_kind == "role":
         rendered_time = time_block_role(time_metrics)
     else:
         rendered_time = time_block(time_metrics, scope_kind)
 
     return {
-        "economic": economic_block(economic),
+        "economic": economic_block(economic, requests),
         "process": {
             "time": rendered_time,
             "user_input": user_input_block(user_input),
-            "reliability": reliability_block(reliability),
+            "requests": requests_block(requests),
         },
-        "supplementary": supplementary_block(supplementary),
+        "supplementary": supplementary_block(supplementary, reliability),
     }
 
 
@@ -243,18 +250,18 @@ def _calculate_partitioned_inter_turn_time(
         return 0.0
 
     # Gap before first turn: assigned to first turn's phase
-    if _phase_of_turn(session, all_turns[0]) == phase_label:
+    if phase_of_turn(session, all_turns[0]) == phase_label:
         if all_turns[0].start_timestamp > scope_start:
             total_inter_turn += (all_turns[0].start_timestamp - scope_start).total_seconds()
 
     # Gaps between turns
     for i in range(len(all_turns) - 1):
-        if _phase_of_turn(session, all_turns[i]) == phase_label:
+        if phase_of_turn(session, all_turns[i]) == phase_label:
             gap = (all_turns[i+1].start_timestamp - all_turns[i].end_timestamp).total_seconds()
             total_inter_turn += max(0.0, gap)
 
     # Gap after last turn
-    if _phase_of_turn(session, all_turns[-1]) == phase_label:
+    if phase_of_turn(session, all_turns[-1]) == phase_label:
         if scope_end > all_turns[-1].end_timestamp:
             total_inter_turn += (scope_end - all_turns[-1].end_timestamp).total_seconds()
 
@@ -267,7 +274,7 @@ def _records_in_scope(
     scope_kind: str,
     role_view: ConversationView | None,
 ) -> list[Record]:
-    """Return the record stream for a scope's reliability/supplementary aggregation.
+    """Return the record stream for a scope's reliability and supplementary aggregation.
 
     Session scope iterates every conversation's records across
     every conversation file. Role scope iterates the records of
@@ -343,65 +350,3 @@ def _compute_economic_for_scope(
     for view in session.views:
         subagent_models.update(view.conversation.subagent_model_index.by_agent_id)
     return compute_economic_for_records(records, rate_table, subagent_models)
-
-
-def _build_turn_records(session: Session) -> list[dict[str, Any]]:
-    """Render the per-turn record-level output array."""
-    records: list[dict[str, Any]] = []
-    for turn in session.turns:
-        records.append({
-            "turn_id": turn.starting_prompt.uuid,
-            "conversation_id": _conversation_session_id(session, turn.conversation_path),
-            "role_key": _role_of_turn(session, turn),
-            "phase": _phase_of_turn(session, turn),
-            "start_timestamp": _iso_or_none(turn.start_timestamp),
-            "end_timestamp": _iso_or_none(turn.end_timestamp),
-            "duration_seconds": (turn.end_timestamp - turn.start_timestamp).total_seconds(),
-            "steer_count": len(turn.steer_events),
-        })
-    return records
-
-
-def _turns_in_phase(session: Session, phase: str) -> Iterable[Turn]:
-    """Yield turns whose starting-prompt phase matches ``phase``."""
-    for turn in session.turns:
-        if _phase_of_turn(session, turn) == phase:
-            yield turn
-
-
-def _turns_in_role(session: Session, role_key: str) -> Iterable[Turn]:
-    """Yield turns whose conversation has the given role key."""
-    for view in session.views:
-        if view.role != role_key:
-            continue
-        for turn in session.turns:
-            if turn.conversation_path == view.conversation.path:
-                yield turn
-
-
-def _phase_of_turn(session: Session, turn: Turn) -> str:
-    """Return the phase label for a turn."""
-    starting_uuid = turn.starting_prompt.uuid
-    for view in session.views:
-        if view.conversation.path != turn.conversation_path:
-            continue
-        if starting_uuid and starting_uuid in view.phase_by_record_uuid:
-            return view.phase_by_record_uuid[starting_uuid]
-        return PHASE_OTHER
-    return PHASE_OTHER
-
-
-def _role_of_turn(session: Session, turn: Turn) -> str:
-    """Return the role key for a turn."""
-    for view in session.views:
-        if view.conversation.path == turn.conversation_path:
-            return view.role
-    return ""
-
-
-def _conversation_session_id(session: Session, conversation_path: str) -> str | None:
-    """Return the sessionId for a conversation path, or ``None`` when not found."""
-    for view in session.views:
-        if view.conversation.path == conversation_path:
-            return view.conversation.session_id
-    return None

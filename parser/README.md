@@ -67,7 +67,7 @@ silently mis-classify.
 
 ## Documentation
 
-For module-level details, anchor and constructed flag conventions,
+For module-level details, label and constructed flag conventions,
 and the per-metric formulas and rationale, see the docstrings
 inside each module under `cc_chat_parser/` and its `metrics/`
 subpackage.

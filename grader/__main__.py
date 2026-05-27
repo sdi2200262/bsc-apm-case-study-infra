@@ -326,9 +326,8 @@ def _write_reports(
     scorer: scoring.Scorer,
     verbose: bool,
 ) -> None:
-    """Write the JSON and text reports and print the console summary."""
+    """Write the JSON report and print the console summary."""
     reporting.write_json(paths, scorer)
-    reporting.write_text(paths, scorer)
     reporting.print_console_summary(paths, scorer, verbose)
 
 

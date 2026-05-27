@@ -67,7 +67,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 from ..rates import (
     CATEGORY_CACHE_1H,
@@ -309,19 +309,27 @@ def _modal_main_model_from_records(records: list[Record]) -> str:
     return counts.most_common(1)[0][0]
 
 
-def _sum_main_from_records(records: list[Record]) -> TokenSums:
-    """Sum main-call tokens across an arbitrary record subset, deduplicated by requestId.
+def iter_main_request_records(records: Iterable[Record]) -> Iterator[Record]:
+    """Yield the first assistant record observed for each main-call requestId.
 
-    The dedup is local to the subset: the first non-synthetic
-    assistant record encountered for a given ``requestId``
-    contributes its ``message.usage``; later records sharing the
-    id are skipped. This keeps per-scope sums correct for any
-    record subset that does not split a single API call's records
-    across multiple scopes (a property that holds by construction
-    because all records of a streaming response are written
-    contiguously to one conversation file).
+    Walks ``records`` in order and yields one record per unique
+    ``message.requestId`` among non-synthetic, non-API-error
+    assistant records. Skips records that fail the main-call
+    selection rule (wrong record type, synthetic model marker, API
+    error flag, missing or non-string ``requestId``) and skips
+    duplicate records for an already-yielded requestId. The dedup
+    is local to the ``records`` iterable; callers wanting a global
+    dedup must pass a single iterable that covers their scope.
+
+    Args:
+        records: Conversation records in document order. Mixed
+            record types are tolerated; only assistant records that
+            pass the main-call filter are yielded.
+
+    Yields:
+        The first ``Record`` instance carrying each unique main-call
+        ``requestId`` encountered in ``records``.
     """
-    total = TokenSums.zero()
     seen: set[str] = set()
     for record in records:
         if record.record_type != RECORD_TYPE_ASSISTANT:
@@ -339,6 +347,19 @@ def _sum_main_from_records(records: list[Record]) -> TokenSums:
         if request_id in seen:
             continue
         seen.add(request_id)
+        yield record
+
+
+def _sum_main_from_records(records: list[Record]) -> TokenSums:
+    """Sum main-call tokens across an arbitrary record subset, deduplicated by requestId.
+
+    Walks ``records`` with :func:`iter_main_request_records` so the
+    main-call selection rule and the per-scope dedup are shared
+    across every consumer of that population.
+    """
+    total = TokenSums.zero()
+    for record in iter_main_request_records(records):
+        message = record.payload["message"]
         usage = message.get("usage")
         if not isinstance(usage, dict):
             continue

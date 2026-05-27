@@ -31,7 +31,7 @@ Sidecar shape::
 
 A path is a dotted address into ``metrics.json``. Object keys use
 ``.``; array elements use ``[N]``. A path can point to any node:
-a leaf scalar, a leaf wrapper (``{value, anchor, constructed}``), a
+a leaf scalar, a leaf wrapper (``{value, label, constructed}``), a
 metric block, or even the whole session scope. The CLI's ``add``
 subcommand validates that the path resolves against the current
 ``metrics.json`` before writing.

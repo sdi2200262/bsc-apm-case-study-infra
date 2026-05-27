@@ -37,12 +37,14 @@ def _evaluate_invariants(
     Walks session, every phase, and every role scope. For each
     scope checks the time composition (where defined), the
     per-category token composition (main + delegated == total),
-    the prompt-token composition, the steer accounting, and the
-    bucket share sums. Records partition is also checked: phase
-    and role aggregations should sum to the session totals for
-    every economic category, every supplementary count, and the
-    five additive process counts (turn count, turn-prompt count,
-    and the three steer counts). Each check returns
+    the prompt-token composition, the steer accounting, the
+    bucket share sums, and the request-count mirror between the
+    economic and process dimensions. Records partition is also
+    checked: phase and role aggregations should sum to the
+    session totals for every economic category, every
+    supplementary count, the five additive process counts (turn
+    count, turn-prompt count, and the three steer counts), and
+    the three request-population counts. Each check returns
     ``{"status": "ok"}`` when within tolerance and a residual
     block otherwise.
 
@@ -98,6 +100,18 @@ def _evaluate_invariants(
             + user_input["steer_abandoned_count"]["value"],
             0,
         )
+        # ``request_count`` and ``delegated_request_count`` are mirrored
+        # from the process-dimension requests block into the economic
+        # block so consumers can read either dimension's leaves without
+        # cross-referencing. The mirror is a leaf copy, not a derived
+        # quantity, so the identity holds exactly.
+        process_requests = block["process"]["requests"]
+        for field in ("request_count", "delegated_request_count"):
+            checks[f"economic_requests_mirror_{scope_label}_{field}"] = _check_close(
+                economic[field]["value"],
+                process_requests[field]["value"],
+                0,
+            )
         for share_key, denominator in (
             ("turn_prompts_bucket_shares",
              user_input["turn_prompt_count"]["value"]),
@@ -158,6 +172,39 @@ def _evaluate_invariants(
             phase_sum,
             0,
         )
+    # Request-count fields partition cleanly across phases: each
+    # request is tagged with the phase of its triggering record, so
+    # the per-phase counts sum to the session count for every
+    # request-population leaf the process-dimension exposes.
+    session_requests = session_process["requests"]
+    for field in ("request_count", "delegated_request_count", "requests_with_tool_use_count"):
+        phase_sum = sum(
+            artifact["phases"][phase]["process"]["requests"][field]["value"]
+            for phase in artifact["phases"]
+        )
+        checks[f"phase_partition_{field}"] = _check_close(
+            session_requests[field]["value"],
+            phase_sum,
+            0,
+        )
+    # Per-turn phase share buckets must sum to the turn's main
+    # request count. The turn renderer emits ``request_count``
+    # alongside ``phase_request_share``; the two derive from the
+    # same record sweep but are computed independently, so a
+    # divergence would indicate a builder bug. Each turn's
+    # identity is checked separately so a divergence on one turn
+    # is not masked by aggregation.
+    for index, turn in enumerate(artifact.get("turns", [])):
+        share = turn.get("phase_request_share")
+        if not isinstance(share, dict):
+            continue
+        request_count = turn.get("request_count")
+        if not isinstance(request_count, int):
+            continue
+        share_sum = sum(int(v) for v in share.values())
+        checks[f"turn_phase_request_share_sum_{index}"] = _check_close(
+            share_sum, request_count, 0,
+        )
     # Role partition only holds when every conversation in the
     # session has a real APM role. Sessions with one or more
     # ``unassigned-N`` conversations contribute tokens to the
@@ -197,6 +244,16 @@ def _evaluate_invariants(
             )
             checks[f"role_partition_{field}"] = _check_close(
                 session_process[subblock][field]["value"],
+                role_sum,
+                0,
+            )
+        for field in ("request_count", "delegated_request_count", "requests_with_tool_use_count"):
+            role_sum = sum(
+                artifact["roles"][role]["process"]["requests"][field]["value"]
+                for role in artifact["roles"]
+            )
+            checks[f"role_partition_{field}"] = _check_close(
+                session_requests[field]["value"],
                 role_sum,
                 0,
             )
