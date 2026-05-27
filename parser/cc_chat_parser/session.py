@@ -91,7 +91,7 @@ from .loader import (
     discover_conversation_files,
     load_conversation,
 )
-from .phase_walker import assign_speckit_phases
+from .speckit_phase_walker import assign_speckit_phases
 from .schema import (
     Record,
     SchemaError,
