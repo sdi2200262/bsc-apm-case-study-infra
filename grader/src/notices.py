@@ -137,6 +137,7 @@ def print_notice_block(notices: tuple[Notice, ...]) -> None:
     Each notice renders as:
     - ``[{tag}]`` on its own line, no indentation.
     - ``  label: {label}`` with two-space indent.
+    - ``  {summary}`` with two-space indent.
     - Each line of ``detail`` (split on embedded newlines) with
       two-space indent.
 
@@ -153,5 +154,6 @@ def print_notice_block(notices: tuple[Notice, ...]) -> None:
     for notice in notices:
         print(f"[{notice.tag}]")
         print(f"  label: {notice.label}")
+        print(f"  {notice.summary}")
         for line in notice.detail.split("\n"):
             print(f"  {line}")
