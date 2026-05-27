@@ -21,7 +21,6 @@ beyond the loaded session and the rate table their mode requires.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
 from .buckets import BUCKETS
 from .loader import STEER_FATE_DELIVERED
@@ -42,6 +41,7 @@ from .schema import (
     is_synthetic_assistant,
     queue_operation,
 )
+from .notices import collect_notices, print_notice_block
 from .session import Session
 from .user_prompts import is_user_authored_prompt
 
@@ -273,48 +273,4 @@ def print_process(session: Session, short_threshold: int) -> None:
     print()
     print("  supplementary:")
     print(f"    tool_success_rate:       {reliability_metrics.tool_success_rate:.4f}")
-    print_review_block(session.backward_skill_invocations)
-
-
-def print_review_block(
-    backward_skill_invocations: tuple[dict[str, Any], ...],
-) -> None:
-    """Emit a ``[REVIEW]`` block when backward Skill invocations were observed.
-
-    A backward Skill invocation is an assistant-side Spec-kit Skill
-    whose declared phase sits behind the ratchet at the moment the
-    event arrives. The ratchet does not move back, so the event is
-    tagged with its declared phase but does not undo the ratchet's
-    progress. Surfacing the count and the distinct skill names in the
-    CLI summary gives an analyst a cue to audit the session before
-    drawing phase-distribution conclusions, without forcing them to
-    open the JSON artifact.
-
-    Args:
-        backward_skill_invocations: The session's chronological log of
-            backward Skill events. Empty for APM submissions and for
-            Spec-kit submissions that never invoked a Skill behind the
-            ratchet. Each entry carries a ``skill`` key with the
-            declared Spec-kit command name.
-
-    Returns:
-        None. Prints nothing when the log is empty, so the prior
-        output bytes stay identical for sessions without backward
-        invocations.
-    """
-    if not backward_skill_invocations:
-        return
-    distinct_skills = sorted({
-        str(entry.get("skill", ""))
-        for entry in backward_skill_invocations
-        if entry.get("skill")
-    })
-    count = len(backward_skill_invocations)
-    print()
-    print("[REVIEW]")
-    print(f"  backward skill invocations:   {count}")
-    print(f"  distinct skills:              {', '.join(distinct_skills)}")
-    print(
-        "  cue: an analyst should audit this session before drawing "
-        "phase-distribution conclusions."
-    )
+    print_notice_block(collect_notices(session))

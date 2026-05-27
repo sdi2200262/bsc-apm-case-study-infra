@@ -57,6 +57,7 @@ except ImportError:
 
 from .buckets import DEFAULT_SHORT_THRESHOLD
 from .cli_render import print_economic, print_inspection, print_process
+from .notices import collect_notices, print_notice_block
 from .commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .io import is_sanitised_payload, load_json, write_file_text, write_json
 from .loader import discover_sanitisable_jsonl_files
@@ -225,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: cost computation failed: {error}", file=sys.stderr)
             return 1
         print_economic(economic, rate_table)
+        print_notice_block(collect_notices(session))
         printed_any = True
     if args.process:
         if printed_any:
