@@ -198,6 +198,12 @@ def is_user_authored_prompt(record: Record) -> bool:
     * User-interrupt markers (``[Request interrupted by user]`` and
       its tool-use variant): platform narration of an Esc press,
       not user-authored prompt text.
+    * Records flagged ``isMeta: true``: by Claude Code's contract a
+      meta record is terminal-only and not delivered to the model,
+      so it cannot open an assistant turn. Built-in slash commands
+      whose rendered body the platform routes back as a meta user
+      record (``/context`` and similar) carry both list-shaped and
+      string-shaped content; this guard covers both.
 
     Group-level guards for the two remaining failure modes (markers
     whose ``promptId`` group has no rendered body, and free-typed
@@ -214,6 +220,8 @@ def is_user_authored_prompt(record: Record) -> bool:
         return False
     if is_user_interrupt_marker(record):
         return False
+    if record.payload.get("isMeta") is True:
+        return False
     message = record.payload.get("message")
     if not isinstance(message, dict):
         return False
@@ -222,8 +230,6 @@ def is_user_authored_prompt(record: Record) -> bool:
         for block in content:
             if isinstance(block, dict) and block.get("type") == CONTENT_BLOCK_TOOL_RESULT:
                 return False
-        if record.payload.get("isMeta") is True:
-            return False
         return True
     if isinstance(content, str):
         if is_local_command_caveat(record):
