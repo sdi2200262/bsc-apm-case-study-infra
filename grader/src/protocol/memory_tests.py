@@ -190,6 +190,8 @@ def run_scenario(
             input=sequence,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=VALGRIND_TIMEOUT_SECONDS,
             env=env,
             cwd=c_replica,

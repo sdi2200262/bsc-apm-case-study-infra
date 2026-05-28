@@ -114,7 +114,9 @@ class ServerProcess:
             keyed by tool name to its ``inputSchema`` or ``None``.
         _valgrind_stderr_file: Open file handle capturing valgrind's
             stderr in the memcheck path; ``None`` in the non-memcheck
-            path. Persists after ``stop()`` for :meth:`leak_verdict`.
+            path. Opened with ``errors="replace"`` so a participant
+            server's malformed UTF-8 on stderr is tolerated. Persists
+            after ``stop()`` for :meth:`leak_verdict`.
         _proc_exit_code: Exit code recorded at ``stop()`` time; used
             by :meth:`leak_verdict` to check the error sentinel.
         _server_unresponsive: Sticky flag set on the first missed
@@ -176,6 +178,8 @@ class ServerProcess:
                     mode="w+",
                     suffix=".valgrind.txt",
                     delete=False,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 stderr_arg = self._valgrind_stderr_file
             else:
@@ -186,6 +190,8 @@ class ServerProcess:
                 stdout=subprocess.PIPE,
                 stderr=stderr_arg,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 cwd=cwd,
                 env=env,
                 bufsize=1,
