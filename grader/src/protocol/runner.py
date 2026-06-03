@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import json
 import os
-import select
 import subprocess
 import sys
 import tempfile
@@ -48,6 +47,7 @@ from collections.abc import Iterator
 from typing import IO
 
 from .. import provision
+from ._jsonrpc_io import read_correlated_response
 from ._memcheck import (
     VALGRIND_STDERR_TAIL_LINES,
     classify_leak_verdict,
@@ -119,9 +119,9 @@ class ServerProcess:
             after ``stop()`` for :meth:`leak_verdict`.
         _proc_exit_code: Exit code recorded at ``stop()`` time; used
             by :meth:`leak_verdict` to check the error sentinel.
-        _server_unresponsive: Sticky flag set on the first missed
-            :meth:`send_request`; subsequent calls short-circuit to
-            ``None`` without paying the per-request timeout.
+        _server_unresponsive: Sticky flag set on the first
+            :meth:`send_request` returning no id-correlated response;
+            later calls short-circuit to ``None`` without the timeout.
     """
 
     def __init__(self, ctx: TestContext) -> None:
@@ -286,7 +286,12 @@ class ServerProcess:
         return clean, report
 
     def send_request(self, request: dict) -> dict | None:
-        """Send a JSON-RPC request; return the parsed response or ``None`` (sticky on first miss)."""
+        """Send a JSON-RPC request; return the id-correlated response or ``None`` (sticky on first miss).
+
+        Correlation and stray-line skipping are handled by
+        :func:`._jsonrpc_io.read_correlated_response`; a ``None``
+        return flips the sticky unresponsive flag.
+        """
         if self.proc is None or self.proc.stdin is None or self.proc.stdout is None:
             return None
         if self._server_unresponsive:
@@ -302,20 +307,17 @@ class ServerProcess:
                 if self.ctx.memcheck
                 else REQUEST_TIMEOUT_SECONDS
             )
-            response_line = _read_with_timeout(
-                self.proc.stdout, timeout, self.ctx.debug
+            response = read_correlated_response(
+                self.proc.stdout, request.get("id"), timeout, self.ctx.debug
             )
-            if not response_line:
-                self._server_unresponsive = True
-                return None
-            if self.ctx.debug:
-                print(f"[debug] recv: {response_line.strip()}")
-            return json.loads(response_line.strip())
-        except (OSError, json.JSONDecodeError) as error:
+        except OSError as error:
             if self.ctx.debug:
                 print(f"[debug] request error: {error}")
             self._server_unresponsive = True
             return None
+        if response is None:
+            self._server_unresponsive = True
+        return response
 
     def send_notification(self, notification: dict) -> None:
         """Send a JSON-RPC notification (no response expected)."""
@@ -494,13 +496,3 @@ def extract_text(response: dict | None) -> str:
     if not content:
         return ""
     return content[0].get("text", "")
-
-
-def _read_with_timeout(stream: IO[str], timeout: float, debug: bool) -> str:
-    """Read a single line from ``stream`` with a ``select``-based timeout."""
-    ready, _, _ = select.select([stream], [], [], timeout)
-    if not ready:
-        if debug:
-            print(f"[debug] timeout: no response after {timeout}s")
-        return ""
-    return stream.readline()
