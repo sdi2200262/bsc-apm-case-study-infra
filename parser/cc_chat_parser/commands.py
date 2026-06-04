@@ -283,10 +283,10 @@ def skill_tool_use_name(block: dict[str, Any]) -> str | None:
 def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
     """Return the speckit command an assistant Skill tool_use refers to, or ``None``.
 
-    The walker treats an assistant ``Skill`` tool_use whose declared
-    skill names a known Spec-kit phase command as a phase event in its
-    own right. This matches the Claude Code Skill tool: the model
-    itself invokes the skill, no user prompt is typed.
+    The Spec-kit phase assigner treats an assistant ``Skill`` tool_use
+    whose declared skill names a known Spec-kit phase command as a
+    phase event in its own right. This matches the Claude Code Skill
+    tool: the model itself invokes the skill, no user prompt is typed.
 
     Args:
         block: A single content block from an assistant ``message.content``

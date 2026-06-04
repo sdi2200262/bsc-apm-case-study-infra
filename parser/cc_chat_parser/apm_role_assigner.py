@@ -4,7 +4,7 @@
 """
 Derive APM conversation roles and per-record phases.
 
-The APM counterpart to :mod:`speckit_phase_walker`. APM phase is
+The APM counterpart to :mod:`speckit_phase_assigner`. APM phase is
 role-derived: each conversation file carries one role, which fixes
 the phase for the whole conversation (Planner is planning, Manager
 and Worker are implementation), with records before the role is
@@ -19,7 +19,7 @@ mechanisms; the first by record order fixes the role:
    the typed command did not expand (an assistant ``Skill`` tool_use).
 
 The structural detection of a ``Skill`` tool_use is shared with the
-Spec-kit walker through :func:`commands.skill_tool_use_name`.
+Spec-kit phase assigner through :func:`commands.skill_tool_use_name`.
 """
 
 from __future__ import annotations

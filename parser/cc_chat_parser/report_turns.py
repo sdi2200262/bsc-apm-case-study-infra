@@ -35,7 +35,7 @@ def build_turn_records(session: Session) -> list[dict[str, Any]]:
     bucketed by each request's phase. A request's phase is the phase
     of its first emitting assistant record in the conversation file's
     document order, looked up against a per-conversation phase index
-    derived from the walker output. The turn-level ``phase`` field
+    derived from the assigner output. The turn-level ``phase`` field
     still carries the phase of the turn's starting prompt.
 
     Args:

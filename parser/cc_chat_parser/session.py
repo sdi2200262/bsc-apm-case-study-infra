@@ -13,11 +13,11 @@ conversations (one per Worker the participant initiated, plus any
 handoff continuations).
 
 Two responsibilities sit here, above the per-conversation work the
-loader does and the role and phase computation the framework walkers
-do:
+loader does and the role and phase computation the framework
+assigners do:
 
 1. Number each APM conversation's role and key it. The role itself
-   is determined by :func:`apm_role_walker.assign_apm_roles`; this
+   is determined by :func:`apm_role_assigner.assign_apm_roles`; this
    module numbers roles sequentially by first-record timestamp
    ascending, with no parsing of participant-supplied identifiers.
    Participants type worker identifiers by hand on
@@ -30,10 +30,10 @@ do:
    similar-but-typo-different first commands and decide whether to
    merge them.
 
-2. Partition each framework walker's per-record phase output back per
-   conversation file and attach it to the view. APM role and phase
-   come from :func:`apm_role_walker.assign_apm_roles`, Spec-kit phase
-   from :func:`speckit_phase_walker.assign_speckit_phases`; this
+2. Partition each framework assigner's per-record phase output back
+   per conversation file and attach it to the view. APM role and phase
+   come from :func:`apm_role_assigner.assign_apm_roles`, Spec-kit phase
+   from :func:`speckit_phase_assigner.assign_speckit_phases`; this
    module does no phase computation of its own.
 """
 
@@ -44,7 +44,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .apm_role_walker import ConversationRole, assign_apm_roles
+from .apm_role_assigner import ConversationRole, assign_apm_roles
 from .commands import (
     FRAMEWORK_APM,
     FRAMEWORK_SPECKIT,
@@ -54,7 +54,7 @@ from .loader import (
     discover_conversation_files,
     load_conversation,
 )
-from .speckit_phase_walker import assign_speckit_phases
+from .speckit_phase_assigner import assign_speckit_phases
 from .schema import (
     Record,
     SchemaError,
@@ -91,7 +91,7 @@ class ConversationView:
             APM this maps each genuine user-prompt record to the
             role's phase. For Spec-kit this is the per-conversation
             slice of
-            :attr:`speckit_phase_walker.PhaseWalkResult.phase_by_uuid`,
+            :attr:`speckit_phase_assigner.PhaseWalkResult.phase_by_uuid`,
             which documents the three populations covered.
     """
 
@@ -117,9 +117,9 @@ class Session:
             timestamp order. Each turn knows its conversation file via
             ``Turn.conversation_path``.
         backward_skill_invocations: Chronological log of backward
-            Skill events from the Spec-kit walker; entry schema is
+            Skill events from the Spec-kit phase assigner; entry schema is
             documented on
-            :attr:`speckit_phase_walker.PhaseWalkResult.backward_skill_invocations`.
+            :attr:`speckit_phase_assigner.PhaseWalkResult.backward_skill_invocations`.
             Empty tuple for APM sessions and for Spec-kit sessions
             with no backward Skill invocations.
     """
@@ -174,7 +174,7 @@ def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationVie
     """Assemble per-conversation views for an APM submission.
 
     Roles and per-record phases are computed by
-    :func:`apm_role_walker.assign_apm_roles`. Conversations are then
+    :func:`apm_role_assigner.assign_apm_roles`. Conversations are then
     numbered sequentially per role kind by their earliest record
     timestamp ascending so that handoffs produce ``manager-2``,
     ``manager-3`` and parallel workers produce ``worker-1``,
