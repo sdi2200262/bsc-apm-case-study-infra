@@ -305,6 +305,26 @@ def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
     return skill
 
 
+def is_apm_role_skill_tool_use(block: dict[str, Any]) -> str | None:
+    """Return the APM role command an assistant Skill tool_use names, or ``None``.
+
+    The role-table counterpart to :func:`is_speckit_skill_tool_use`:
+    it recognises the model self-invoking a role skill (``apm-1/2/3``)
+    through the ``Skill`` tool, which is how a role initiates when the
+    typed command did not expand.
+
+    Args:
+        block: A content block from an assistant ``message.content``.
+
+    Returns:
+        The role command name, or ``None`` for any other block.
+    """
+    skill = skill_tool_use_name(block)
+    if skill is None or skill not in APM_ROLE_BY_INITIATE_COMMAND:
+        return None
+    return skill
+
+
 def is_known_command(name: str) -> bool:
     """Return ``True`` when the command name is recognised by the parser.
 
