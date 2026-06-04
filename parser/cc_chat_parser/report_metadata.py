@@ -120,10 +120,10 @@ def _models_observed(session: Session) -> dict[str, int]:
 
 
 def _session_start_timestamp(session: Session) -> datetime | None:
-    """Return the earliest user-authored prompt timestamp across the session.
+    """Return the start timestamp of the session's first turn.
 
-    Falls back to :func:`_earliest_real_timestamp` when no
-    user-authored prompt exists anywhere in the session.
+    Falls back to the earliest user-authored prompt, then to
+    :func:`_earliest_real_timestamp`, when the session has no turns.
 
     Args:
         session: The assembled session.
@@ -132,6 +132,8 @@ def _session_start_timestamp(session: Session) -> datetime | None:
         The session-start timestamp, or ``None`` when no timestamped
         record exists.
     """
+    if session.turns:
+        return session.turns[0].start_timestamp
     earliest: datetime | None = None
     for view in session.views:
         for record in view.conversation.records:
