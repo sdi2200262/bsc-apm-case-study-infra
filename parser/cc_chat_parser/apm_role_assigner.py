@@ -116,7 +116,11 @@ def _first_role_initiation(
 
     Walks records in order. A role initiation is a user prompt
     carrying a role-initiating command (``apm-1/2/3``) or an assistant
-    ``Skill`` tool_use naming one; the first by record order wins.
+    ``Skill`` tool_use naming one; the first by record order wins. A
+    ``Skill`` initiation fires mid-turn, so it is attributed to the
+    user prompt that started its turn (the most recent one), giving
+    the whole initiation turn the role phase, as an expanded command
+    does by being the turn start itself.
 
     Args:
         conversation: The conversation to scan.
@@ -124,12 +128,14 @@ def _first_role_initiation(
     Returns:
         ``(base_role, first_command, first_command_record,
         init_index)``. For a ``Skill`` initiation ``first_command`` is
-        ``""`` and the record ``None``. ``base_role`` is
-        ``unassigned`` and ``init_index`` is ``None`` when no
-        initiation occurs.
+        ``""``, the record ``None``, and ``init_index`` the
+        turn-starting prompt. ``base_role`` is ``unassigned`` and
+        ``init_index`` is ``None`` when no initiation occurs.
     """
+    last_user_prompt_index: int | None = None
     for index, record in enumerate(conversation.records):
         if is_user_authored_prompt(record):
+            last_user_prompt_index = index
             for command in extract_command_names(user_prompt_text(record)):
                 role = role_from_initiate_command(command)
                 if role != ROLE_UNASSIGNED:
@@ -137,7 +143,12 @@ def _first_role_initiation(
         for block in assistant_content_blocks(record):
             skill = is_apm_role_skill_tool_use(block)
             if skill is not None:
-                return role_from_initiate_command(skill), "", None, index
+                init_index = (
+                    last_user_prompt_index
+                    if last_user_prompt_index is not None
+                    else index
+                )
+                return role_from_initiate_command(skill), "", None, init_index
     return ROLE_UNASSIGNED, "", None, None
 
 
