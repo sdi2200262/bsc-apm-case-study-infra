@@ -12,30 +12,29 @@ conversations (more when handoffs occurred), and one or more Worker
 conversations (one per Worker the participant initiated, plus any
 handoff continuations).
 
-Two responsibilities sit here above the per-conversation work the
-loader does:
+Two responsibilities sit here, above the per-conversation work the
+loader does and the role and phase computation the framework walkers
+do:
 
-1. Detect each APM conversation's role from its first slash command
-   and assign role keys. Roles are numbered sequentially by
-   first-record timestamp ascending, with no parsing of
-   participant-supplied identifiers. Participants type worker
-   identifiers by hand on ``/apm-3-initiate-worker <id>``, so typos in
-   re-invocations would split what is semantically the same worker
-   into two distinct keys (``frontend-agent`` and ``fronend-agent``)
-   if the parser tried to use the participant's id. Sequential
-   numbering avoids the trap; the verbatim first command of each
-   conversation is preserved per file so a downstream reviewer can
-   spot two role-keys with similar-but-typo-different first commands
-   and decide whether to merge them.
+1. Number each APM conversation's role and key it. The role itself
+   is determined by :func:`apm_role_walker.assign_apm_roles`; this
+   module numbers roles sequentially by first-record timestamp
+   ascending, with no parsing of participant-supplied identifiers.
+   Participants type worker identifiers by hand on
+   ``/apm-3-initiate-worker <id>``, so typos in re-invocations would
+   split what is semantically the same worker into two distinct keys
+   (``frontend-agent`` and ``fronend-agent``) if the parser tried to
+   use the participant's id. Sequential numbering avoids the trap;
+   the verbatim first command of each conversation is preserved per
+   file so a downstream reviewer can spot two role-keys with
+   similar-but-typo-different first commands and decide whether to
+   merge them.
 
-2. Assign a phase label to every record that participates in
-   per-prompt phase aggregation. APM phase assignment is local to
-   this module (:func:`_phase_by_uuid_apm_walker`): the role's phase
-   stamps every prompt in the conversation. Spec-kit phase
-   assignment lives in
-   :func:`speckit_phase_walker.assign_speckit_phases`; this module
-   only dispatches the loaded conversations to the walker and
-   partitions its output per conversation file.
+2. Partition each framework walker's per-record phase output back per
+   conversation file and attach it to the view. APM role and phase
+   come from :func:`apm_role_walker.assign_apm_roles`, Spec-kit phase
+   from :func:`speckit_phase_walker.assign_speckit_phases`; this
+   module does no phase computation of its own.
 """
 
 from __future__ import annotations
@@ -45,14 +44,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .apm_role_walker import ConversationRole, assign_apm_roles
 from .commands import (
-    APM_PHASE_BY_ROLE,
     FRAMEWORK_APM,
     FRAMEWORK_SPECKIT,
-    PHASE_OTHER,
-    ROLE_UNASSIGNED,
-    extract_command_names,
-    role_from_initiate_command,
 )
 from .loader import (
     Conversation,
@@ -63,7 +58,6 @@ from .speckit_phase_walker import assign_speckit_phases
 from .schema import (
     Record,
     SchemaError,
-    user_prompt_text,
 )
 from .turns import Turn, derive_turns
 from .user_prompts import is_user_authored_prompt
@@ -179,35 +173,34 @@ def load_session(path: Path, framework: str) -> Session:
 def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationView, ...]:
     """Assemble per-conversation views for an APM submission.
 
-    Each conversation's role is derived from its first recognised
-    slash command. Conversations are then numbered sequentially per
-    role kind by their earliest record timestamp ascending so that
-    handoffs produce ``manager-2``, ``manager-3`` and parallel workers
-    produce ``worker-1``, ``worker-2`` in chronological order.
+    Roles and per-record phases are computed by
+    :func:`apm_role_walker.assign_apm_roles`. Conversations are then
+    numbered sequentially per role kind by their earliest record
+    timestamp ascending so that handoffs produce ``manager-2``,
+    ``manager-3`` and parallel workers produce ``worker-1``,
+    ``worker-2`` in chronological order.
     """
-    initial: list[tuple[Conversation, str, str, Record | None, datetime | None]] = []
-    for conversation in conversations:
-        first_command, first_record = _first_slash_command(conversation)
-        base_role = role_from_initiate_command(first_command) if first_command else ROLE_UNASSIGNED
-        initial.append((
-            conversation,
-            base_role,
-            first_command,
-            first_record,
-            _earliest_user_authored_timestamp(conversation.records),
-        ))
-    initial.sort(key=lambda item: (item[4] is None, item[4]))
+    result = assign_apm_roles(conversations)
+    initial: list[tuple[Conversation, ConversationRole, datetime | None]] = [
+        (conversation, role, _earliest_user_authored_timestamp(conversation.records))
+        for conversation, role in zip(conversations, result.conversation_roles)
+    ]
+    initial.sort(key=lambda item: (item[2] is None, item[2]))
     counters: dict[str, int] = {}
     views: list[ConversationView] = []
-    for conversation, base_role, first_command, first_record, first_ts in initial:
-        counters[base_role] = counters.get(base_role, 0) + 1
-        role_key = f"{base_role}-{counters[base_role]}"
-        phase_by_uuid = _phase_by_uuid_apm_walker(conversation.records, base_role)
+    for conversation, role, first_ts in initial:
+        counters[role.base_role] = counters.get(role.base_role, 0) + 1
+        role_key = f"{role.base_role}-{counters[role.base_role]}"
+        phase_by_uuid = {
+            record.uuid: result.phase_by_uuid[record.uuid]
+            for record in conversation.records
+            if record.uuid and record.uuid in result.phase_by_uuid
+        }
         views.append(ConversationView(
             conversation=conversation,
             role=role_key,
-            first_command=first_command,
-            first_command_record=first_record,
+            first_command=role.first_command,
+            first_command_record=role.first_command_record,
             first_record_timestamp=first_ts,
             phase_by_record_uuid=phase_by_uuid,
         ))
@@ -229,11 +222,13 @@ def _build_speckit_views(
     """
     initial: list[tuple[Conversation, str, Record | None, datetime | None]] = []
     for conversation in conversations:
-        first_command, first_record = _first_slash_command(conversation)
+        # Spec-kit has no role-initiating command, so the view's
+        # first_command is empty by definition; only APM conversations
+        # carry one.
         initial.append((
             conversation,
-            first_command,
-            first_record,
+            "",
+            None,
             _earliest_user_authored_timestamp(conversation.records),
         ))
     initial.sort(key=lambda item: (item[3] is None, item[3]))
@@ -258,35 +253,6 @@ def _build_speckit_views(
     return tuple(views), backward_skill_invocations
 
 
-def _phase_by_uuid_apm_walker(records: tuple[Record, ...], base_role: str) -> dict[str, str]:
-    """Return a mapping of prompt UUID to phase for an APM conversation.
-
-    Walks the records sequentially. Every genuine user prompt is
-    assigned ``PHASE_OTHER`` until a role-initiating command is
-    found. Once an initiator appears, that prompt and every
-    subsequent prompt in the conversation are assigned to the
-    real phase associated with ``base_role``.
-    """
-    result: dict[str, str] = {}
-    current_phase = PHASE_OTHER
-    real_phase = APM_PHASE_BY_ROLE.get(base_role, PHASE_OTHER)
-
-    for record in records:
-        if not is_user_authored_prompt(record):
-            continue
-        if record.uuid is None:
-            continue
-
-        if current_phase == PHASE_OTHER:
-            for command in extract_command_names(user_prompt_text(record)):
-                if role_from_initiate_command(command) != ROLE_UNASSIGNED:
-                    current_phase = real_phase
-                    break
-
-        result[record.uuid] = current_phase
-    return result
-
-
 def _phase_by_uuid_constant(records: tuple[Record, ...], phase: str) -> dict[str, str]:
     """Stamp every genuine user prompt record's uuid with the same phase label."""
     result: dict[str, str] = {}
@@ -297,27 +263,6 @@ def _phase_by_uuid_constant(records: tuple[Record, ...], phase: str) -> dict[str
             continue
         result[record.uuid] = phase
     return result
-
-
-def _first_slash_command(conversation: Conversation) -> tuple[str, Record | None]:
-    """Return the first role-initiating framework command in a conversation.
-
-    Walks the conversation's records in document order. The first
-    genuine user prompt that carries an APM role-initiating command
-    (``apm-1/2/3``) defines the conversation's role. Commands that
-    precede the initiator (including recovery or status commands)
-    do not trigger role assignment; those conversations remain
-    unassigned until an initiator is encountered. Claude Code
-    built-ins are ignored. When no initiator appears anywhere in the
-    conversation, returns an empty string and ``None``.
-    """
-    for record in conversation.records:
-        if not is_user_authored_prompt(record):
-            continue
-        for command in extract_command_names(user_prompt_text(record)):
-            if role_from_initiate_command(command) != ROLE_UNASSIGNED:
-                return command, record
-    return "", None
 
 
 def _earliest_user_authored_timestamp(records: tuple[Record, ...]) -> datetime | None:

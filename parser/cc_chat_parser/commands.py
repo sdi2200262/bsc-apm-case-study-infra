@@ -249,13 +249,44 @@ def speckit_command_phase(name: str) -> str | None:
     return SPECKIT_PHASE_BY_COMMAND.get(name)
 
 
+def skill_tool_use_name(block: dict[str, Any]) -> str | None:
+    """Return the skill an assistant ``Skill`` tool_use declares, or ``None``.
+
+    The structural half of skill-invocation detection, shared by the
+    framework-specific predicates below. A participant never types
+    these: the model itself invokes a skill through the Claude Code
+    ``Skill`` tool, naming it in ``input.skill``. This recognises that
+    block shape and returns the declared name verbatim, independent of
+    which framework's vocabulary the name belongs to; the caller
+    applies its own table.
+
+    Args:
+        block: A single content block from an assistant
+            ``message.content`` array.
+
+    Returns:
+        The declared skill name when ``block`` is a ``Skill`` tool_use
+        carrying a string ``input.skill``; ``None`` for every other
+        block and for malformed ones.
+    """
+    if block.get("type") != "tool_use" or block.get("name") != "Skill":
+        return None
+    skill_input = block.get("input")
+    if not isinstance(skill_input, dict):
+        return None
+    skill = skill_input.get("skill")
+    if not isinstance(skill, str):
+        return None
+    return skill
+
+
 def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
     """Return the speckit command an assistant Skill tool_use refers to, or ``None``.
 
-    The walker treats an assistant ``Skill`` tool_use whose ``input.skill``
-    names a known Spec-kit phase command as a phase event in its own
-    right. This matches the Claude Code Skill tool: the model itself
-    invokes the skill, no user prompt is typed.
+    The walker treats an assistant ``Skill`` tool_use whose declared
+    skill names a known Spec-kit phase command as a phase event in its
+    own right. This matches the Claude Code Skill tool: the model
+    itself invokes the skill, no user prompt is typed.
 
     Args:
         block: A single content block from an assistant ``message.content``
@@ -268,15 +299,8 @@ def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
         other block, for skills outside that table, and for malformed
         blocks.
     """
-    if block.get("type") != "tool_use" or block.get("name") != "Skill":
-        return None
-    skill_input = block.get("input")
-    if not isinstance(skill_input, dict):
-        return None
-    skill = skill_input.get("skill")
-    if not isinstance(skill, str) or not skill.startswith("speckit-"):
-        return None
-    if skill not in SPECKIT_PHASE_BY_COMMAND:
+    skill = skill_tool_use_name(block)
+    if skill is None or skill not in SPECKIT_PHASE_BY_COMMAND:
         return None
     return skill
 
