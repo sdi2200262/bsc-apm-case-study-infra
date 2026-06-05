@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) BSc APM Case Study 2025-2026
+
+name: Static checks (ruff + pyright)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-type:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # One entry per package brought under the standard. Each package
+        # carries its own ruff.toml + pyrightconfig.json; add a package
+        # here once it has both.
+        package: [grader]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: ruff check
+        run: uvx ruff@0.15.13 check .
+
+      - name: ruff format --check
+        run: uvx ruff@0.15.13 format --check .
+
+      - name: pyright
+        run: uvx pyright@1.1.409
