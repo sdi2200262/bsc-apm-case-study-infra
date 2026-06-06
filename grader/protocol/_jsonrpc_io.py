@@ -16,6 +16,8 @@ import select
 import time
 from typing import IO
 
+from .. import log
+
 __all__ = ["read_line_with_timeout", "read_correlated_response"]
 
 
@@ -24,7 +26,7 @@ def read_line_with_timeout(stream: IO[str], timeout: float, debug: bool) -> str:
     ready, _, _ = select.select([stream], [], [], timeout)
     if not ready:
         if debug:
-            print(f"[debug] timeout: no response after {timeout}s")
+            log.debug(f"timeout: no response after {timeout}s")
         return ""
     return stream.readline()
 
@@ -59,15 +61,15 @@ def read_correlated_response(
         if not line:
             return None
         if debug:
-            print(f"[debug] recv: {line.strip()}")
+            log.debug(f"recv: {line.strip()}")
         try:
             message = json.loads(line.strip())
         except json.JSONDecodeError:
             if debug:
-                print("[debug] skip: line did not parse as JSON")
+                log.debug("skip: line did not parse as JSON")
             continue
         if isinstance(message, dict) and message.get("id") == request_id:
             return message
         if debug:
             seen = message.get("id") if isinstance(message, dict) else "<non-object>"
-            print(f"[debug] skip: id {seen!r} does not match {request_id!r}")
+            log.debug(f"skip: id {seen!r} does not match {request_id!r}")

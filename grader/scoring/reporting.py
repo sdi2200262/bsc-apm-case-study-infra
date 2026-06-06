@@ -33,7 +33,8 @@ from .scoring import (
     TestDefinition,
 )
 
-from .notices import collect_notices, print_notice_block
+from .. import log
+from .notices import collect_notices
 
 VERBOSE_MESSAGE_LIMIT = 60
 
@@ -116,39 +117,31 @@ def print_console_summary(
         verbose: When ``True``, prints each rubric row's status
             and short message under the matching section header.
     """
-    print("")
-    print("=" * 78)
-    print("  GRADING SUMMARY")
-    print("=" * 78)
+    log.blank()
+    log.line()
+    log.info("GRADING SUMMARY")
+    log.line()
 
     if verbose:
         _print_verbose(scorer)
 
-    for line in _summary_lines(scorer):
-        print(line)
-    print_notice_block(collect_notices(scorer))
-    print("")
-    print(f"  JSON report: {paths.json_path}")
-    print("=" * 78)
-
-
-def _summary_lines(scorer: Scorer) -> list[str]:
-    """Build the lines for the summary block at the foot of the report."""
+    for header, tests in SECTION_LAYOUT:
+        section_score, section_max = _section_totals(scorer, tests)
+        log.info(f"{header.title():18s} {section_score:3d}/{section_max:<3d}")
+    log.line()
     py_total = scorer.python_total_score()
     c_total = scorer.c_score()
     grand = scorer.total_score()
+    log.info(f"Python Total:      {py_total[0]:3d}/{py_total[1]:<3d}")
+    log.info(f"C Total:           {c_total[0]:3d}/{c_total[1]:<3d}")
+    log.info(f"TOTAL:             {grand[0]:3d}/{grand[1]:<3d}")
 
-    lines: list[str] = []
-    for header, tests in SECTION_LAYOUT:
-        section_score, section_max = _section_totals(scorer, tests)
-        label = header.title()
-        lines.append(f"  {label:18s} {section_score:3d}/{section_max:<3d}")
-    lines.append("  ----------------------------------------")
-    lines.append(f"  Python Total:      {py_total[0]:3d}/{py_total[1]:<3d}")
-    lines.append(f"  C Total:           {c_total[0]:3d}/{c_total[1]:<3d}")
-    lines.append(f"  TOTAL:             {grand[0]:3d}/{grand[1]:<3d}")
-    lines.append("")
-    return lines
+    log.notice_block(
+        (n.tag, n.label, n.summary, n.detail) for n in collect_notices(scorer)
+    )
+    log.blank()
+    log.info(f"JSON report: {paths.json_path}")
+    log.line()
 
 
 def _section_totals(
@@ -168,17 +161,18 @@ def _section_totals(
 def _print_verbose(scorer: Scorer) -> None:
     """Print per-test status under each rubric section header."""
     for header, tests in SECTION_LAYOUT:
-        print(f"\n  {header}:")
+        log.blank()
+        log.info(f"{header}:")
         for test in tests:
             result = scorer.results.get(test.id)
             if result is None:
                 continue
             status = "PASS" if result.passed else "FAIL"
-            print(
-                f"    [{status}] {test.id}: "
+            log.info(
+                f"  {test.id} {status}: "
                 f"{_truncate(result.message, VERBOSE_MESSAGE_LIMIT)}"
             )
-    print("")
+    log.blank()
 
 
 def _truncate(text: str, limit: int) -> str:

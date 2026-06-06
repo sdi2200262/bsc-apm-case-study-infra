@@ -22,8 +22,9 @@ the grading run's own builds.
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
+
+from .. import log
 
 # Commit the participant applies their patch against, per the
 # participant guide's setup steps. Embedding the pin here means a
@@ -73,10 +74,9 @@ def _prepare_clean_checkout(repo_path: Path) -> None:
         return
     if not any(root in status_out for root in PATCH_NEW_FILE_ROOTS):
         return
-    print(
+    log.warn(
         f"patch: leftover detected, sweeping baseline checkout: "
-        f"{status_out.strip().splitlines()[0]!r}...",
-        file=sys.stderr,
+        f"{status_out.strip().splitlines()[0]!r}..."
     )
     _git(repo_path, "reset", "--hard", PATCH_BASELINE_PIN)
     _git(repo_path, "clean", "-fdx")

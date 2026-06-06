@@ -69,6 +69,8 @@ from typing import Any
 
 import yaml
 
+from . import log
+
 NOTES_FILENAME = "results_notes.yaml"
 RESULTS_FILENAME = "results.json"
 
@@ -255,12 +257,12 @@ def _cmd_add(args: argparse.Namespace) -> int:
     notes.append(entry)
     save_notes(directory, notes)
     if "test_ids" in entry:
-        print(
+        log.info(
             f"added note for tests {', '.join(entry['test_ids'])} "
             f"(now {len(notes)} note(s))"
         )
     else:
-        print(f"added submission-level note (now {len(notes)} note(s))")
+        log.info(f"added submission-level note (now {len(notes)} note(s))")
     return 0
 
 
@@ -280,7 +282,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
     directory = args.results_dir
     notes = load_notes(directory)
     if not notes:
-        print(f"no notes in {directory / NOTES_FILENAME}")
+        log.info(f"no notes in {directory / NOTES_FILENAME}")
         return 0
     results = _read_results(directory)
     known = _known_test_ids(results)
@@ -293,9 +295,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
         else:
             missing = [tid for tid in test_ids if tid not in known]
             scope = f"tests={','.join(test_ids)} stale (missing {','.join(missing)})"
-        print(f"[{index}] {scope}")
-        for line in entry["note"].rstrip().splitlines():
-            print(f"      {line}")
+        log.info(f"#{index} {scope}")
+        for note_line in entry["note"].rstrip().splitlines():
+            log.info(f"      {note_line}")
     return 0
 
 
@@ -328,7 +330,7 @@ def _cmd_remove(args: argparse.Namespace) -> int:
         if removed.get("test_ids")
         else "submission-level"
     )
-    print(f"removed note ({target}; now {len(notes)} note(s))")
+    log.info(f"removed note ({target}; now {len(notes)} note(s))")
     return 0
 
 
@@ -355,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return handler(args)
     except NotesError as error:
-        print(f"error: {error}", file=sys.stderr)
+        log.error(str(error))
         return 1
 
 

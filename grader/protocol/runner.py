@@ -37,7 +37,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -46,6 +45,7 @@ from pathlib import Path
 from collections.abc import Iterator
 from typing import IO
 
+from .. import log
 from ..environment import provision
 from ._jsonrpc_io import read_correlated_response
 from ._memcheck import (
@@ -170,8 +170,8 @@ class ServerProcess:
             else:
                 cmd = [server_binary]
         if self.ctx.debug:
-            print(f"[debug] starting server: {' '.join(cmd)}")
-            print(f"[debug] cwd: {cwd}")
+            log.debug(f"starting server: {' '.join(cmd)}")
+            log.debug(f"cwd: {cwd}")
         try:
             if self.ctx.impl == "c" and self.ctx.memcheck:
                 self._valgrind_stderr_file = tempfile.NamedTemporaryFile(
@@ -202,10 +202,9 @@ class ServerProcess:
                 return False
             return True
         except OSError as error:
-            print(
+            log.error(
                 f"server start failed: {self.ctx.impl} subprocess "
-                f"could not be launched: {error}",
-                file=sys.stderr,
+                f"could not be launched: {error}"
             )
             return False
 
@@ -235,10 +234,7 @@ class ServerProcess:
         else:
             why = f"exited with code {returncode}"
         detail = f"; stderr tail: {tail}" if tail else ""
-        print(
-            f"server start failed: {self.ctx.impl} subprocess {why}{detail}",
-            file=sys.stderr,
-        )
+        log.error(f"server start failed: {self.ctx.impl} subprocess {why}{detail}")
 
     def stop(self) -> None:
         """Close stdin, wait for the subprocess (killing on timeout), record exit."""
@@ -299,7 +295,7 @@ class ServerProcess:
         try:
             line = json.dumps(request) + "\n"
             if self.ctx.debug:
-                print(f"[debug] send: {line.strip()}")
+                log.debug(f"send: {line.strip()}")
             self.proc.stdin.write(line)
             self.proc.stdin.flush()
             timeout = (
@@ -312,7 +308,7 @@ class ServerProcess:
             )
         except OSError as error:
             if self.ctx.debug:
-                print(f"[debug] request error: {error}")
+                log.debug(f"request error: {error}")
             self._server_unresponsive = True
             return None
         if response is None:

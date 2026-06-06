@@ -6,9 +6,9 @@ Grader CLI entry point.
 
 Parses arguments, resolves configuration, runs the testing-
 environment pre-flight and reset, applies the participant's patch
-(or skips for baseline mode), then sequences the phase modules
-and writes JSON and text reports beside the eclass-mcp-server
-checkout.
+(or skips for baseline mode), then sequences the phase modules,
+writes the JSON report beside the eclass-mcp-server checkout, and
+prints the console summary.
 
 Phase order, per implementation:
 
@@ -46,6 +46,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+from . import log
 from .config import resolve_config, require_path
 from .environment import (
     build_c,
@@ -84,10 +85,13 @@ def main() -> int:
     if args.no_patch and args.patch_file:
         parser.error("--no-patch is incompatible with a patch file")
 
+    if args.debug:
+        log.enable_debug()
+
     try:
         return _run(args)
     except GraderError as error:
-        print(f"error: {error}", file=sys.stderr)
+        log.error(str(error))
         return 1
 
 
@@ -141,13 +145,13 @@ def _run(args: argparse.Namespace) -> int:
 
     _install_cleanup_signal_handlers(eclass_root)
 
-    print("preflight: probing testing environment endpoints")
+    log.info("preflight: probing testing environment endpoints")
     preflight.run_preflight()
-    print("preflight: passed")
+    log.info("preflight: passed")
 
-    print("reset: running testing environment reset")
+    log.info("reset: running testing environment reset")
     reset.run_reset(mock_root)
-    print("reset: complete")
+    log.info("reset: complete")
 
     if args.no_patch:
         patch_path: Path | None = None
@@ -155,10 +159,7 @@ def _run(args: argparse.Namespace) -> int:
     else:
         patch_path = Path(args.patch_file).resolve()
         if not patch_path.exists():
-            print(
-                f"error: patch-apply failed: patch file not found: {patch_path}",
-                file=sys.stderr,
-            )
+            log.error(f"patch-apply failed: patch file not found: {patch_path}")
             return 1
         patch_name = patch_path.stem
 
@@ -166,23 +167,23 @@ def _run(args: argparse.Namespace) -> int:
     paths = reporting.report_paths(eclass_root.parent, patch_name)
 
     if patch_path is not None:
-        print(f"patch: applying {patch_path.name}")
+        log.info(f"patch: applying {patch_path.name}")
         ok, summary, detail = patch.apply_patch(eclass_root, patch_path)
         if not ok:
-            print(f"error: patch-apply failed: {summary}", file=sys.stderr)
+            log.error(f"patch-apply failed: {summary}")
             scorer.record("PATCH", False, summary, detail)
             _write_reports(paths, scorer, args.verbose)
             return 1
-        print(f"patch: {summary}")
+        log.info(f"patch: {summary}")
 
     try:
         provision.provision(eclass_root, mock_root)
-        print(
+        log.info(
             "provision: testing environment .env and certs/ copied "
             "verbatim into the checkout"
         )
     except provision.ProvisioningError as error:
-        print(f"error: provisioning failed: {error}", file=sys.stderr)
+        log.error(f"provisioning failed: {error}")
         if patch_path is not None and not args.no_cleanup:
             patch.cleanup(eclass_root)
         provision.reset_provisioning(eclass_root)
@@ -194,7 +195,7 @@ def _run(args: argparse.Namespace) -> int:
     finally:
         provision.reset_provisioning(eclass_root)
         if patch_path is not None and not args.no_cleanup:
-            print("patch: cleaning up test branch")
+            log.info("patch: cleaning up test branch")
             patch.cleanup(eclass_root)
 
     _write_reports(paths, scorer, args.verbose)
@@ -208,9 +209,9 @@ def _run_python_phases(
     debug: bool,
 ) -> None:
     """Run the Python dependency install, then the Python phases."""
-    print("python build: uv sync")
+    log.info("python build: uv sync")
     ok, summary, _detail = build_python.build(eclass_root)
-    print(f"python build: {summary}")
+    log.info(f"python build: {summary}")
     if not ok:
         _skip_remaining(
             scorer,
@@ -242,10 +243,10 @@ def _run_c_phases(
     The multi-step memory phase runs last, gated on its composed
     single-call scenarios.
     """
-    print("c compile: make c-server")
+    log.info("c compile: make c-server")
     compile_ok, compile_summary, compile_detail = build_c.compile_c_replica(eclass_root)
     scorer.record("C.1.1", compile_ok, compile_summary, compile_detail)
-    print(f"c compile: {compile_summary}")
+    log.info(f"c compile: {compile_summary}")
     if not compile_ok:
         _skip_remaining(
             scorer,
@@ -254,15 +255,15 @@ def _run_c_phases(
         )
         return
 
-    print("c stack: ldd verification")
+    log.info("c stack: ldd verification")
     stack_results = build_c.verify_stack(eclass_root)
     for test_id, result in stack_results.items():
         scorer.record(test_id, result[0], result[1], result[2])
-        print(f"c stack {test_id}: {result[1]}")
+        log.info(f"c stack {test_id}: {result[1]}")
 
     _record_phase(scorer, "c config", c_config.run, eclass_root, mock_root, debug)
 
-    print("c baseline phase")
+    log.info("c baseline phase")
     for test_id, result in c_baseline.run(eclass_root, mock_root, debug).items():
         scorer.record(test_id, result[0], result[1], result[2],
                       diagnostic=result[3])
@@ -272,7 +273,7 @@ def _run_c_phases(
     _record_phase(scorer, "c general", c_general_announcements.run,
                   eclass_root, mock_root, debug)
 
-    print("c memory phase")
+    log.info("c memory phase")
     passed_tests = frozenset(
         test_id for test_id, result in scorer.results.items() if result.passed
     )
@@ -303,7 +304,7 @@ def _record_phase(
     is recorded as the unscored per-test diagnostic (``None`` for a
     failed or non-string-matched row).
     """
-    print(f"{label} phase")
+    log.info(f"{label} phase")
     for test_id, result in run_func(eclass_root, mock_root, debug).items():
         scorer.record(test_id, result[0], result[1], result[2],
                        diagnostic=result[3])

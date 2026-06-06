@@ -15,8 +15,9 @@ that the analyst must be aware of.
 populated :class:`~grader.scoring.scoring.Scorer` and returns a frozen
 tuple of notices in the canonical order: all REVIEW notices first
 (sorted by test row id), then all WARNING notices (sorted by test row
-id). :func:`print_notice_block` renders that tuple to stdout in the
-shared contract format.
+id). The shared rendering of that tuple to the terminal lives in the
+logging module (:func:`grader.log.notice_block`); this module owns the
+notice content, not its presentation.
 """
 
 from __future__ import annotations
@@ -125,35 +126,3 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
             )
 
     return tuple(review + warning)
-
-
-def print_notice_block(notices: tuple[Notice, ...]) -> None:
-    """Render a tuple of notices to stdout.
-
-    Emits one blank line before the block, then each notice in order.
-    Returns immediately without printing anything when ``notices`` is
-    empty.
-
-    Each notice renders as:
-    - ``[{tag}]`` on its own line, no indentation.
-    - ``  label: {label}`` with two-space indent.
-    - ``  {summary}`` with two-space indent.
-    - Each line of ``detail`` (split on embedded newlines) with
-      two-space indent.
-
-    No separator between notices of the same tag. No trailing blank
-    line after the final notice.
-
-    Args:
-        notices: Tuple of notices to render, ordered REVIEW before
-            WARNING within each group.
-    """
-    if not notices:
-        return
-    print()
-    for notice in notices:
-        print(f"[{notice.tag}]")
-        print(f"  label: {notice.label}")
-        print(f"  {notice.summary}")
-        for line in notice.detail.split("\n"):
-            print(f"  {line}")
