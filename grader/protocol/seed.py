@@ -61,7 +61,7 @@ GENERAL_BACKEND_FLOOR_DAYS = 30
 
 # The grading environment's seed lives beside the grader in the same
 # repository: <infra>/grader-env/seed/seed.yaml, three parents up
-# from this file (grader/src/seed.py -> grader/src -> grader -> infra).
+# from this file (grader/protocol/seed.py -> grader/protocol -> grader -> infra).
 _GRADER_ENV_SEED = (
     Path(__file__).resolve().parent.parent.parent
     / "grader-env"

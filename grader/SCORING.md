@@ -3,7 +3,7 @@
 Total: 100 points across 90 atomic rows. The Python implementation
 contributes 30 points across 27 rows; the C replica contributes 70
 points across 63 rows (37 functional/infrastructure rows plus 26
-per-scenario memory sub-assertions). The grader (`grader/src/scoring.py`)
+per-scenario memory sub-assertions). The grader (`grader/scoring/scoring.py`)
 declares every row and asserts the tier budget at import; a numeric
 drift between this document and the code is a bug in this document.
 
@@ -316,4 +316,4 @@ of the live grading environment (the unmodified upstream's
 behaviour against the seeded mock) and is verified empirically when
 the grading VM is rebuilt; this document keeps only the mechanical
 maxima that are derivable from the rubric table in
-`grader/src/scoring.py` without a live run.
+`grader/scoring/scoring.py` without a live run.

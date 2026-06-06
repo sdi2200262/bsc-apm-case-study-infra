@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..env_file import parse_env_file
+from ..environment.env_file import parse_env_file
 
 DOTENV_FILENAME = ".env"
 ECLASS_KEY_PREFIX = "ECLASS_"

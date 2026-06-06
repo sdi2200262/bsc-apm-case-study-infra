@@ -11,7 +11,7 @@ than reconstructed. Runs after a successful patch apply (which also
 avoids a ``git apply --check`` collision with a pre-created
 ``certs/``) and resets per submission so no wiring leaks between
 runs. The ``ECLASS_*`` env-var surface parses the same ``.env``
-(:mod:`grader.src.env_file`), so both config surfaces carry
+(:mod:`grader.environment.env_file`), so both config surfaces carry
 identical values by construction. When a behavioural scenario
 switches principal, the principal is projected onto both surfaces
 together (:func:`set_dotenv_credentials` for the on-disk ``.env``,
@@ -26,7 +26,7 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
-from .errors import GraderError
+from ..errors import GraderError
 
 DOTENV_FILENAME = ".env"
 CERTS_DIRNAME = "certs"

@@ -23,12 +23,11 @@ import json
 import os
 from pathlib import Path
 
-from ..provision import (
+from ..environment.provision import (
     DOTENV_FILENAME,
     install_sso_cert,
     write_dotenv,
 )
-from ..seed import SEED, user
 from .expected import login_success
 from .runner import (
     CLIENT_NAME,
@@ -41,6 +40,7 @@ from .runner import (
     extract_text,
     tls_trust_env,
 )
+from .seed import SEED, user
 
 TLS_TRUST_ENV_KEYS = (
     "SSL_CERT_FILE",

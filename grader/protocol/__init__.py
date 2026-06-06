@@ -8,6 +8,9 @@ Submodules:
 - ``runner``: server-spawn helpers and JSON-RPC framing.
 - ``_memcheck``: valgrind stderr parsing helpers used by ``runner``.
 - ``calibration``: per-run seed-apply instant from MariaDB.
+- ``seed``: pinned testing-environment seed loader; exposes
+  username, password, enrolled course codes, per-course
+  announcements, admin announcements, and per-window helpers.
 - ``expected``: constructs the faithful openeclass response
   strings for the exact-string scenario assertions.
 - ``matching``: the single acceptance policy (byte-exact vs.

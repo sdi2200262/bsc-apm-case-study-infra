@@ -46,19 +46,17 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from .src import (
+from .config import resolve_config, require_path
+from .environment import (
     build_c,
     build_python,
     patch,
     preflight,
     provision,
-    reporting,
     reset,
-    scoring,
 )
-from .src.config import resolve_config, require_path
-from .src.errors import GraderError
-from .src.protocol import (
+from .errors import GraderError
+from .protocol import (
     c_baseline,
     c_config,
     c_course_announcements,
@@ -68,6 +66,7 @@ from .src.protocol import (
     python_course_announcements,
     python_general_announcements,
 )
+from .scoring import reporting, scoring
 
 
 def main() -> int:

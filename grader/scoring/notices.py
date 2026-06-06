@@ -12,7 +12,7 @@ objectively abnormal conditions that need no judgment to classify but
 that the analyst must be aware of.
 
 :func:`collect_notices` is the sole aggregator. It reads the
-populated :class:`~grader.src.scoring.Scorer` and returns a frozen
+populated :class:`~grader.scoring.scoring.Scorer` and returns a frozen
 tuple of notices in the canonical order: all REVIEW notices first
 (sorted by test row id), then all WARNING notices (sorted by test row
 id). :func:`print_notice_block` renders that tuple to stdout in the
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .protocol.matching import (
+from ..protocol.matching import (
     ANNOUNCEMENTS_UNORDERED,
     CAP_DOCUMENTED,
     DESCRIPTION_PRESENCE_ONLY,

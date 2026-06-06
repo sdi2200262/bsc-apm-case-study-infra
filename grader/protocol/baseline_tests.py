@@ -22,8 +22,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..provision import blank_dotenv_credentials, write_dotenv
-from ..seed import SEED, enrolled_courses, user
+from ..environment.provision import blank_dotenv_credentials, write_dotenv
+from .seed import SEED, enrolled_courses, user
 
 from ._assertion_support import (
     HANDSHAKE_FAIL,
@@ -82,7 +82,7 @@ def test_tools_list(
     """P.1.1 / C.2.2: tools/list matches the constructed expected tool list.
 
     The contract split lives in
-    :func:`grader.src.protocol.matching.match_tools_list`; this row
+    :func:`grader.protocol.matching.match_tools_list`; this row
     propagates its ``mode`` so a presence-only acceptance surfaces
     in the WARNINGS block.
     """

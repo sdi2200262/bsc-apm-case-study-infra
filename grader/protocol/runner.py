@@ -46,7 +46,7 @@ from pathlib import Path
 from collections.abc import Iterator
 from typing import IO
 
-from .. import provision
+from ..environment import provision
 from ._jsonrpc_io import read_correlated_response
 from ._memcheck import (
     VALGRIND_STDERR_TAIL_LINES,

@@ -43,7 +43,7 @@ unconditionally (the PRD whitespace rule).
 The second, lenient form in each pair (``ANNOUNCEMENTS_UNORDERED``,
 ``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``, collected in
 :data:`LENIENT_MODES`) is warned for human review at end of grading
-(see :mod:`grader.src.reporting`).
+(see :mod:`grader.scoring.reporting`).
 
 The ``tools/list`` row (:func:`match_tools_list`) splits the
 contract by tool source: byte-exact ``name``, ``description``, and
@@ -67,7 +67,6 @@ from collections.abc import Callable, Iterable
 
 from dateutil import parser as _dateparser
 
-from ..seed import Course
 from .expected import (
     BASELINE_TOOL_NAMES,
     CAPABILITIES_DOCUMENTED,
@@ -78,6 +77,7 @@ from .expected import (
     expected_tools_list,
     get_courses_forms,
 )
+from .seed import Course
 
 BYTE_EXACT = "byte-exact"
 WHITESPACE_NORMALIZED = "whitespace-normalized"
@@ -233,7 +233,7 @@ def match_get_courses(
     for the openeclass-formatted layout, ``GET_COURSES_DOCUMENTED``
     for the documented-clean layout. The documented-clean layout is a
     lenient acceptance and is warned for human review at end of
-    grading (see :mod:`grader.src.reporting`).
+    grading (see :mod:`grader.scoring.reporting`).
 
     Args:
         text: The tool's response text.
@@ -292,7 +292,7 @@ def match_announcements(
 
     The matched form is the recorded diagnostic; the unordered
     form is lenient and is warned for human review at end of
-    grading (see :mod:`grader.src.reporting`).
+    grading (see :mod:`grader.scoring.reporting`).
 
     Args:
         text: The tool's response text.
@@ -356,7 +356,7 @@ def match_initialize(actual_result: dict) -> str | None:
     ``CAP_FAITHFUL``; the documented form (what the wire-protocol
     reference literally specifies) yields ``CAP_DOCUMENTED``. The
     documented form is a lenient acceptance and is warned for human
-    review at end of grading (see :mod:`grader.src.reporting`). Only
+    review at end of grading (see :mod:`grader.scoring.reporting`). Only
     these three fields are the contract; an ``initialize`` result
     may carry further fields (an ``instructions`` string, SDK
     metadata) and those are outside the row's contract and ignored.
@@ -465,7 +465,7 @@ def _parse_announcement_entries(
 
     Inverts the ``preamble + blank line + blank-line-separated
     entries`` construction (see
-    :func:`grader.src.protocol.expected.course_response`). The
+    :func:`grader.protocol.expected.course_response`). The
     space-family normalisation is applied to the whole response
     first; it touches only the space codepoints, so newlines and
     indentation are unaffected and the blank-line split is exact.

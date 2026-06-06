@@ -44,7 +44,7 @@ from .runner import (
     PROTOCOL_VERSION,
     mcp_server_env,
 )
-from ..seed import SEED, user
+from .seed import SEED, user
 
 VALGRIND_TIMEOUT_SECONDS = 120
 

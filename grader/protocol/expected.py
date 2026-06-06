@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from ..seed import Announcement, Course
+from .seed import Announcement, Course
 
 # Narrow no-break space (U+202F) the platform renders before the
 # meridiem; a plain ASCII space here breaks the exact-string match.

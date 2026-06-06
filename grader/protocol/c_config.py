@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..provision import provision
+from ..environment.provision import provision
 from . import config_surface
 
 

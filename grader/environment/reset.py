@@ -20,7 +20,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from .errors import ResetError
+from ..errors import ResetError
 
 RESET_SCRIPT_RELATIVE = "scripts/reset"
 RESET_TIMEOUT_SECONDS = 300

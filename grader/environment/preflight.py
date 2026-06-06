@@ -22,7 +22,7 @@ from __future__ import annotations
 import requests
 import urllib3
 
-from .errors import PreflightError
+from ..errors import PreflightError
 
 OPENECLASS_URL = "http://localhost/"
 MOCK_CAS_HEALTH_URL = "https://localhost:18443/health"
