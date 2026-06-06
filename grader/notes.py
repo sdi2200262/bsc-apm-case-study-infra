@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Hand-written annotations attached to grader results.
+"""Hand-written annotations attached to grader results.
 
 The grader produces a per-submission ``results.json`` that scores
 every rubric row and carries the per-test message the assertion
@@ -173,6 +171,33 @@ def save_notes(directory: Path, notes: list[dict[str, Any]]) -> None:
     temp_path.rename(path)
 
 
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point.
+
+    Args:
+        argv: Optional argument list; defaults to ``sys.argv[1:]``.
+
+    Returns:
+        Process exit code: ``0`` on success, ``1`` on a recoverable
+        notes error, ``2`` on operator error (missing flags).
+    """
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.subcommand is None:
+        parser.print_help(sys.stderr)
+        return 2
+    handler = {
+        "add": _cmd_add,
+        "list": _cmd_list,
+        "remove": _cmd_remove,
+    }[args.subcommand]
+    try:
+        return handler(args)
+    except NotesError as error:
+        log.error(str(error))
+        return 1
+
+
 class _LiteralBlockDumper(yaml.SafeDumper):
     """SafeDumper variant that emits multi-line strings as literal block scalars.
 
@@ -332,33 +357,6 @@ def _cmd_remove(args: argparse.Namespace) -> int:
     )
     log.info(f"removed note ({target}; now {len(notes)} note(s))")
     return 0
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point.
-
-    Args:
-        argv: Optional argument list; defaults to ``sys.argv[1:]``.
-
-    Returns:
-        Process exit code: ``0`` on success, ``1`` on a recoverable
-        notes error, ``2`` on operator error (missing flags).
-    """
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-    if args.subcommand is None:
-        parser.print_help(sys.stderr)
-        return 2
-    handler = {
-        "add": _cmd_add,
-        "list": _cmd_list,
-        "remove": _cmd_remove,
-    }[args.subcommand]
-    try:
-        return handler(args)
-    except NotesError as error:
-        log.error(str(error))
-        return 1
 
 
 def _build_parser() -> argparse.ArgumentParser:

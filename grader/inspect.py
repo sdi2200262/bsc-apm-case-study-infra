@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Render an emitted grader results artifact in a human-readable form.
+"""Render an emitted grader results artifact in a human-readable form.
 
 The grader writes a results JSON document for each graded patch:
 per-test pass-or-fail status, points awarded against the rubric, and
@@ -49,7 +48,7 @@ def load_results(filepath: Path) -> dict[str, Any]:
         json.JSONDecodeError: When the file contains invalid JSON.
         FileNotFoundError: When the file does not exist.
     """
-    with open(filepath, "r", encoding="utf-8") as source:
+    with open(filepath, encoding="utf-8") as source:
         return json.load(source)
 
 
@@ -212,9 +211,11 @@ def print_tests_list(
     for test_id, test_data in tests.items():
         if filter_passed is not None and test_data.get("passed") != filter_passed:
             continue
-        if filter_category is not None:
-            if test_data.get("category", "").lower() != filter_category.lower():
-                continue
+        if (
+            filter_category is not None
+            and test_data.get("category", "").lower() != filter_category.lower()
+        ):
+            continue
 
         status = format_status(test_data.get("passed", False))
         points = format_points(
@@ -226,7 +227,82 @@ def print_tests_list(
         log.info(f"{test_id:6s} {status:4s} {points:5s} - {desc}")
 
 
-def create_parser() -> argparse.ArgumentParser:
+def main(argv: list[str] | None = None) -> int:
+    """Run the CLI: parse args, load the results file, dispatch the action.
+
+    Args:
+        argv: Optional argument list; defaults to ``sys.argv[1:]``.
+
+    Returns:
+        Process exit code: ``0`` on success or any informational
+        path (summary, list, filter, full output); ``1`` when the
+        results file is missing, invalid JSON, unreadable, or names a
+        test ID not present in the file.
+    """
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if not args.results_file.exists():
+        log.error(f"File not found: {args.results_file}")
+        return 1
+
+    try:
+        data = load_results(args.results_file)
+    except json.JSONDecodeError as error:
+        log.error(f"Invalid JSON: {error}")
+        return 1
+    except OSError as error:
+        log.error(str(error))
+        return 1
+
+    tests = data.get("tests", {})
+
+    if args.list_categories:
+        # Raw, one-per-line output for scripting; not decorated.
+        for cat in get_categories(tests):
+            print(cat)
+        return 0
+
+    if args.full_output:
+        test_id = args.full_output.upper()
+        if test_id not in tests:
+            log.error(f"Test '{test_id}' not found")
+            log.error(f"Available tests: {', '.join(tests.keys())}")
+            return 1
+        # Raw field dump for piping (e.g. into json.tool); not decorated.
+        print(tests[test_id].get("full_output", ""))
+        return 0
+
+    if args.test:
+        test_id = args.test.upper()
+        if test_id not in tests:
+            log.error(f"Test '{test_id}' not found")
+            log.error(f"Available tests: {', '.join(tests.keys())}")
+            return 1
+        print_test(test_id, tests[test_id], show_full=True)
+        return 0
+
+    if args.failed:
+        print_header("FAILED TESTS")
+        print_tests_list(tests, filter_passed=False)
+        return 0
+
+    if args.passed:
+        print_header("PASSED TESTS")
+        print_tests_list(tests, filter_passed=True)
+        return 0
+
+    if args.category:
+        print_header(f"TESTS IN CATEGORY: {args.category.upper()}")
+        print_tests_list(tests, filter_category=args.category)
+        return 0
+
+    # Default and explicit --summary: the one-shot score summary.
+    print_summary(data)
+    return 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
     """Return the argparse parser configured for the inspect CLI."""
     parser = argparse.ArgumentParser(
         prog="inspect.py",
@@ -302,81 +378,6 @@ Categories:
     )
 
     return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Run the CLI: parse args, load the results file, dispatch the action.
-
-    Args:
-        argv: Optional argument list; defaults to ``sys.argv[1:]``.
-
-    Returns:
-        Process exit code: ``0`` on success or any informational
-        path (summary, list, filter, full output); ``1`` when the
-        results file is missing, invalid JSON, unreadable, or names a
-        test ID not present in the file.
-    """
-    parser = create_parser()
-    args = parser.parse_args(argv)
-
-    if not args.results_file.exists():
-        log.error(f"File not found: {args.results_file}")
-        return 1
-
-    try:
-        data = load_results(args.results_file)
-    except json.JSONDecodeError as error:
-        log.error(f"Invalid JSON: {error}")
-        return 1
-    except OSError as error:
-        log.error(str(error))
-        return 1
-
-    tests = data.get("tests", {})
-
-    if args.list_categories:
-        # Raw, one-per-line output for scripting; not decorated.
-        for cat in get_categories(tests):
-            print(cat)
-        return 0
-
-    if args.full_output:
-        test_id = args.full_output.upper()
-        if test_id not in tests:
-            log.error(f"Test '{test_id}' not found")
-            log.error(f"Available tests: {', '.join(tests.keys())}")
-            return 1
-        # Raw field dump for piping (e.g. into json.tool); not decorated.
-        print(tests[test_id].get("full_output", ""))
-        return 0
-
-    if args.test:
-        test_id = args.test.upper()
-        if test_id not in tests:
-            log.error(f"Test '{test_id}' not found")
-            log.error(f"Available tests: {', '.join(tests.keys())}")
-            return 1
-        print_test(test_id, tests[test_id], show_full=True)
-        return 0
-
-    if args.failed:
-        print_header("FAILED TESTS")
-        print_tests_list(tests, filter_passed=False)
-        return 0
-
-    if args.passed:
-        print_header("PASSED TESTS")
-        print_tests_list(tests, filter_passed=True)
-        return 0
-
-    if args.category:
-        print_header(f"TESTS IN CATEGORY: {args.category.upper()}")
-        print_tests_list(tests, filter_category=args.category)
-        return 0
-
-    # Default and explicit --summary: the one-shot score summary.
-    print_summary(data)
-    return 0
 
 
 if __name__ == "__main__":

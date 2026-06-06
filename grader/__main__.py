@@ -1,40 +1,21 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Grader CLI entry point.
+"""Grader CLI entry point: grade one participant patch end to end.
 
-Parses arguments, resolves configuration, runs the testing-
-environment pre-flight and reset, applies the participant's patch
-(or skips for baseline mode), then sequences the phase modules,
-writes the JSON report beside the eclass-mcp-server checkout, and
-prints the console summary.
+Parses arguments, resolves the testing-environment and eclass paths,
+runs the preflight and reset, applies the participant's patch (or skips
+it in baseline mode), sequences the Python and C phase modules, writes
+the JSON report beside the eclass-mcp-server checkout, and prints the
+console summary. The per-phase ordering and the C compile gate live with
+the phase runners ``_run_python_phases`` and ``_run_c_phases``.
 
-Phase order, per implementation:
+Exit codes: ``0`` on a clean run (phase-test failures are recorded in the
+report and do not change the exit code); ``1`` on a configuration,
+preflight, reset, provisioning, or patch-application failure; ``2`` on an
+argument error or a missing patch file.
 
-- Python: dependency install (prerequisite, not scored), then P.1
-  baseline, P.2 course announcements, P.3 general announcements.
-- C: C.1.1 compile (sole hard gate: on fail, skip-record every
-  other C row including all ``.mem`` and C.5 rows and return).
-  After compile: C.1.2/C.1.3/C.1.4 tech stack (no cascade);
-  C.1.5/C.1.6 configuration surfaces (no cascade; restores
-  dual-provisioned state); C.2 baseline (each C.2.3-12 row also
-  records a ``.mem`` sub-assertion scored only if its functional
-  assertion passes); C.3 course announcements and C.4 general
-  announcements (same per-scenario ``.mem`` pattern); C.5
-  multi-step memory last (gated on specific composed single-call
-  scenarios named in each scenario's ``gates_on``).
-
-Exit codes:
-
-- ``0`` on a clean run; phase-test failures are recorded in the
-  report and do not change this exit code.
-- ``1`` on configuration errors, pre-flight failures, reset
-  failures, provisioning failures, or patch-application failures.
-- ``2`` on argument errors or a missing patch file.
-
-Invoke as ``python -m grader`` from a working directory that has
-the ``grader`` package on ``sys.path``.
+Invoke as ``python -m grader`` from a working directory with the
+``grader`` package on ``sys.path``.
 """
 
 from __future__ import annotations
@@ -43,11 +24,11 @@ import argparse
 import os
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from . import log
-from .config import resolve_config, require_path
+from .config import require_path, resolve_config
 from .environment import (
     build_c,
     build_python,
@@ -69,16 +50,23 @@ from .protocol import (
 )
 from .scoring import reporting, scoring
 
+PhaseRunner = Callable[
+    [Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]
+]
 
-def main() -> int:
+
+def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the grading sequence.
+
+    Args:
+        argv: Optional argument list; defaults to ``sys.argv[1:]``.
 
     Returns:
         ``0`` on a clean run; ``2`` on an argparse usage error;
         ``1`` on any ``GraderError`` or a patch-application failure.
     """
     parser = _build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.no_patch and not args.patch_file:
         parser.error("either provide a patch file or use --no-patch")
@@ -100,13 +88,13 @@ def _install_cleanup_signal_handlers(eclass_root: Path) -> None:
 
     Python's ``try/finally`` does not fire on a SIGTERM, so without
     these handlers a Ctrl-C or ``kill`` bypasses the cleanup in
-    :func:`_run` and leaves the checkout dirty for the next grade.
-    The handler runs :func:`provision.reset_provisioning` then
-    :func:`patch.cleanup` (both idempotent), restores the default
+    ``_run`` and leaves the checkout dirty for the next grade.
+    The handler runs ``provision.reset_provisioning`` then
+    ``patch.cleanup`` (both idempotent), restores the default
     disposition, and re-raises by sending the same signal to this
     process so the calling shell sees the correct killed-by-signal
     exit status. SIGKILL and OOM remain uncatchable;
-    :func:`patch._prepare_clean_checkout` recovers from those.
+    ``patch._prepare_clean_checkout`` recovers from those.
 
     Args:
         eclass_root: Resolved eclass-mcp-server checkout path.
@@ -282,11 +270,6 @@ def _run_c_phases(
     ).items():
         scorer.record(test_id, result[0], result[1], result[2],
                       diagnostic=result[3])
-
-
-PhaseRunner = Callable[
-    [Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]
-]
 
 
 def _record_phase(
