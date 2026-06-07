@@ -116,7 +116,7 @@ BASELINE_TOOL_NAMES: frozenset[str] = frozenset({"login", "get_courses", "logout
 BASELINE_TOOLS: tuple[dict, ...] = (
     {
         "name": "login",
-        "description": "Log in to eClass using username/password from your .env file through UoA's SSO. Configure ECLASS_USERNAME and ECLASS_PASSWORD in your .env file.",
+        "description": "Log in to eClass using username/password from your .env file through UoA's SSO. Configure ECLASS_USERNAME and ECLASS_PASSWORD in your .env file.",  # noqa: E501
         "inputSchema": BASELINE_TOOL_INPUT_SCHEMA,
     },
     {
@@ -153,7 +153,7 @@ ANNOUNCEMENT_TOOLS: tuple[dict, ...] = (
                 },
                 "days_back": {
                     "type": "integer",
-                    "description": "Number of days back to include. Zero is valid and returns today's announcements only. Default is 30.",
+                    "description": "Number of days back to include. Zero is valid and returns today's announcements only. Default is 30.",  # noqa: E501
                 },
             },
             "required": ["course_url"],
@@ -166,7 +166,7 @@ ANNOUNCEMENT_TOOLS: tuple[dict, ...] = (
             "properties": {
                 "days_back": {
                     "type": "integer",
-                    "description": "Number of days back to include. Zero is valid and returns today's announcements only. Default is 30.",
+                    "description": "Number of days back to include. Zero is valid and returns today's announcements only. Default is 30.",  # noqa: E501
                 },
             },
         },
