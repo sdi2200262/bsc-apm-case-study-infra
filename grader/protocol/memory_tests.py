@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Multi-step memory-leak scenarios for the C replica (C.5.1 through C.5.3).
+"""Multi-step memory-leak scenarios for the C replica (C.5.1 through C.5.3).
 
 Each scenario drives the C binary once under valgrind
 ``--leak-check=full --show-leak-kinds=all --track-origins=yes
@@ -67,7 +65,7 @@ class MemoryScenario:
         scenario_id: Rubric identifier (``"C.5.1"``, etc.).
         description: Short description for the report writer.
         calls: Ordered request sequence after the initialize and
-            initialized handshake; the :data:`TOOLS_LIST_METHOD`
+            initialized handshake; the ``TOOLS_LIST_METHOD``
             sentinel issues a ``tools/list``, every other entry a
             ``tools/call``.
         gates_on: Rubric identifiers whose call shapes the scenario
@@ -95,7 +93,13 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("authstatus", {}),
         ),
         gates_on=(
-            "C.2.4", "C.2.5", "C.2.8", "C.3.7", "C.4.7", "C.2.9", "C.2.10",
+            "C.2.4",
+            "C.2.5",
+            "C.2.8",
+            "C.3.7",
+            "C.4.7",
+            "C.2.9",
+            "C.2.10",
         ),
     ),
     MemoryScenario(
@@ -109,7 +113,11 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("authstatus", {}),
         ),
         gates_on=(
-            "C.2.4", "C.2.6", "C.2.9", "C.2.12", "C.2.3",
+            "C.2.4",
+            "C.2.6",
+            "C.2.9",
+            "C.2.12",
+            "C.2.3",
         ),
     ),
     MemoryScenario(
@@ -123,7 +131,11 @@ SCENARIOS: tuple[MemoryScenario, ...] = (
             ("authstatus", {}),
         ),
         gates_on=(
-            "C.2.4", "C.2.5", "C.2.8", "C.2.9", "C.2.10",
+            "C.2.4",
+            "C.2.5",
+            "C.2.8",
+            "C.2.9",
+            "C.2.10",
         ),
     ),
 )
@@ -208,52 +220,6 @@ def run_scenario(
     )
 
 
-def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
-    """Return the newline-framed JSON-RPC sequence for a scenario.
-
-    Opens with ``initialize`` and the ``notifications/initialized``
-    notification, then issues one request per entry in ``calls``: a
-    ``tools/list`` request for the :data:`TOOLS_LIST_METHOD`
-    sentinel, otherwise a ``tools/call``. Baseline tools receive the
-    ``random_string`` parameter.
-    """
-    frames: list[str] = [
-        json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
-            },
-        }),
-        json.dumps({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-        }),
-    ]
-    for index, (tool, args) in enumerate(calls, start=2):
-        if tool == TOOLS_LIST_METHOD:
-            frames.append(json.dumps({
-                "jsonrpc": "2.0",
-                "id": index,
-                "method": "tools/list",
-                "params": {},
-            }))
-            continue
-        merged = dict(args)
-        if tool in BASELINE_TOOL_NAMES and "random_string" not in merged:
-            merged["random_string"] = "test"
-        frames.append(json.dumps({
-            "jsonrpc": "2.0",
-            "id": index,
-            "method": "tools/call",
-            "params": {"name": tool, "arguments": merged},
-        }))
-    return "\n".join(frames) + "\n"
-
-
 def classify_valgrind_run(
     scenario_id: str,
     returncode: int,
@@ -262,7 +228,7 @@ def classify_valgrind_run(
 ) -> tuple[bool, str, str]:
     """Classify one valgrind run's verdict from its exit code and streams.
 
-    Thin wrapper around :func:`._memcheck.classify_leak_verdict`: the
+    Thin wrapper around ``._memcheck.classify_leak_verdict``: the
     shared classifier decides clean-or-not from ``(returncode,
     stderr)``; this function prefixes the scenario identifier onto
     the reason and assembles the ``detail`` field with the bounded
@@ -288,3 +254,61 @@ def classify_valgrind_run(
         detail = f"{detail}\n--- stdout tail ---\n{stdout_tail}".strip()
     clean, reason = classify_leak_verdict(returncode, stderr)
     return clean, f"{scenario_id}: {reason}", detail
+
+
+def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
+    """Return the newline-framed JSON-RPC sequence for a scenario.
+
+    Opens with ``initialize`` and the ``notifications/initialized``
+    notification, then issues one request per entry in ``calls``: a
+    ``tools/list`` request for the ``TOOLS_LIST_METHOD``
+    sentinel, otherwise a ``tools/call``. Baseline tools receive the
+    ``random_string`` parameter.
+    """
+    frames: list[str] = [
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+            }
+        ),
+    ]
+    for index, (tool, args) in enumerate(calls, start=2):
+        if tool == TOOLS_LIST_METHOD:
+            frames.append(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": index,
+                        "method": "tools/list",
+                        "params": {},
+                    }
+                )
+            )
+            continue
+        merged = dict(args)
+        if tool in BASELINE_TOOL_NAMES and "random_string" not in merged:
+            merged["random_string"] = "test"
+        frames.append(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": index,
+                    "method": "tools/call",
+                    "params": {"name": tool, "arguments": merged},
+                }
+            )
+        )
+    return "\n".join(frames) + "\n"

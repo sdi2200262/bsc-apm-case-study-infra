@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-General-announcements protocol assertions (P.3.x / C.4.x).
+"""General-announcements protocol assertions (P.3.x / C.4.x).
 
 Principal: ``student_general`` (enrolled in BIO110 only). Each
 function accepts an optional ``instant`` (per-run seed-apply
@@ -11,7 +9,7 @@ timestamp) and ``memcheck``. Return shape is a 5-tuple
 same convention as ``course_announcements_tests``.
 
 Leak-verdict pattern: functional result is saved inside the ``with``
-block; :func:`leak_after` is called after the block exits so
+block; ``leak_after`` is called after the block exits so
 ``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
 """
 
@@ -20,15 +18,15 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
-from .seed import SEED, general_announcements_in_window, user
 from ._assertion_support import (
     HANDSHAKE_FAIL,
     LOGIN_FAIL,
-    Result5,
     SERVER_START_FAIL,
     TOOL_FAIL,
+    Result5,
     leak_after,
 )
+from .announcement_matching import match_announcements
 from .expected import (
     ERR_GENERAL_UPPER_BOUND,
     ERR_NEGATIVE_DAYS_BACK,
@@ -37,18 +35,12 @@ from .expected import (
     general_entries,
     general_response,
 )
-from .announcement_matching import match_announcements
 from .matching import match_exact
 from .runner import ServerProcess, call_tool, extract_text, initialize_server, spawn_server
+from .seed import SEED, general_announcements_in_window, user
 
 _PRINCIPAL = user(SEED, "student_general")
 TOOL_NAME = "get_general_announcements"
-
-
-def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_general principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username,
-            "ECLASS_PASSWORD": _PRINCIPAL.password}
 
 
 def test_general_not_logged_in(
@@ -76,8 +68,10 @@ def test_general_not_logged_in(
                     text = extract_text(tool_resp)
                     mode = match_exact(text, ERR_NOT_LOGGED_IN)
                     ok = mode is not None
-                    msg = "exact not-logged-in error matched" if ok else (
-                        f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
+                    msg = (
+                        "exact not-logged-in error matched"
+                        if ok
+                        else (f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}")
                     )
                     detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -96,8 +90,12 @@ def test_general_negative_days(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -115,8 +113,10 @@ def test_general_negative_days(
                         text = extract_text(tool_resp)
                         mode = match_exact(text, ERR_NEGATIVE_DAYS_BACK)
                         ok = mode is not None
-                        msg = "exact negative-days error matched" if ok else (
-                            f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}"
+                        msg = (
+                            "exact negative-days error matched"
+                            if ok
+                            else (f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -135,8 +135,12 @@ def test_general_over_thirty(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -154,8 +158,10 @@ def test_general_over_thirty(
                         text = extract_text(tool_resp)
                         mode = match_exact(text, ERR_GENERAL_UPPER_BOUND)
                         ok = mode is not None
-                        msg = "exact upper-bound error matched" if ok else (
-                            f"expected {ERR_GENERAL_UPPER_BOUND!r}, got {text!r}"
+                        msg = (
+                            "exact upper-bound error matched"
+                            if ok
+                            else (f"expected {ERR_GENERAL_UPPER_BOUND!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -174,8 +180,12 @@ def test_general_days_zero(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -193,8 +203,10 @@ def test_general_days_zero(
                         text = extract_text(tool_resp)
                         mode = match_exact(text, NO_ANNOUNCEMENTS)
                         ok = mode is not None
-                        msg = "exact empty-window string matched" if ok else (
-                            f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+                        msg = (
+                            "exact empty-window string matched"
+                            if ok
+                            else (f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -217,8 +229,12 @@ def test_general_days_5(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -234,10 +250,14 @@ def test_general_days_5(
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "days_back=5 announcement response accepted (1 item)" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "days_back=5 announcement response accepted (1 item)"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -264,8 +284,12 @@ def test_general_days_8(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -281,10 +305,14 @@ def test_general_days_8(
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "days_back=8 union announcement response accepted (2 items)" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "days_back=8 union announcement response accepted (2 items)"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -311,8 +339,12 @@ def test_general_default(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -328,10 +360,19 @@ def test_general_default(
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "default-window announcement response accepted (4 items)" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "default-window announcement response accepted (4 items)"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_general principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}

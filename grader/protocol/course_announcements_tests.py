@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Course-announcements protocol assertions (P.2.x / C.3.x).
+"""Course-announcements protocol assertions (P.2.x / C.3.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server.
 Principal: ``student_courses``. Return shape is always a 5-tuple
@@ -11,7 +9,7 @@ Principal: ``student_courses``. Return shape is always a 5-tuple
 mode the row was accepted under (``None`` for a failed match).
 
 Leak-verdict pattern: functional result is saved inside the ``with``
-block; :func:`leak_after` is called after the block exits so
+block; ``leak_after`` is called after the block exits so
 ``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
 """
 
@@ -20,15 +18,15 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
-from .seed import SEED, course_announcements_in_window, user
 from ._assertion_support import (
     HANDSHAKE_FAIL,
     LOGIN_FAIL,
-    Result5,
     SERVER_START_FAIL,
     TOOL_FAIL,
+    Result5,
     leak_after,
 )
+from .announcement_matching import match_announcements
 from .expected import (
     ERR_BAD_COURSE_URL,
     ERR_NEGATIVE_DAYS_BACK,
@@ -38,7 +36,6 @@ from .expected import (
     course_response,
     course_url,
 )
-from .announcement_matching import match_announcements
 from .matching import match_exact
 from .runner import (
     ServerProcess,
@@ -47,15 +44,10 @@ from .runner import (
     initialize_server,
     spawn_server,
 )
+from .seed import SEED, course_announcements_in_window, user
 
 _PRINCIPAL = user(SEED, "student_courses")
 TOOL_NAME = "get_course_announcements"
-
-
-def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_courses principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username,
-            "ECLASS_PASSWORD": _PRINCIPAL.password}
 
 
 def test_course_not_logged_in(
@@ -76,16 +68,17 @@ def test_course_not_logged_in(
             if not initialize_server(server):
                 ok, msg, detail = HANDSHAKE_FAIL
             else:
-                tool_resp = call_tool(server, TOOL_NAME,
-                                      {"course_url": course_url("CS101")})
+                tool_resp = call_tool(server, TOOL_NAME, {"course_url": course_url("CS101")})
                 if tool_resp is None:
                     ok, msg, detail = TOOL_FAIL
                 else:
                     text = extract_text(tool_resp)
                     mode = match_exact(text, ERR_NOT_LOGGED_IN)
                     ok = mode is not None
-                    msg = "exact not-logged-in error matched" if ok else (
-                        f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}"
+                    msg = (
+                        "exact not-logged-in error matched"
+                        if ok
+                        else (f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}")
                     )
                     detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -104,8 +97,12 @@ def test_course_bad_url(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -116,16 +113,17 @@ def test_course_bad_url(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME,
-                                          {"course_url": "not-a-valid-url"})
+                    tool_resp = call_tool(server, TOOL_NAME, {"course_url": "not-a-valid-url"})
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
                         mode = match_exact(text, ERR_BAD_COURSE_URL)
                         ok = mode is not None
-                        msg = "exact extract-code error matched" if ok else (
-                            f"expected {ERR_BAD_COURSE_URL!r}, got {text!r}"
+                        msg = (
+                            "exact extract-code error matched"
+                            if ok
+                            else (f"expected {ERR_BAD_COURSE_URL!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -144,8 +142,12 @@ def test_course_negative_days(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -156,17 +158,24 @@ def test_course_negative_days(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME, {
-                        "course_url": course_url("PHYS150"), "days_back": -1,
-                    })
+                    tool_resp = call_tool(
+                        server,
+                        TOOL_NAME,
+                        {
+                            "course_url": course_url("PHYS150"),
+                            "days_back": -1,
+                        },
+                    )
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
                         mode = match_exact(text, ERR_NEGATIVE_DAYS_BACK)
                         ok = mode is not None
-                        msg = "exact negative-days error matched" if ok else (
-                            f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}"
+                        msg = (
+                            "exact negative-days error matched"
+                            if ok
+                            else (f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -190,8 +199,12 @@ def test_course_empty_window(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -202,16 +215,17 @@ def test_course_empty_window(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME,
-                                          {"course_url": course_url("MATH201")})
+                    tool_resp = call_tool(server, TOOL_NAME, {"course_url": course_url("MATH201")})
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
                         mode = match_exact(text, NO_ANNOUNCEMENTS)
                         ok = mode is not None
-                        msg = "exact empty-window string matched" if ok else (
-                            f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+                        msg = (
+                            "exact empty-window string matched"
+                            if ok
+                            else (f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -234,8 +248,12 @@ def test_course_days_zero(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -246,17 +264,26 @@ def test_course_days_zero(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME, {
-                        "course_url": course_url("CS101"), "days_back": 0,
-                    })
+                    tool_resp = call_tool(
+                        server,
+                        TOOL_NAME,
+                        {
+                            "course_url": course_url("CS101"),
+                            "days_back": 0,
+                        },
+                    )
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "relative-date announcement response accepted" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "relative-date announcement response accepted"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -280,8 +307,12 @@ def test_course_zero_absolute(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -292,17 +323,24 @@ def test_course_zero_absolute(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME, {
-                        "course_url": course_url("PHYS150"), "days_back": 0,
-                    })
+                    tool_resp = call_tool(
+                        server,
+                        TOOL_NAME,
+                        {
+                            "course_url": course_url("PHYS150"),
+                            "days_back": 0,
+                        },
+                    )
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
                         mode = match_exact(text, NO_ANNOUNCEMENTS)
                         ok = mode is not None
-                        msg = "exact empty-window string matched (days_back=0 honoured)" if ok else (
-                            f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}"
+                        msg = (
+                            "exact empty-window string matched (days_back=0 honoured)"
+                            if ok
+                            else (f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -329,8 +367,12 @@ def test_course_default(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -341,16 +383,19 @@ def test_course_default(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME,
-                                          {"course_url": course_url("PHYS150")})
+                    tool_resp = call_tool(server, TOOL_NAME, {"course_url": course_url("PHYS150")})
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "default-window announcement response accepted (3 items)" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "default-window announcement response accepted (3 items)"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -373,8 +418,12 @@ def test_course_days_10(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -385,17 +434,26 @@ def test_course_days_10(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME, {
-                        "course_url": course_url("PHYS150"), "days_back": 10,
-                    })
+                    tool_resp = call_tool(
+                        server,
+                        TOOL_NAME,
+                        {
+                            "course_url": course_url("PHYS150"),
+                            "days_back": 10,
+                        },
+                    )
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "days_back=10 announcement response accepted (2 items)" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "days_back=10 announcement response accepted (2 items)"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
@@ -422,8 +480,12 @@ def test_course_days_40(
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
     with spawn_server(
-        impl, eclass_dir, mock_root, debug,
-        env_overrides=_creds(), memcheck=memcheck,
+        impl,
+        eclass_dir,
+        mock_root,
+        debug,
+        env_overrides=_creds(),
+        memcheck=memcheck,
     ) as server:
         srv = server
         if server is not None:
@@ -434,17 +496,31 @@ def test_course_days_40(
                 if login_resp is None:
                     ok, msg, detail = LOGIN_FAIL
                 else:
-                    tool_resp = call_tool(server, TOOL_NAME, {
-                        "course_url": course_url("PHYS150"), "days_back": 40,
-                    })
+                    tool_resp = call_tool(
+                        server,
+                        TOOL_NAME,
+                        {
+                            "course_url": course_url("PHYS150"),
+                            "days_back": 40,
+                        },
+                    )
                     if tool_resp is None:
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_announcements(text, expected, expected_entries, len(anns), instant)
+                        mode = match_announcements(
+                            text, expected, expected_entries, len(anns), instant
+                        )
                         ok = mode is not None
-                        msg = "days_back=40 announcement response accepted (4 items)" if ok else (
-                            f"expected constructed response, got {text[:200]!r}"
+                        msg = (
+                            "days_back=40 announcement response accepted (4 items)"
+                            if ok
+                            else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_courses principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}

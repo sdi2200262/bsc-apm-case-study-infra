@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Configuration-surface assertions for the C replica: C.1.5 and C.1.6.
+"""Configuration-surface assertions for the C replica: C.1.5 and C.1.6.
 
 C.1.5 spawns the server with no ``.env`` on disk and only the
 ``ECLASS_*`` values (parsed from the testing environment's own
@@ -103,9 +101,7 @@ def test_dotenv_config_surface(
     """
     write_dotenv(eclass_dir, mock_root)
     install_sso_cert(eclass_dir, mock_root)
-    return _probe(
-        "C.1.6", eclass_dir, {}, debug, "verbatim documented .env surface"
-    )
+    return _probe("C.1.6", eclass_dir, {}, debug, "verbatim documented .env surface")
 
 
 def _probe(
@@ -137,13 +133,11 @@ def _probe(
         return (
             False,
             f"{test_id}: login did not succeed under the {surface_label}",
-            f"{test_id}: expected {LOGIN_SUCCESS!r} under the "
-            f"{surface_label}; got {login_text!r}",
+            f"{test_id}: expected {LOGIN_SUCCESS!r} under the {surface_label}; got {login_text!r}",
         )
     return (
         True,
-        f"{test_id}: initialize and authenticated login succeeded under "
-        f"the {surface_label}",
+        f"{test_id}: initialize and authenticated login succeeded under the {surface_label}",
         f"{test_id}: the C server authenticated reading only the {surface_label}",
     )
 
@@ -184,40 +178,40 @@ def _handshake_then_login(
         return None, (
             False,
             f"{test_id}: server did not start under the {surface_label}",
-            f"{test_id}: the C server failed to spawn with only the "
-            f"{surface_label} configured",
+            f"{test_id}: the C server failed to spawn with only the {surface_label} configured",
         )
     try:
-        init_response = server.send_request({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
-            },
-        })
+        init_response = server.send_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
+                },
+            }
+        )
         if not init_response or "result" not in init_response:
             return None, (
                 False,
-                f"{test_id}: initialize did not return a result under "
-                f"the {surface_label}",
+                f"{test_id}: initialize did not return a result under the {surface_label}",
                 f"{test_id}: initialize response: {json.dumps(init_response)}",
             )
-        server.send_notification({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-        })
+        server.send_notification(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+            }
+        )
         login_text = extract_text(call_tool(server, "login", {}))
     finally:
         server.stop()
     return login_text, None
 
 
-def _strip_eclass_inherited(
-    env: dict[str, str], neutralise_inherited: bool
-) -> dict[str, str]:
+def _strip_eclass_inherited(env: dict[str, str], neutralise_inherited: bool) -> dict[str, str]:
     """Return ``env``, optionally neutralising inherited config keys.
 
     Args:
