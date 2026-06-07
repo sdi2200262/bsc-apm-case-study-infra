@@ -61,7 +61,7 @@ def record_mem(
     test_id: str,
     ok: bool,
     leak: LeakTuple | None,
-    no_verdict_msg: str,
+    no_verdict_msg: str | None = None,
 ) -> None:
     """Record the ``<id>.mem`` sub-assertion for one C functional scenario.
 
@@ -87,8 +87,14 @@ def record_mem(
         leak: The leak verdict from ``leak_after``, or ``None``
             when the spawn returned no server.
         no_verdict_msg: The message recorded when ``leak`` is
-            ``None``; supplied by the caller verbatim.
+            ``None``. Defaults to the standard
+            ``skipped: <id> produced no leak verdict (server did not
+            start)`` wording shared by every C functional phase.
     """
+    if no_verdict_msg is None:
+        no_verdict_msg = (
+            f"skipped: {test_id} produced no leak verdict (server did not start)"
+        )
     if leak is not None:
         leak_clean, leak_detail = leak
         mem_ok = ok and leak_clean

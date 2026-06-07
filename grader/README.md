@@ -196,14 +196,7 @@ grader/
         ├── general_announcements_tests.py  # P.3 / C.4 assertions
         ├── config_surface.py               # C.1.5 / C.1.6 surface-isolated probes
         ├── memory_tests.py                 # C.5 multi-step scenarios under valgrind
-        ├── python_baseline.py               # phase aggregator (impl=python)
-        ├── python_course_announcements.py   # phase aggregator (impl=python)
-        ├── python_general_announcements.py  # phase aggregator (impl=python)
-        ├── c_baseline.py                    # phase aggregator (impl=c)
-        ├── c_config.py                      # phase aggregator (impl=c, C.1.5/C.1.6)
-        ├── c_course_announcements.py        # phase aggregator (impl=c)
-        ├── c_general_announcements.py       # phase aggregator (impl=c)
-        └── c_memory.py                      # phase aggregator (impl=c)
+        └── phases.py                       # per-(implementation, phase) aggregation entries
 ```
 
 ## Related
