@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Single-source ``.env`` reader shared by provisioning and the runner.
+"""Single-source ``.env`` reader shared by provisioning and the runner.
 
 Both config surfaces derive from the testing environment's own
 ``<mock_root>/.env``: provisioning copies it verbatim, env-var
 injection parses it, so neither is hand-maintained. A leaf module
 (no intra-package imports) so ``provision`` and ``protocol.runner``
-import :func:`parse_env_file` without a cycle.
+import ``parse_env_file`` without a cycle.
 """
 
 from __future__ import annotations

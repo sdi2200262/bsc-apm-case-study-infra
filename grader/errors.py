@@ -1,23 +1,17 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Exception hierarchy for the grader package.
+"""Exception hierarchy for the grader package.
 
-Each grader module raises the appropriate ``GraderError`` subclass
-on failure; the grader CLI entry point (``python -m grader``)
-catches the base ``GraderError`` and reports a structured error to
-stderr before returning a non-zero exit code. Custom exception
-types make the failure mode visible in the source: a configuration
-miss raises ``GraderConfigError``; an unreachable testing
-environment raises ``PreflightError``; a reset script that returns
-non-zero raises ``ResetError``; ``provision.ProvisioningError``
-covers a missing testing-environment artefact;
-``calibration.CalibrationError`` covers a failed seed-instant query.
+Each grader module raises the appropriate ``GraderError`` subclass on
+failure; the CLI entry point (``python -m grader``) catches the base
+``GraderError`` and reports a structured error to stderr before a
+non-zero exit code. Two subclasses live with the code that raises them,
+``provision.ProvisioningError`` and ``calibration.CalibrationError``;
+the rest are defined below.
 
-Every exception message includes the failing component, the path
-or URL involved when applicable, and the operator action that
-typically resolves the failure.
+Every exception message includes the failing component, the path or URL
+involved when applicable, and the operator action that typically
+resolves the failure.
 """
 
 from __future__ import annotations

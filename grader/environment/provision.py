@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Deterministic dev-environment provisioning for the patched checkout.
+"""Deterministic dev-environment provisioning for the patched checkout.
 
 Replicates the documented local-development wiring by copying the
 testing environment's own ``<mock_root>/.env`` and ``<mock_root>/
@@ -11,10 +9,10 @@ than reconstructed. Runs after a successful patch apply (which also
 avoids a ``git apply --check`` collision with a pre-created
 ``certs/``) and resets per submission so no wiring leaks between
 runs. The ``ECLASS_*`` env-var surface parses the same ``.env``
-(:mod:`grader.environment.env_file`), so both config surfaces carry
+(``grader.environment.env_file``), so both config surfaces carry
 identical values by construction. When a behavioural scenario
 switches principal, the principal is projected onto both surfaces
-together (:func:`set_dotenv_credentials` for the on-disk ``.env``,
+together (``set_dotenv_credentials`` for the on-disk ``.env``,
 env-var overrides for the other), so that invariant holds across
 the switch and a server reading either surface authenticates as
 the scenario's principal.
@@ -23,8 +21,8 @@ the scenario's principal.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from ..errors import GraderError
 
@@ -135,7 +133,7 @@ def blank_dotenv_credentials(eclass_root: Path) -> None:
 
     Every other line is preserved verbatim (comments, ordering, all
     non-credential keys) so the dotenv surface stays otherwise
-    valid; only the keys in :data:`CREDENTIAL_KEYS` are emptied.
+    valid; only the keys in ``CREDENTIAL_KEYS`` are emptied.
     Used by the missing-credentials probes to deprive the on-disk
     surface without removing the file.
 
@@ -154,7 +152,7 @@ def set_dotenv_credentials(
 ) -> None:
     """Project a principal onto the checkout's ``.env`` credentials, in place.
 
-    Rewrites only the two :data:`CREDENTIAL_KEYS` lines to the given
+    Rewrites only the two ``CREDENTIAL_KEYS`` lines to the given
     principal; every other line (comments, ordering, all
     non-credential keys) is preserved verbatim, so the dotenv
     surface stays otherwise valid. A server that reads only the
@@ -170,7 +168,7 @@ def set_dotenv_credentials(
 
     Raises:
         FileNotFoundError: When the checkout has no ``.env``. The
-            verbatim ``.env`` is written by :func:`provision` before
+            verbatim ``.env`` is written by ``provision`` before
             any principal is projected, so a missing file is a real
             precondition failure surfaced loudly, not a silent
             fallback.
@@ -201,14 +199,13 @@ def reset_provisioning(eclass_root: Path) -> None:
 def _rewrite_credentials(
     eclass_root: Path, value_for: Callable[[str], str]
 ) -> None:
-    """Rewrite the :data:`CREDENTIAL_KEYS` lines of the checkout's ``.env``.
+    """Rewrite the ``CREDENTIAL_KEYS`` lines of the checkout's ``.env``.
 
     Walks the file line by line and replaces only the lines whose key
-    is in :data:`CREDENTIAL_KEYS`; every other line (comments, blank
+    is in ``CREDENTIAL_KEYS``; every other line (comments, blank
     lines, ordering, all non-credential keys) is preserved verbatim.
-    The new value for a matched key is supplied by ``value_for``,
-    which lets the blanking and principal-projection callers share
-    one loop without touching one another's docstrings.
+    The new value for a matched key is supplied by ``value_for``, so the
+    blanking and principal-projection callers share this one rewrite loop.
 
     Args:
         eclass_root: Resolved patched eclass-mcp-server checkout path.
@@ -217,7 +214,7 @@ def _rewrite_credentials(
 
     Raises:
         FileNotFoundError: When the checkout has no ``.env``; the
-            verbatim ``.env`` must be written by :func:`provision`
+            verbatim ``.env`` must be written by ``provision``
             before any rewrite.
     """
     eclass_root = Path(eclass_root).resolve()

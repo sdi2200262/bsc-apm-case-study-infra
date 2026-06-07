@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Pre-flight HTTP probes against the testing environment.
+"""Pre-flight HTTP probes against the testing environment.
 
 The grader runs against a separately-installed testing environment
 that provides the openeclass instance and the mock CAS service.

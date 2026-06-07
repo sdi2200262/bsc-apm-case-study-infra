@@ -1,22 +1,18 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Grader configuration: paths and the ``grader.yaml`` loader.
+"""Grader configuration: paths and the ``grader.yaml`` loader.
 
-The grader requires two external paths to function: the eclass
-root (the eclass-mcp-server clone the patch applies to) and the
-mock root (the testing environment install whose endpoints the
-grader probes and whose reset script the grader invokes between
-grading runs). Each path can be supplied via a CLI flag or via a
-``grader.yaml`` file colocated with the invocation.
+The grader requires two external paths to function:
+- the eclass root: the eclass-mcp-server clone the patch applies to.
+- the mock root: the testing environment install whose endpoints the
+  grader probes and whose reset script it runs between grading runs.
 
-Resolution order for each path: CLI flag wins over ``grader.yaml``
-value, which wins over absent. A consumer that needs an absent
-path raises ``GraderConfigError`` at use time via
-:func:`require_path`; the resolver itself does not raise on
-absence so that callers which do not need a path can run without
-it.
+Each path can be supplied via a CLI flag or a ``grader.yaml`` file
+colocated with the invocation. Resolution order: CLI flag wins over the
+``grader.yaml`` value, which wins over absent. A consumer that needs an
+absent path raises ``GraderConfigError`` at use time via
+``require_path``; the resolver itself does not raise on absence, so a
+caller that does not need a path can run without it.
 
 The YAML's top-level shape:
 

@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Subprocess invocation of the testing environment's reset script.
+"""Subprocess invocation of the testing environment's reset script.
 
 The grader calls ``<mock-root>/scripts/reset`` once at the start
 of each grading run to guarantee a deterministic starting state:

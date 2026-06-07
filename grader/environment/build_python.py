@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Python build verification for the eclass-mcp-server checkout.
+"""Python build verification for the eclass-mcp-server checkout.
 
 The grader runs ``uv sync`` against the participant's checkout to
 install the Python implementation's dependencies. A successful

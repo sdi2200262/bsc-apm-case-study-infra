@@ -17,3 +17,5 @@ Submodules:
 - ``build_c``: ``compile_c_replica`` (C.1.1) and ``verify_stack``
   (C.1.2) for the C replica.
 """
+
+from __future__ import annotations
