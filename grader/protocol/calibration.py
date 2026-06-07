@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Per-run seed-instant calibration.
+"""Per-run seed-instant calibration.
 
 The grader's openeclass instance anchors every announcement date to
 ``NOW() - days_ago days`` at seed-apply time. The maximum stored

@@ -5,7 +5,7 @@
 
 A ``select``-bounded readline and the id-correlating read loop that
 skips lines which do not parse or do not answer the outstanding
-request. Split from :mod:`.runner` to keep it within the module-size
+request. Split from ``runner`` to keep it within the module-size
 budget.
 """
 

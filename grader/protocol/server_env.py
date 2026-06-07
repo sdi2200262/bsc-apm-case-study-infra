@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Spawned-server environment assembly, single-sourced from the mock.
+"""Spawned-server environment assembly, single-sourced from the mock.
 
 Owns the environment block a participant MCP server is spawned
 with: the ``ECLASS_*`` configuration pairs parsed from the testing
@@ -29,7 +28,7 @@ def eclass_config_pairs(mock_root: Path) -> dict[str, str]:
     Parses ``<mock_root>/.env`` so that the env-var injection path
     and the dotenv provisioning path carry byte-identical values by
     construction. TLS trust-anchor keys are supplied separately by
-    :func:`tls_trust_env`.
+    ``tls_trust_env``.
 
     Args:
         mock_root: Resolved testing environment install path.
@@ -50,7 +49,7 @@ def tls_trust_env(mock_root: Path) -> dict[str, str]:
     """Return the TLS trust-anchor environment for the spawned server.
 
     Points the participant server's HTTP client at the grader mock's
-    SSO certificate. Kept separate from :func:`eclass_config_pairs`
+    SSO certificate. Kept separate from ``eclass_config_pairs``
     because these are grader-side plumbing, not part of the
     participant-documented configuration surface.
 

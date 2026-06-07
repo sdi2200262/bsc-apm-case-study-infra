@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Tools/call argument validation against a participant's advertised inputSchema.
+"""Tools/call argument validation against a participant's advertised ``inputSchema``.
 
 The C ``tools/call`` path validates the caller's arguments against the
 ``inputSchema`` the participant advertised in ``tools/list`` before
