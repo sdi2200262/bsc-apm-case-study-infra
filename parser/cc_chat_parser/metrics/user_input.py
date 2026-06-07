@@ -14,7 +14,9 @@ Two distinct populations of user input drive this dimension:
   reached a release point. Abandoned steers (queued and removed
   before delivery) do not enter this population because the model
   never saw them; they are tallied separately as engagement
-  attempts that did not land.
+  attempts that did not land. A queued local-only built-in command
+  is not a steer at all: it issues no model request, so it counts in
+  neither the delivered nor the abandoned population.
 
 Bucket distributions are computed over three populations: turn
 prompts alone, delivered steers alone, and the union of the two

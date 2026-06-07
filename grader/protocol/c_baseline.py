@@ -23,6 +23,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from . import baseline_tests
+from . import frame_tests
 from ._assertion_support import Result5, record_mem
 
 IMPL = "c"
@@ -74,12 +75,12 @@ def run(
     results: dict[str, tuple[bool, str, str, str | None]] = {}
 
     init_ok, init_msg, init_detail, _init_leak, init_mode = (
-        baseline_tests.test_initialize_frame(
+        frame_tests.test_initialize_frame(
             IMPL, eclass_dir, mock_root, debug
         )
     )
     results["C.2.1"] = (init_ok, init_msg, init_detail, init_mode)
-    tl_ok, tl_msg, tl_detail, _tl_leak, tl_mode = baseline_tests.test_tools_list(
+    tl_ok, tl_msg, tl_detail, _tl_leak, tl_mode = frame_tests.test_tools_list(
         IMPL, eclass_dir, mock_root, debug
     )
     results["C.2.2"] = (tl_ok, tl_msg, tl_detail, tl_mode)

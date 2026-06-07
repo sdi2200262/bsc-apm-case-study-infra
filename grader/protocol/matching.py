@@ -23,27 +23,34 @@ one of two strictness modes:
   with a plain space are the same answer; this mode records that the
   acceptance relied on that rule.
 
-Three rows accept one of two labelled forms and record the matched
-label as the diagnostic. :func:`match_announcements` records
-``ANNOUNCEMENTS_ORDERED`` (the openeclass-derived order) or
-``ANNOUNCEMENTS_UNORDERED`` (the same byte-exact entries compared
-as an order-insensitive multiset). :func:`match_get_courses` records
+Several rows accept one of two labelled forms and record the matched
+label as the diagnostic. :func:`match_get_courses` records
 ``GET_COURSES_FAITHFUL`` (the openeclass-formatted layout) or
 ``GET_COURSES_DOCUMENTED`` (the documented-clean layout).
 :func:`match_initialize` records ``CAP_FAITHFUL`` (the capabilities
 object the SDK serialises for a tools-only server) or
 ``CAP_DOCUMENTED`` (the literal object the wire-protocol reference
-documents). All three matchers route through :func:`_try_forms`
-which evaluates labelled predicates in order and returns the first
-accepted label, so the dispatch is identical across them and the
-per-form acceptance algorithm lives next to each call site. The
-non-breaking space normalisation is applied within each form
-unconditionally (the PRD whitespace rule).
+documents). :func:`match_missing_credentials` records
+``MISSING_CREDS_FAITHFUL`` (the two-sentence error the Python
+reference emits) or ``MISSING_CREDS_DOCUMENTED`` (the one-sentence
+error the reference doc documents). The two-form announcement
+matcher (``ANNOUNCEMENTS_ORDERED`` / ``ANNOUNCEMENTS_UNORDERED``)
+lives in :mod:`.announcement_matching`, which imports the mode
+constants and the shared dispatch from this module. All these
+matchers route through :func:`_try_forms`, which evaluates labelled
+predicates in order and returns the first accepted label, so the
+dispatch is identical across them and the per-form acceptance
+algorithm lives next to each call site. The non-breaking space
+normalisation is applied within each form unconditionally (the PRD
+whitespace rule), except the missing-credentials forms, whose fixed
+error text carries no rendered whitespace family and is compared
+byte for byte.
 
 The second, lenient form in each pair (``ANNOUNCEMENTS_UNORDERED``,
-``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``, collected in
-:data:`LENIENT_MODES`) is warned for human review at end of grading
-(see :mod:`grader.scoring.reporting`).
+``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``,
+``MISSING_CREDS_DOCUMENTED``, collected in :data:`LENIENT_MODES`)
+is warned for human review at end of grading (see
+:mod:`grader.scoring.reporting`).
 
 The ``tools/list`` row (:func:`match_tools_list`) splits the
 contract by tool source: byte-exact ``name``, ``description``, and
@@ -60,12 +67,7 @@ caller treats ``None`` as a failed row and records no diagnostic.
 
 from __future__ import annotations
 
-import datetime as _datetime
-import re
-from collections import Counter
 from collections.abc import Callable, Iterable
-
-from dateutil import parser as _dateparser
 
 from .expected import (
     BASELINE_TOOL_NAMES,
@@ -73,7 +75,6 @@ from .expected import (
     CAPABILITIES_FAITHFUL,
     INITIALIZE_PROTOCOL_VERSION,
     INITIALIZE_SERVER_INFO,
-    announcement_preamble,
     expected_tools_list,
     get_courses_forms,
 )
@@ -104,6 +105,15 @@ ANNOUNCEMENTS_UNORDERED = "announcements-unordered"
 GET_COURSES_FAITHFUL = "get-courses-faithful"
 GET_COURSES_DOCUMENTED = "get-courses-documented"
 
+# The missing-credentials error row records the accepted FORM as its
+# diagnostic. The Python reference emits a two-sentence error; the
+# reference doc documents a one-sentence form. Both are legitimate
+# readings of the published task material, so both are accepted, with
+# the documented one-sentence form gated to the C replica and flagged
+# for human review (see :data:`LENIENT_MODES`).
+MISSING_CREDS_FAITHFUL = "missing-creds-faithful"
+MISSING_CREDS_DOCUMENTED = "missing-creds-documented"
+
 # Recorded on the ``tools/list`` row when at least one announcement
 # tool's ``description`` was accepted via the presence check; see
 # :func:`match_tools_list` for the contract split.
@@ -119,6 +129,7 @@ LENIENT_MODES = frozenset(
         GET_COURSES_DOCUMENTED,
         CAP_DOCUMENTED,
         DESCRIPTION_PRESENCE_ONLY,
+        MISSING_CREDS_DOCUMENTED,
     }
 )
 
@@ -133,6 +144,7 @@ LENIENT_MODES = frozenset(
 # remain fully asserted.
 _SPACE_FAMILY = (0x00A0, 0x2007, 0x2009, 0x202F)
 _SPACE_NORMALISATION = {codepoint: " " for codepoint in _SPACE_FAMILY}
+
 
 def normalize_response(text: str) -> str:
     """Return ``text`` with the non-breaking space family mapped to ASCII space.
@@ -263,87 +275,40 @@ def match_get_courses(
     return _try_forms(forms)
 
 
-def match_announcements(
+def match_missing_credentials(
     text: str,
-    expected_ordered: str,
-    expected_entries: tuple[str, ...],
-    expected_count: int,
-    instant: _datetime.datetime,
+    faithful: str,
+    documented: str,
+    allow_documented: bool,
 ) -> str | None:
-    """Return the accepted announcement form, or ``None``.
+    """Return the matched missing-credentials error form, or None.
 
-    Two forms are accepted; both compare entries with each
-    ``Date:`` line canonicalised to a calendar date (PRD §2 leaves
-    the rendered date string as an unspecified ``<Date String>``
-    placeholder, so any rendering whose parsed date matches the
-    expected calendar date is a legitimate accept):
-
-    - ``ANNOUNCEMENTS_ORDERED``: the response equals the
-      openeclass-derived ordered string after each side's
-      ``Date:`` line is replaced by its parsed calendar date and
-      the non-breaking space family is normalised.
-    - ``ANNOUNCEMENTS_UNORDERED``: the response parses by the PRD
-      grammar into the same multiset of entries (same
-      canonicalisation), but the sequence and the per-entry index
-      number are not enforced. Every other field (title, body,
-      source, count, grammar) is still enforced; a wrong calendar
-      date, a missing/extra/duplicated entry, a malformed entry,
-      or a ``Date:`` value that does not parse all fail.
-
-    The matched form is the recorded diagnostic; the unordered
-    form is lenient and is warned for human review at end of
-    grading (see :mod:`grader.scoring.reporting`).
+    The Python reference server emits a two-sentence error verbatim;
+    the reference doc documents a one-sentence form. Both are
+    legitimate readings of the published task material, so both are
+    candidates, with the documented form gated to the C replica and
+    flagged for human review. Each candidate is compared byte for
+    byte; this row carries no rendered text whose whitespace family
+    could differ.
 
     Args:
         text: The tool's response text.
-        expected_ordered: The constructed openeclass-derived ordered
-            response.
-        expected_entries: The index-free per-entry blocks the
-            response must contain as a multiset, single-sourced
-            from :mod:`.expected`.
-        expected_count: The number of in-window entries the preamble
-            must declare and the response must carry.
-        instant: The run's seed-apply instant. Resolves the
-            openeclass-rendered ``today, h:mm AM/PM`` relative form.
+        faithful: The two-sentence error the Python reference emits.
+        documented: The one-sentence error the reference doc documents.
+        allow_documented: When True (the C replica) the documented
+            one-sentence form is also accepted; when False only the
+            two-sentence faithful form is.
 
     Returns:
-        ``ANNOUNCEMENTS_ORDERED`` or ``ANNOUNCEMENTS_UNORDERED`` for
-        the accepted form, ``None`` when neither matches.
+        MISSING_CREDS_FAITHFUL or MISSING_CREDS_DOCUMENTED for the
+        matched form, None when neither matches.
     """
-    def _accepts_ordered() -> bool:
-        # Form 1: parse the response by the PRD grammar (so we can
-        # canonicalise the same per-entry date line as Form 2),
-        # then check both the entries and their order against
-        # expected.
-        parsed = _parse_announcement_entries(text, expected_count)
-        if parsed is None:
-            return False
-        canon_parsed = _canonicalise_entries(parsed, instant)
-        canon_expected = _canonicalise_entries(
-            [normalize_response(e) for e in expected_entries], instant,
-        )
-        if canon_parsed is None or canon_expected is None:
-            return False
-        return canon_parsed == canon_expected
-
-    def _accepts_unordered() -> bool:
-        parsed = _parse_announcement_entries(text, expected_count)
-        if parsed is None:
-            return False
-        canon_parsed = _canonicalise_entries(parsed, instant)
-        canon_expected = _canonicalise_entries(
-            [normalize_response(e) for e in expected_entries], instant,
-        )
-        if canon_parsed is None or canon_expected is None:
-            return False
-        return Counter(canon_parsed) == Counter(canon_expected)
-
-    return _try_forms(
-        [
-            (ANNOUNCEMENTS_ORDERED, _accepts_ordered),
-            (ANNOUNCEMENTS_UNORDERED, _accepts_unordered),
-        ]
-    )
+    forms: list[tuple[str, Callable[[], bool]]] = [
+        (MISSING_CREDS_FAITHFUL, lambda: text == faithful),
+    ]
+    if allow_documented:
+        forms.append((MISSING_CREDS_DOCUMENTED, lambda: text == documented))
+    return _try_forms(forms)
 
 
 def match_initialize(actual_result: dict) -> str | None:
@@ -435,119 +400,19 @@ def match_tools_list(
         got = actual_by_name[name]
         for key in ("name", "inputSchema"):
             if got.get(key) != expected_tool.get(key):
-                return False, (
-                    f"tools/list {name}.{key} "
-                    "differs from the expected values"
-                ), None
+                return False, (f"tools/list {name}.{key} differs from the expected values"), None
         if name in BASELINE_TOOL_NAMES:
             if got.get("description") != expected_tool.get("description"):
-                return False, (
-                    f"tools/list {name}.description "
-                    "differs from the expected values"
-                ), None
+                return (
+                    False,
+                    (f"tools/list {name}.description differs from the expected values"),
+                    None,
+                )
         else:
             got_desc = got.get("description")
             if not isinstance(got_desc, str) or not got_desc.strip():
-                return False, (
-                    f"tools/list {name}.description "
-                    "must be a non-empty string"
-                ), None
+                return False, (f"tools/list {name}.description must be a non-empty string"), None
             presence_only_fired = True
 
     mode = DESCRIPTION_PRESENCE_ONLY if presence_only_fired else None
     return True, "all 6 tool objects match the expected contract", mode
-
-
-def _parse_announcement_entries(
-    text: str, expected_count: int
-) -> list[str] | None:
-    """Parse a populated announcement response into its index-free entries.
-
-    Inverts the ``preamble + blank line + blank-line-separated
-    entries`` construction (see
-    :func:`grader.protocol.expected.course_response`). The
-    space-family normalisation is applied to the whole response
-    first; it touches only the space codepoints, so newlines and
-    indentation are unaffected and the blank-line split is exact.
-    The leading ``<n>. `` index of each entry is stripped because
-    Form 2 does not enforce the sequence number; every other byte is
-    preserved for the multiset comparison the caller performs.
-
-    Total by contract: any structural surprise (a wrong preamble or
-    count, a block without an index prefix, the wrong number of
-    blank-line-separated blocks) returns ``None`` rather than
-    raising, so a malformed response is a failed row, not a crash.
-
-    Args:
-        text: The tool's response text.
-        expected_count: The entry count the preamble must declare and
-            the response must carry (always positive: the empty-window
-            rows use :func:`match_exact`, never this path).
-
-    Returns:
-        The index-free, space-normalised entry blocks, or ``None``
-        when the response does not parse as a populated response of
-        exactly ``expected_count`` entries.
-    """
-    normalized = normalize_response(text)
-    parts = normalized.split("\n\n")
-    if len(parts) != expected_count + 1:
-        return None
-    if parts[0] != normalize_response(announcement_preamble(expected_count)):
-        return None
-    entries: list[str] = []
-    for block in parts[1:]:
-        index_prefix = re.match(r"\d+\. ", block)
-        if index_prefix is None:
-            return None
-        entries.append(block[index_prefix.end():])
-    return entries
-
-
-_DATE_LINE_RE = re.compile(r"^( {4}Date: )(.+)$", re.MULTILINE)
-
-
-def _parse_date_to_calendar(
-    value: str, instant: _datetime.datetime,
-) -> tuple[int, int, int] | None:
-    """Parse ``value`` to ``(year, month, day)``, or ``None``.
-
-    PRD §2 leaves the rendered date string unspecified, so accept
-    whatever ``dateutil.parser.parse`` accepts (RFC 2822, ISO
-    8601, the openeclass absolute form, locale-formatted
-    variants, common compact shapes). ``instant`` resolves the
-    openeclass-rendered ``today, h:mm AM/PM`` relative form,
-    which dateutil treats as a word rather than a date.
-    """
-    s = value.strip()
-    if s.lower().startswith("today"):
-        d = instant.date()
-        return (d.year, d.month, d.day)
-    try:
-        d = _dateparser.parse(s).date()
-        return (d.year, d.month, d.day)
-    except (ValueError, OverflowError, TypeError):
-        return None
-
-
-def _canonicalise_entries(
-    entries: list[str], instant: _datetime.datetime,
-) -> list[str] | None:
-    """Return ``entries`` with each ``Date:`` line rewritten to YYYY-MM-DD.
-
-    Returns ``None`` if any entry lacks a parseable ``Date:`` line;
-    that fails the match. Every other byte is preserved so title,
-    body, source, and indentation are still byte-asserted.
-    """
-    out: list[str] = []
-    for entry in entries:
-        match = _DATE_LINE_RE.search(entry)
-        if match is None:
-            return None
-        calendar = _parse_date_to_calendar(match.group(2), instant)
-        if calendar is None:
-            return None
-        year, month, day = calendar
-        canonical = f"{match.group(1)}{year:04d}-{month:02d}-{day:02d}"
-        out.append(entry[:match.start()] + canonical + entry[match.end():])
-    return out

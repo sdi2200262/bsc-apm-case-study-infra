@@ -11,12 +11,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 from . import baseline_tests
+from . import frame_tests
 from ._assertion_support import Result5
 
 IMPL = "python"
 
 TESTS: tuple[tuple[str, Callable[..., Result5]], ...] = (
-    ("P.1.1", baseline_tests.test_tools_list),
+    ("P.1.1", frame_tests.test_tools_list),
     ("P.1.2", baseline_tests.test_authstatus_pre_login),
     ("P.1.3", baseline_tests.test_login_success),
     ("P.1.4", baseline_tests.test_authstatus_post_login),

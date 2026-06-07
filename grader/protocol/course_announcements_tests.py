@@ -38,7 +38,8 @@ from .expected import (
     course_response,
     course_url,
 )
-from .matching import match_announcements, match_exact
+from .announcement_matching import match_announcements
+from .matching import match_exact
 from .runner import (
     ServerProcess,
     call_tool,

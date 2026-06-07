@@ -50,6 +50,15 @@ content but not a presentation order or a single layout:
     layout glue and the `(code)` suffix).
   - Form 2 `get-courses-documented`: the documented-clean layout per
     `tools-reference.md` (the bare course title).
+- Missing-credentials error (C.2.7):
+  - Form 1 `missing-creds-faithful`: the two-sentence error the
+    Python reference emits verbatim (`Error:` prefix, the `.env`
+    requirement sentence followed by the `ECLASS_USERNAME` /
+    `ECLASS_PASSWORD` instruction sentence).
+  - Form 2 `missing-creds-documented`: the one-sentence form the
+    reference doc documents (`Error:` prefix and the single
+    `Username and password must be provided in the .env file`
+    message, no second sentence). Accepted for the C replica only.
 
 The `initialize` row (C.2.1) follows the same two-form pattern, with
 byte-exact `protocolVersion` and `serverInfo` plus one of two
@@ -68,14 +77,15 @@ documented shape.
 
 The accepted form is recorded as the row's diagnostic. The lenient
 second form in each pair (`announcements-unordered`,
-`get-courses-documented`, `capabilities-documented`) prints a
-WARNINGS line to stdout at the end of grading that names the row
-and shows its response, prompting the operator to review the row
-and decide any manual deduction recorded in `results_notes.yaml`.
-The Python reference accepts only the openeclass-derived forms for
-the announcement and `get_courses` rows; the C replica accepts
-either, because both are legitimate readings of the published task
-materials.
+`get-courses-documented`, `capabilities-documented`,
+`missing-creds-documented`) prints a WARNINGS line to stdout at the
+end of grading that names the row and shows its response, prompting
+the operator to review the row and decide any manual deduction
+recorded in `results_notes.yaml`. The Python reference accepts only
+the openeclass-derived forms for the announcement and `get_courses`
+rows and the two-sentence form for the missing-credentials row; the
+C replica accepts either, because both are legitimate readings of
+the published task materials.
 
 The `tools/list` row (P.1.1 / C.2.2) is one byte-exact contract for
 both implementations: every tool object's `name`, `description`, and

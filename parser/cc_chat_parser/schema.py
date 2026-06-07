@@ -40,6 +40,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from .errors import ParserError
+from .commands import is_local_only_command
 
 RECORD_TYPE_ASSISTANT = "assistant"
 RECORD_TYPE_USER = "user"
@@ -333,19 +334,31 @@ def queue_record_content(record: Record) -> str | None:
 
 
 def is_user_authored_enqueue(record: Record) -> bool:
-    """Return ``True`` for enqueue records whose content is a user-typed message.
+    """Return True for enqueue records whose content is a user-typed steer.
 
-    System-generated enqueues (typically task-notification envelopes
-    wrapped in ``<task-notification>``) are filtered from the steer
-    lifecycle so they do not pollute the open-enqueue queue used to
-    classify dequeues and removes.
+    A steer is a user prompt queued mid-turn that reaches the model.
+    Two enqueue populations are excluded:
+
+    - System-generated enqueues wrapped in ``<task-notification>``
+      (task-notification envelopes), which are internal, not prompts.
+    - A queued local-only built-in command (e.g. ``/ide``, ``/clear``),
+      which controls the CLI or session and issues no model request, so
+      it is not a steer. A queued model-calling built-in (e.g.
+      ``/review``) drives a model request and remains a steer.
     """
     if queue_operation(record) != QUEUE_OP_ENQUEUE:
         return False
     content = queue_record_content(record)
     if content is None:
         return False
-    return not content.lstrip().startswith("<task-notification")
+    stripped = content.lstrip()
+    if stripped.startswith("<task-notification"):
+        return False
+    if stripped.startswith("/") and len(stripped) > 1:
+        name = stripped[1:].split(maxsplit=1)[0]
+        if is_local_only_command(name):
+            return False
+    return True
 
 
 def compact_boundary_metadata(record: Record) -> dict[str, Any] | None:

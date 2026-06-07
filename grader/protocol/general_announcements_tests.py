@@ -37,7 +37,8 @@ from .expected import (
     general_entries,
     general_response,
 )
-from .matching import match_announcements, match_exact
+from .announcement_matching import match_announcements
+from .matching import match_exact
 from .runner import ServerProcess, call_tool, extract_text, initialize_server, spawn_server
 
 _PRINCIPAL = user(SEED, "student_general")
