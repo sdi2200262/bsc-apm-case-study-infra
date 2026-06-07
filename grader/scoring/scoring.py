@@ -415,6 +415,10 @@ def _test_entry(
     points = definition.points if definition else 0
     entry = {
         "passed": result.passed,
+        # ``points_earned`` is kept distinct from ``points`` (the row maximum)
+        # so a future partial-credit metric can report a value between zero and
+        # the maximum; under the current pass/fail rubric it is either zero or
+        # the full ``points``.
         "points": points,
         "points_earned": points if (definition and result.passed) else 0,
         "category": definition.category if definition else "unknown",
