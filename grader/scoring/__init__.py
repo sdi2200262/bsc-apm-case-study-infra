@@ -5,6 +5,8 @@
 Submodules:
 
 - ``scoring``: rubric definitions and the ``Scorer`` aggregator.
-- ``reporting``: JSON, text, and console report writers.
+- ``reporting``: JSON and console report writers.
 - ``notices``: review and warning notices surfaced after scoring.
 """
+
+from __future__ import annotations

@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Test definitions and score aggregation for the grading rubric.
+"""Test definitions and score aggregation for the grading rubric.
 
 The rubric is 90 atomic rows totalling 100 points: 30 to the Python
 implementation and 70 to the C replica. Each row is one behaviour

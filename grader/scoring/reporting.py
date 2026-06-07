@@ -1,16 +1,15 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Grading-report writers: JSON and console summary.
+"""Grading-report writers: JSON and console summary.
 
 The JSON report at ``<workspace>/results_<patch>.json`` is the
 machine-readable artefact the pipeline's grade stage promotes; its
 shape is fixed so downstream consumers continue to read it. The
-console summary lists each rubric section with its status,
-description, and short message; the eight sections (Python
-baseline, Python course, Python general, C infra, C baseline, C
-course, C general, C memory) mirror the rubric structure.
+console summary reports each rubric section's score against its
+maximum; in verbose mode it also lists every row's pass/fail status
+and short message. The eight sections (Python baseline, Python
+course, Python general, C infra, C baseline, C course, C general, C
+memory) mirror the rubric structure.
 """
 
 from __future__ import annotations
@@ -20,6 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from .. import log
+from .notices import collect_notices
 from .scoring import (
     C_BASELINE_TESTS,
     C_COURSE_TESTS,
@@ -32,9 +33,6 @@ from .scoring import (
     Scorer,
     TestDefinition,
 )
-
-from .. import log
-from .notices import collect_notices
 
 VERBOSE_MESSAGE_LIMIT = 60
 
@@ -85,7 +83,7 @@ def write_json(
     """Write the machine-readable JSON report.
 
     Args:
-        paths: Report path resolution from :func:`report_paths`.
+        paths: Report path resolution from ``report_paths``.
         scorer: Populated scorer whose ``to_dict`` output is
             embedded in the report.
         metadata: Optional extra fields merged into the report's
@@ -112,7 +110,7 @@ def print_console_summary(
     """Print the summary block to stdout, with optional per-test detail.
 
     Args:
-        paths: Report path resolution from :func:`report_paths`.
+        paths: Report path resolution from ``report_paths``.
         scorer: Populated scorer for the totals.
         verbose: When ``True``, prints each rubric row's status
             and short message under the matching section header.
