@@ -38,6 +38,7 @@ from .matching import (
     match_exact,
     match_get_courses,
     match_initialize,
+    match_missing_credentials,
     match_tools_list,
 )
 from .runner import (
@@ -60,6 +61,9 @@ LOGIN_ALREADY = f"Already logged in as {_PRINCIPAL.username}"
 LOGIN_MISSING_CREDS = (
     "Error: Username and password must be provided in the .env file. "
     "Please set ECLASS_USERNAME and ECLASS_PASSWORD in your .env file."
+)
+LOGIN_MISSING_CREDS_DOCUMENTED = (
+    "Error: Username and password must be provided in the .env file"
 )
 LOGOUT_SUCCESS = f"Successfully logged out user {_PRINCIPAL.username}."
 LOGOUT_NO_OP = "Not logged in, nothing to do."
@@ -271,6 +275,20 @@ def test_missing_credentials(
     Blanks both the env-var surface (empty ``ECLASS_USERNAME`` /
     ``ECLASS_PASSWORD``) and the on-disk ``.env``; restores the
     verbatim ``.env`` in ``finally``.
+
+    Two error forms are accepted, mirroring the C.2.1 capabilities
+    and ``get_courses`` two-form rows:
+
+    - ``MISSING_CREDS_FAITHFUL``: the two-sentence error the Python
+      reference emits verbatim (``LOGIN_MISSING_CREDS``).
+    - ``MISSING_CREDS_DOCUMENTED``: the one-sentence error the
+      reference doc documents
+      (``LOGIN_MISSING_CREDS_DOCUMENTED``), accepted only for the C
+      replica and flagged for human review.
+
+    The faithful two-sentence form is always a candidate; the
+    documented one-sentence form is gated to ``impl == "c"`` because
+    the Python reference emits the two-sentence form verbatim.
     """
     blank_dotenv_credentials(eclass_dir)
     overrides = {"ECLASS_USERNAME": "", "ECLASS_PASSWORD": ""}
@@ -292,9 +310,14 @@ def test_missing_credentials(
                         ok, msg, detail = TOOL_FAIL
                     else:
                         text = extract_text(tool_resp)
-                        mode = match_exact(text, LOGIN_MISSING_CREDS)
+                        mode = match_missing_credentials(
+                            text,
+                            LOGIN_MISSING_CREDS,
+                            LOGIN_MISSING_CREDS_DOCUMENTED,
+                            allow_documented=(impl == "c"),
+                        )
                         ok = mode is not None
-                        msg = "exact missing-credentials string matched" if ok else (
+                        msg = "missing-credentials response accepted" if ok else (
                             f"expected missing-credentials error, got {text!r}"
                         )
                         detail = text

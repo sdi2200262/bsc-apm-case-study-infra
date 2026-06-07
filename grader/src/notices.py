@@ -29,6 +29,7 @@ from .protocol.matching import (
     DESCRIPTION_PRESENCE_ONLY,
     GET_COURSES_DOCUMENTED,
     LENIENT_MODES,
+    MISSING_CREDS_DOCUMENTED,
 )
 from .scoring import Scorer
 
@@ -47,6 +48,9 @@ _LENIENT_FORM_PHRASE: dict[str, str] = {
     DESCRIPTION_PRESENCE_ONLY: (
         "accepted via the presence-only description check; "
         "review the participant's wording in the response below"
+    ),
+    MISSING_CREDS_DOCUMENTED: (
+        "accepted via the documented one-sentence missing-credentials form"
     ),
 }
 

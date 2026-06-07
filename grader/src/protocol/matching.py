@@ -33,17 +33,23 @@ as an order-insensitive multiset). :func:`match_get_courses` records
 :func:`match_initialize` records ``CAP_FAITHFUL`` (the capabilities
 object the SDK serialises for a tools-only server) or
 ``CAP_DOCUMENTED`` (the literal object the wire-protocol reference
-documents). All three matchers route through :func:`_try_forms`
-which evaluates labelled predicates in order and returns the first
-accepted label, so the dispatch is identical across them and the
-per-form acceptance algorithm lives next to each call site. The
-non-breaking space normalisation is applied within each form
-unconditionally (the PRD whitespace rule).
+documents). :func:`match_missing_credentials` records
+``MISSING_CREDS_FAITHFUL`` (the two-sentence error the Python
+reference emits) or ``MISSING_CREDS_DOCUMENTED`` (the one-sentence
+error the reference doc documents). All four matchers route through
+:func:`_try_forms` which evaluates labelled predicates in order and
+returns the first accepted label, so the dispatch is identical
+across them and the per-form acceptance algorithm lives next to
+each call site. The non-breaking space normalisation is applied
+within each form unconditionally (the PRD whitespace rule), except
+the missing-credentials forms, whose fixed error text carries no
+rendered whitespace family and is compared byte for byte.
 
 The second, lenient form in each pair (``ANNOUNCEMENTS_UNORDERED``,
-``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``, collected in
-:data:`LENIENT_MODES`) is warned for human review at end of grading
-(see :mod:`grader.src.reporting`).
+``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``,
+``MISSING_CREDS_DOCUMENTED``, collected in :data:`LENIENT_MODES`)
+is warned for human review at end of grading (see
+:mod:`grader.src.reporting`).
 
 The ``tools/list`` row (:func:`match_tools_list`) splits the
 contract by tool source: byte-exact ``name``, ``description``, and
@@ -104,6 +110,15 @@ ANNOUNCEMENTS_UNORDERED = "announcements-unordered"
 GET_COURSES_FAITHFUL = "get-courses-faithful"
 GET_COURSES_DOCUMENTED = "get-courses-documented"
 
+# The missing-credentials error row records the accepted FORM as its
+# diagnostic. The Python reference emits a two-sentence error; the
+# reference doc documents a one-sentence form. Both are legitimate
+# readings of the published task material, so both are accepted, with
+# the documented one-sentence form gated to the C replica and flagged
+# for human review (see :data:`LENIENT_MODES`).
+MISSING_CREDS_FAITHFUL = "missing-creds-faithful"
+MISSING_CREDS_DOCUMENTED = "missing-creds-documented"
+
 # Recorded on the ``tools/list`` row when at least one announcement
 # tool's ``description`` was accepted via the presence check; see
 # :func:`match_tools_list` for the contract split.
@@ -119,6 +134,7 @@ LENIENT_MODES = frozenset(
         GET_COURSES_DOCUMENTED,
         CAP_DOCUMENTED,
         DESCRIPTION_PRESENCE_ONLY,
+        MISSING_CREDS_DOCUMENTED,
     }
 )
 
@@ -260,6 +276,42 @@ def match_get_courses(
                 lambda: match_response(text, documented_clean) is not None,
             )
         )
+    return _try_forms(forms)
+
+
+def match_missing_credentials(
+    text: str,
+    faithful: str,
+    documented: str,
+    allow_documented: bool,
+) -> str | None:
+    """Return the matched missing-credentials error form, or None.
+
+    The Python reference server emits a two-sentence error verbatim;
+    the reference doc documents a one-sentence form. Both are
+    legitimate readings of the published task material, so both are
+    candidates, with the documented form gated to the C replica and
+    flagged for human review. Each candidate is compared byte for
+    byte; this row carries no rendered text whose whitespace family
+    could differ.
+
+    Args:
+        text: The tool's response text.
+        faithful: The two-sentence error the Python reference emits.
+        documented: The one-sentence error the reference doc documents.
+        allow_documented: When True (the C replica) the documented
+            one-sentence form is also accepted; when False only the
+            two-sentence faithful form is.
+
+    Returns:
+        MISSING_CREDS_FAITHFUL or MISSING_CREDS_DOCUMENTED for the
+        matched form, None when neither matches.
+    """
+    forms: list[tuple[str, Callable[[], bool]]] = [
+        (MISSING_CREDS_FAITHFUL, lambda: text == faithful),
+    ]
+    if allow_documented:
+        forms.append((MISSING_CREDS_DOCUMENTED, lambda: text == documented))
     return _try_forms(forms)
 
 
