@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Protocol-test subpackage.
+"""Protocol-test subpackage.
 
 Submodules:
 
@@ -32,3 +31,5 @@ Submodules:
   assertions with the matching ``impl`` and return the
   per-test-id result mapping the grader CLI driver consumes.
 """
+
+from __future__ import annotations

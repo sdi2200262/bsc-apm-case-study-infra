@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Valgrind memcheck helpers for the C replica functional scenarios.
+"""Valgrind memcheck helpers for the C replica functional scenarios.
 
 ``parse_leak_bytes`` extracts the byte count for one leak category
 from captured valgrind stderr; ``tail_lines`` returns the trailing

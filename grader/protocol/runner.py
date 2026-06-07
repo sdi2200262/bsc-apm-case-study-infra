@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Protocol-test runner: server spawning, JSON-RPC framing, fixtures.
+"""Protocol-test runner: server spawning, JSON-RPC framing, fixtures.
 
 Drives a freshly-spawned MCP server subprocess (Python or C) over
-JSON-RPC stdio. The public surface is enumerated in ``__all__``: a
-``ServerProcess`` subprocess wrapper, a ``spawn_server`` context
-manager, the JSON-RPC helpers (``initialize_server``, ``call_tool``,
-``extract_text``), the spawned-server environment block re-exported
-from :mod:`.server_env` (``eclass_config_pairs``, ``tls_trust_env``,
-``mcp_server_env``), and the constructed client identity constants
-(``CLIENT_NAME``, ``CLIENT_VERSION``, ``PROTOCOL_VERSION``). For C,
-``call_tool`` validates ``tools/call`` arguments against the
-participant's advertised ``inputSchema`` before the binary receives
-the call.
+JSON-RPC stdio. The public surface (``__all__``):
+
+- ``TestContext``: frozen per-test settings carried to the subprocess.
+- ``ServerProcess``: subprocess wrapper over the JSON-RPC stdio loop.
+- ``spawn_server``: context manager that spawns a server, yields it,
+  then stops it.
+- ``initialize_server``, ``call_tool``, ``extract_text``: JSON-RPC
+  helpers. For C, ``call_tool`` validates ``tools/call`` arguments
+  against the participant's advertised ``inputSchema`` before the
+  binary receives the call.
+- ``eclass_config_pairs``, ``tls_trust_env``, ``mcp_server_env``: the
+  spawned-server environment block, re-exported from ``server_env``.
+- ``CLIENT_NAME``, ``CLIENT_VERSION``, ``PROTOCOL_VERSION``: the
+  constructed client identity constants.
 
 On a credential-bearing spawn (``env_overrides`` carrying a non-empty
 ``ECLASS_USERNAME`` and ``ECLASS_PASSWORD``) ``spawn_server`` also
@@ -28,8 +31,8 @@ own ``.env`` deprivation stays in force.
 When ``memcheck=True`` and ``impl="c"``, ``spawn_server`` wraps the
 binary under valgrind; after the context manager exits the caller
 may call ``server.leak_verdict()`` on the still-live reference. The
-valgrind leak parsers live in :mod:`._memcheck` and the spawned-server
-environment block in :mod:`.server_env`.
+valgrind leak parsers live in ``_memcheck`` and the spawned-server
+environment block in ``server_env``.
 """
 
 from __future__ import annotations
@@ -39,10 +42,10 @@ import os
 import subprocess
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Iterator
 from typing import IO
 
 from .. import log
@@ -116,11 +119,11 @@ class ServerProcess:
             stderr in the memcheck path; ``None`` in the non-memcheck
             path. Opened with ``errors="replace"`` so a participant
             server's malformed UTF-8 on stderr is tolerated. Persists
-            after ``stop()`` for :meth:`leak_verdict`.
+            after ``stop()`` for ``leak_verdict``.
         _proc_exit_code: Exit code recorded at ``stop()`` time; used
-            by :meth:`leak_verdict` to check the error sentinel.
+            by ``leak_verdict`` to check the error sentinel.
         _server_unresponsive: Sticky flag set on the first
-            :meth:`send_request` returning no id-correlated response;
+            ``send_request`` returning no id-correlated response;
             later calls short-circuit to ``None`` without the timeout.
     """
 
@@ -260,7 +263,7 @@ class ServerProcess:
 
         Call only when ``ctx.memcheck`` and ``ctx.impl == "c"``. The
         clean/not-clean decision is delegated to
-        :func:`._memcheck.classify_leak_verdict` so the per-scenario
+        ``_memcheck.classify_leak_verdict`` so the per-scenario
         ``.mem`` sub-assertions and the multi-step memory scenarios
         apply the same rules (signal kill, report completeness, the
         valgrind error sentinel, and the lost-byte counts).
@@ -282,11 +285,11 @@ class ServerProcess:
         return clean, report
 
     def send_request(self, request: dict) -> dict | None:
-        """Send a JSON-RPC request; return the id-correlated response or ``None`` (sticky on first miss).
+        """Send a JSON-RPC request and return the id-correlated response or ``None``.
 
         Correlation and stray-line skipping are handled by
-        :func:`._jsonrpc_io.read_correlated_response`; a ``None``
-        return flips the sticky unresponsive flag.
+        ``_jsonrpc_io.read_correlated_response``; a ``None`` return
+        flips the sticky ``_server_unresponsive`` flag.
         """
         if self.proc is None or self.proc.stdin is None or self.proc.stdout is None:
             return None
@@ -440,7 +443,7 @@ def spawn_server(
 
 
 def initialize_server(server: ServerProcess) -> bool:
-    """Initialise the server; ``True`` on success, ``False`` when the response missed or lacked ``result``."""
+    """Initialise the server; return whether the ``initialize`` handshake succeeded."""
     response = server.send_request({
         "jsonrpc": "2.0",
         "id": 1,
