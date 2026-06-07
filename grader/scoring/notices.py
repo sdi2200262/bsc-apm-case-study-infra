@@ -1,23 +1,22 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Notice aggregation and rendering for the grader console summary.
+"""Notice aggregation for the grader console summary.
 
-A :class:`Notice` represents a single human-review flag emitted
-during a grading run. Two tags are in use: ``REVIEW`` for rows whose
-acceptance was qualitatively ambiguous and requires human judgment
-before the result enters the cohort record, and ``WARNING`` for
-objectively abnormal conditions that need no judgment to classify but
-that the analyst must be aware of.
+A ``Notice`` represents a single human-review flag emitted during a
+grading run. Two tags are in use:
 
-:func:`collect_notices` is the sole aggregator. It reads the
-populated :class:`~grader.scoring.scoring.Scorer` and returns a frozen
-tuple of notices in the canonical order: all REVIEW notices first
-(sorted by test row id), then all WARNING notices (sorted by test row
-id). The shared rendering of that tuple to the terminal lives in the
-logging module (:func:`grader.log.notice_block`); this module owns the
-notice content, not its presentation.
+- ``REVIEW``: rows whose acceptance was qualitatively ambiguous and
+  requires human judgment before the result enters the cohort record.
+- ``WARNING``: objectively abnormal conditions that need no judgment
+  to classify but that the analyst must be aware of.
+
+``collect_notices`` is the sole aggregator. It reads the populated
+``Scorer`` and returns a tuple of notices in the canonical order: all
+REVIEW notices first, then all WARNING notices, each group in check
+order (the order tests are registered in the rubric). The shared
+rendering of that tuple to the terminal lives in the logging module
+(``grader.log.notice_block``); this module owns the notice content,
+not its presentation.
 """
 
 from __future__ import annotations
@@ -94,7 +93,7 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
             diagnostic and pass/fail state.
 
     Returns:
-        A tuple of :class:`Notice` objects, REVIEW notices before
+        A tuple of ``Notice`` objects, REVIEW notices before
         WARNING notices, each group in check order.
     """
     review: list[Notice] = []
