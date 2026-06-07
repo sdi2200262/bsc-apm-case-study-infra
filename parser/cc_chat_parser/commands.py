@@ -48,14 +48,28 @@ command-to-phase table is consumed by the per-prompt classifier in the
 session assembler.
 
 A third vocabulary lives alongside the framework tables: Claude Code's
-own built-in slash commands. The platform ships dozens of built-ins
-covering session control (``/exit``, ``/clear``, ``/compact``, ``/resume``),
-configuration (``/model``, ``/effort``, ``/permissions``, ``/config``,
-``/theme``), bundled skills that drive a model call (``/review``,
-``/loop``, ``/simplify``, ``/init``, ``/security-review``), and
-diagnostic surfaces (``/status``, ``/usage``, ``/stats``, ``/doctor``).
+own built-in slash commands. The platform ships dozens of built-ins,
+split here into two disjoint sets by whether invoking the command
+issues a model request:
+
+- Local-only built-ins act on the CLI, session, UI, or configuration
+  and send no payload to the model: session control (``/exit``,
+  ``/clear``, ``/compact``, ``/resume``), configuration (``/model``,
+  ``/effort``, ``/permissions``, ``/config``, ``/theme``), and
+  diagnostic surfaces (``/status``, ``/usage``, ``/stats``, ``/doctor``).
+- Model-calling built-ins are bundled skills or commands that render a
+  body to the model and drive a model request (``/review``, ``/loop``,
+  ``/simplify``, ``/init``, ``/security-review``).
+
+``CLAUDE_CODE_BUILTINS`` is the derived union of the two sets: it is the
+recognition surface for :func:`is_known_command`, unchanged by the split.
+The split exists because steer detection in the schema layer excludes a
+queued local-only command (a queued ``/ide`` controls the CLI and never
+reaches the model, so it is not a steer) while a queued model-calling
+command stays a real steer.
+
 Source: https://code.claude.com/docs/en/commands. A participant typing
-any of these produces a slash-command marker that the parser must
+any built-in produces a slash-command marker that the parser must
 recognise as a known invocation; otherwise every such occurrence
 pollutes the ``unknown_commands_observed`` diagnostic. Built-ins are
 classified separately from the framework tables: they do not move the
@@ -147,29 +161,44 @@ SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset({
 })
 
 # Claude Code built-in slash commands. Source:
-# https://code.claude.com/docs/en/commands. The list covers every name
-# the platform ships out of the box, including bundled skills that
-# render a body to the model and local-only commands that act on the
-# CLI without sending a payload. The names ``vim`` and ``pr-comments``
-# are kept for transcripts captured against Claude Code versions that
-# still shipped them.
-CLAUDE_CODE_BUILTINS: frozenset[str] = frozenset({
-    "add-dir", "agents", "autofix-pr", "batch", "branch", "btw",
-    "chrome", "claude-api", "clear", "color", "compact", "config",
-    "context", "copy", "debug", "desktop", "diff", "doctor", "effort",
-    "exit", "export", "extra-usage", "fast", "feedback",
+# https://code.claude.com/docs/en/commands. The built-ins are split
+# into two disjoint sets by whether invoking the command issues a model
+# request. The names ``vim`` and ``pr-comments`` are kept for transcripts
+# captured against Claude Code versions that still shipped them.
+
+# Local-only built-ins act on the CLI, session, UI, or configuration and
+# send no payload to the model. A queued one is not a steer.
+LOCAL_ONLY_BUILTINS: frozenset[str] = frozenset({
+    "add-dir", "agents", "branch", "btw", "chrome", "clear", "color",
+    "compact", "config", "context", "copy", "desktop", "diff", "doctor",
+    "effort", "exit", "export", "extra-usage", "fast", "feedback",
     "fewer-permission-prompts", "focus", "heapdump", "help", "hooks",
-    "ide", "init", "insights", "install-github-app", "install-slack-app",
-    "keybindings", "login", "logout", "loop", "mcp", "memory", "mobile",
-    "model", "passes", "permissions", "plan", "plugin", "powerup",
-    "pr-comments", "privacy-settings", "radio", "recap", "release-notes",
-    "reload-plugins", "remote-control", "remote-env", "rename", "resume",
-    "review", "rewind", "sandbox", "schedule", "security-review",
-    "setup-bedrock", "setup-vertex", "simplify", "skills", "stats",
-    "status", "statusline", "stickers", "tasks", "team-onboarding",
-    "teleport", "terminal-setup", "theme", "tui", "ultraplan",
-    "ultrareview", "upgrade", "usage", "vim", "voice", "web-setup",
+    "ide", "keybindings", "login", "logout", "mcp", "memory", "mobile",
+    "model", "passes", "permissions", "plugin", "powerup", "pr-comments",
+    "privacy-settings", "radio", "release-notes", "reload-plugins",
+    "remote-control", "remote-env", "rename", "resume", "rewind",
+    "sandbox", "setup-bedrock", "setup-vertex", "skills", "stats",
+    "status", "statusline", "stickers", "tasks", "teleport",
+    "terminal-setup", "theme", "tui", "upgrade", "usage", "vim", "voice",
+    "web-setup",
 })
+
+# Model-calling built-ins are bundled skills or commands that render a
+# body to the model and drive a model request. A queued one is a steer.
+MODEL_CALLING_BUILTINS: frozenset[str] = frozenset({
+    "autofix-pr", "batch", "claude-api", "debug", "init", "insights",
+    "install-github-app", "install-slack-app", "loop", "plan", "recap",
+    "review", "schedule", "security-review", "simplify",
+    "team-onboarding", "ultraplan", "ultrareview",
+})
+
+# The recognition surface for :func:`is_known_command` is the union of
+# both sets, unchanged by the split.
+CLAUDE_CODE_BUILTINS: frozenset[str] = LOCAL_ONLY_BUILTINS | MODEL_CALLING_BUILTINS
+
+assert not (LOCAL_ONLY_BUILTINS & MODEL_CALLING_BUILTINS), (
+    "built-in command appears in both the local-only and model-calling sets"
+)
 
 # A user prompt's slash-command invocation appears inside the prompt
 # text wrapped in a ``<command-name>`` XML-like tag, with a leading
@@ -338,6 +367,22 @@ def is_known_command(name: str) -> bool:
         or name in SPECKIT_KNOWN_COMMANDS
         or name in CLAUDE_CODE_BUILTINS
     )
+
+
+def is_local_only_command(name: str) -> bool:
+    """Return True when the command name is a local-only built-in.
+
+    Local-only built-ins control the CLI or session and issue no model
+    request, so a queued one is not a steer. Model-calling built-ins
+    and every framework command return False.
+
+    Args:
+        name: A command name with the leading slash already stripped.
+
+    Returns:
+        True when name is in LOCAL_ONLY_BUILTINS, False otherwise.
+    """
+    return name in LOCAL_ONLY_BUILTINS
 
 
 def phase_index(phase: str) -> int:
