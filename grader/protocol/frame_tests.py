@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Protocol-frame baseline assertions (P.1.1 / C.2.1, C.2.2).
+"""Protocol-frame baseline assertions (P.1.1 / C.2.1, C.2.2).
 
 Owns the two rows that assert a raw protocol frame rather than a tool
 response: the ``tools/list`` advertisement and the C-replica
@@ -10,8 +8,8 @@ hand-written ``initialize`` frame. Both run against a freshly-spawned
 MCP server as the ``student_courses`` principal and return the same
 5-tuple as the other baseline rows
 (``(ok, msg, detail, leak_tuple|None, mode|None)``; see
-:mod:`grader.protocol.baseline_tests` for the tuple contract). The
-form-acceptance policy lives in :mod:`.matching`; this module owns only
+``grader.protocol.baseline_tests`` for the tuple contract). The
+form-acceptance policy lives in ``.matching``; this module owns only
 the frame exchange and the result wiring.
 """
 
@@ -42,11 +40,6 @@ from .seed import SEED, user
 _PRINCIPAL = user(SEED, "student_courses")
 
 
-def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_courses principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}
-
-
 def test_tools_list(
     impl: str,
     eclass_dir: Path,
@@ -57,7 +50,7 @@ def test_tools_list(
     """P.1.1 / C.2.2: tools/list matches the constructed expected tool list.
 
     The contract split lives in
-    :func:`grader.protocol.matching.match_tools_list`; this row
+    ``grader.protocol.matching.match_tools_list``; this row
     propagates its ``mode`` so a presence-only acceptance surfaces
     in the WARNINGS block.
     """
@@ -111,10 +104,10 @@ def test_initialize_frame(
     Asserts the C replica's ``protocolVersion`` and ``serverInfo``
     equal the invariant constructed constants and its
     ``capabilities`` object is one of the two accepted constructed
-    forms (see :mod:`.expected`). The matched form, recorded as the
-    row's diagnostic, is ``capabilities-library`` or
-    ``capabilities-doc``. The expected response is constructed, never captured
-    from the submission. C-only: a non-C implementation does not
+    forms (see ``.expected``). The matched form, recorded as the
+    row's diagnostic, is ``capabilities-faithful`` or
+    ``capabilities-documented``. The expected response is constructed, never
+    captured from the submission. C-only: a non-C implementation does not
     apply.
     """
     if impl != "c":
@@ -167,3 +160,8 @@ def test_initialize_frame(
                         )
                     )
     return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_courses principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}

@@ -1,41 +1,18 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Shared scaffolding for the per-row scenario assertion modules.
+"""Shared scaffolding and result helpers for the scenario assertion suites.
 
-Every ``*_tests.py`` module emits the same five-tuple result shape
-``(ok, message, detail, leak_tuple_or_None, mode_or_None)`` and uses
-the same server-start failure sentinel; the C aggregators all record
-``.mem`` sub-assertions with the same outcome semantics. Keeping
-those names and the recording shape in one place removes the
-copy-pasted scaffolding from the scenario modules and prevents the
-``.mem`` recording wording from drifting between aggregators.
-
-Public surface:
-
-- :data:`SERVER_START_FAIL`: the three-tuple every assertion body
-  returns when ``spawn_server`` yielded ``None``.
-- :data:`HANDSHAKE_FAIL`, :data:`LOGIN_FAIL`, :data:`TOOL_FAIL`: the
-  three-tuples every assertion body returns when the corresponding
-  protocol step missed a response. Row bodies branch progressively
-  on the result of each step so the row reports which step missed
-  instead of "expected X, got ''".
-- :data:`LeakTuple`, :data:`Result5`: the result type aliases the
-  scenario functions advertise.
-- :func:`leak_after`: returns the leak verdict only when the
-  ``memcheck`` path projected a valgrind run; ``None`` otherwise.
-- :func:`record_mem`: writes the ``<id>.mem`` sub-assertion row for
-  one C functional scenario, with one wording shared across the C
-  baseline, course, and general aggregators.
+Every ``*_tests.py`` module returns the same five-tuple result shape and
+the same step-failure sentinels, and the C aggregators all record ``.mem``
+sub-assertions with one outcome wording. Centralising them here removes the
+copy-pasted scaffolding from the scenario modules and keeps the sentinel
+text and the ``.mem`` recording wording from drifting between suites.
 """
 
 from __future__ import annotations
 
-from typing import Optional
-
 LeakTuple = tuple[bool, str]
-Result5 = tuple[bool, str, str, Optional[LeakTuple], Optional[str]]
+Result5 = tuple[bool, str, str, LeakTuple | None, str | None]
 
 SERVER_START_FAIL: tuple[bool, str, str] = (
     False,
@@ -84,7 +61,7 @@ def record_mem(
     test_id: str,
     ok: bool,
     leak: LeakTuple | None,
-    no_verdict_msg: str,
+    no_verdict_msg: str | None = None,
 ) -> None:
     """Record the ``<id>.mem`` sub-assertion for one C functional scenario.
 
@@ -107,11 +84,17 @@ def record_mem(
         test_id: The functional rubric identifier; the ``.mem`` row
             is keyed ``"<test_id>.mem"``.
         ok: Whether the functional assertion passed.
-        leak: The leak verdict from :func:`leak_after`, or ``None``
+        leak: The leak verdict from ``leak_after``, or ``None``
             when the spawn returned no server.
         no_verdict_msg: The message recorded when ``leak`` is
-            ``None``; supplied by the caller verbatim.
+            ``None``. Defaults to the standard
+            ``skipped: <id> produced no leak verdict (server did not
+            start)`` wording shared by every C functional phase.
     """
+    if no_verdict_msg is None:
+        no_verdict_msg = (
+            f"skipped: {test_id} produced no leak verdict (server did not start)"
+        )
     if leak is not None:
         leak_clean, leak_detail = leak
         mem_ok = ok and leak_clean

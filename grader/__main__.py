@@ -38,16 +38,7 @@ from .environment import (
     reset,
 )
 from .errors import GraderError
-from .protocol import (
-    c_baseline,
-    c_config,
-    c_course_announcements,
-    c_general_announcements,
-    c_memory,
-    python_baseline,
-    python_course_announcements,
-    python_general_announcements,
-)
+from .protocol import phases
 from .scoring import reporting, scoring
 
 PhaseRunner = Callable[
@@ -207,11 +198,11 @@ def _run_python_phases(
             f"skipped: python build failed ({summary})",
         )
         return
-    _record_phase(scorer, "python baseline", python_baseline.run,
+    _record_phase(scorer, "python baseline", phases.run_python_baseline,
                   eclass_root, mock_root, debug)
-    _record_phase(scorer, "python course", python_course_announcements.run,
+    _record_phase(scorer, "python course", phases.run_python_course_announcements,
                   eclass_root, mock_root, debug)
-    _record_phase(scorer, "python general", python_general_announcements.run,
+    _record_phase(scorer, "python general", phases.run_python_general_announcements,
                   eclass_root, mock_root, debug)
 
 
@@ -249,23 +240,23 @@ def _run_c_phases(
         scorer.record(test_id, result[0], result[1], result[2])
         log.info(f"c stack {test_id}: {result[1]}")
 
-    _record_phase(scorer, "c config", c_config.run, eclass_root, mock_root, debug)
+    _record_phase(scorer, "c config", phases.run_c_config, eclass_root, mock_root, debug)
 
     log.info("c baseline phase")
-    for test_id, result in c_baseline.run(eclass_root, mock_root, debug).items():
+    for test_id, result in phases.run_c_baseline(eclass_root, mock_root, debug).items():
         scorer.record(test_id, result[0], result[1], result[2],
                       diagnostic=result[3])
 
-    _record_phase(scorer, "c course", c_course_announcements.run,
+    _record_phase(scorer, "c course", phases.run_c_course_announcements,
                   eclass_root, mock_root, debug)
-    _record_phase(scorer, "c general", c_general_announcements.run,
+    _record_phase(scorer, "c general", phases.run_c_general_announcements,
                   eclass_root, mock_root, debug)
 
     log.info("c memory phase")
     passed_tests = frozenset(
         test_id for test_id, result in scorer.results.items() if result.passed
     )
-    for test_id, result in c_memory.run(
+    for test_id, result in phases.run_c_memory(
         eclass_root, mock_root, debug, passed_tests
     ).items():
         scorer.record(test_id, result[0], result[1], result[2],

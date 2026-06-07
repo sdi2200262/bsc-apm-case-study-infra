@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Expected response strings for the exact-string scenario assertions.
+"""Expected response strings for the exact-string scenario assertions.
 
 Each announcement row asserts one exact full-string match against
 an expected response built here. The date forms and the
@@ -40,7 +38,7 @@ from .seed import Announcement, Course
 
 # Narrow no-break space (U+202F) the platform renders before the
 # meridiem; a plain ASCII space here breaks the exact-string match.
-NARROW_NBSP = " "
+NARROW_NBSP = " "  # noqa: RUF001
 
 # Four-space indent on the Source/Date/Content lines of an entry.
 ENTRY_INDENT = "    "
@@ -55,7 +53,7 @@ ECLASS_BASE_URL = "http://localhost"
 # selector keeps the run between the title and `(code)` verbatim
 # after `link.text.strip()`. GLUE is exactly U+00A0, CR, LF, then
 # 164 ASCII spaces: an openeclass-version-specific layout constant.
-GET_COURSES_GLUE = " \r\n" + " " * 164
+GET_COURSES_GLUE = " \r\n" + " " * 164  # noqa: RUF001
 
 # English names; locale is English on the grading environment.
 _WEEKDAYS = (
@@ -83,33 +81,14 @@ _MONTHS = (
 )
 
 # Exact error and empty-window strings (PRD; not substrings).
-ERR_NOT_LOGGED_IN = (
-    "Error: Not logged in. Please log in first using the login tool."
-)
+ERR_NOT_LOGGED_IN = "Error: Not logged in. Please log in first using the login tool."
 ERR_BAD_COURSE_URL = "Error: Could not extract course code."
 ERR_NEGATIVE_DAYS_BACK = "Error: days_back must be a non-negative integer."
-ERR_GENERAL_UPPER_BOUND = (
-    "Error: Cannot retrieve announcements older than 30 days."
-)
+ERR_GENERAL_UPPER_BOUND = "Error: Cannot retrieve announcements older than 30 days."
 NO_ANNOUNCEMENTS = "No announcements found."
 
 SYSTEM_SOURCE = "System"
 
-
-def login_success(username: str) -> str:
-    """Return the exact ``login`` success response for ``username``.
-
-    Single source for the principal-bearing success line the baseline
-    suite and the configuration-surface probes both assert; pinning
-    the format here keeps the two callers in lockstep.
-
-    Args:
-        username: Authenticated principal name to interpolate.
-
-    Returns:
-        ``Login successful! You are now logged in as <username>.``
-    """
-    return f"Login successful! You are now logged in as {username}."
 
 # Constructed handshake contract: the expected ``initialize`` and
 # ``tools/list`` responses the baseline rows (C.2.1, C.2.2, P.1.1)
@@ -130,9 +109,7 @@ BASELINE_TOOL_INPUT_SCHEMA = {
 }
 
 # Scopes the byte-exact ``description`` contract in ``match_tools_list``.
-BASELINE_TOOL_NAMES: frozenset[str] = frozenset(
-    {"login", "get_courses", "logout", "authstatus"}
-)
+BASELINE_TOOL_NAMES: frozenset[str] = frozenset({"login", "get_courses", "logout", "authstatus"})
 
 # The four baseline tools, verbatim from the wire-protocol reference,
 # in its declared order.
@@ -220,6 +197,22 @@ CAPABILITIES_DOCUMENTED = {
 }
 
 
+def login_success(username: str) -> str:
+    """Return the exact ``login`` success response for ``username``.
+
+    Single source for the principal-bearing success line the baseline
+    suite and the configuration-surface probes both assert; pinning
+    the format here keeps the two callers in lockstep.
+
+    Args:
+        username: Authenticated principal name to interpolate.
+
+    Returns:
+        ``Login successful! You are now logged in as <username>.``
+    """
+    return f"Login successful! You are now logged in as {username}."
+
+
 def expected_tools_list() -> tuple[dict, ...]:
     """Return the expected ``tools/list`` tool objects.
 
@@ -229,23 +222,6 @@ def expected_tools_list() -> tuple[dict, ...]:
         announcement tools omit ``description``.
     """
     return ALL_TOOL_OBJECTS
-
-
-def _clock_token(instant: datetime) -> str:
-    """Return the 12-hour ``<h>:<mm><U+202F><AM|PM>`` clock token.
-
-    Args:
-        instant: The datetime whose time component to render. Every
-            announcement in a run shares this component.
-
-    Returns:
-        The clock token: a no-leading-zero 12-hour hour, a
-        colon-separated zero-padded minute, the U+202F narrow
-        no-break space, then ``AM`` or ``PM``.
-    """
-    period = "AM" if instant.hour < 12 else "PM"
-    hour12 = instant.hour % 12 or 12
-    return f"{hour12}:{instant.minute:02d}{NARROW_NBSP}{period}"
 
 
 def announcement_date(instant: datetime, days_ago: int) -> str:
@@ -272,19 +248,14 @@ def announcement_date(instant: datetime, days_ago: int) -> str:
     return f"{weekday}, {month} {moment.day}, {moment.year}, {clock}"
 
 
-def _preamble(count: int) -> str:
-    """Return the populated-response preamble for ``count`` entries."""
-    return f"Found {count} announcement(s):"
-
-
 def announcement_preamble(count: int) -> str:
     """Return the populated-announcement-response preamble for ``count`` entries.
 
     The single source for the ``Found <N> announcement(s):`` grammar.
     The matcher's order-insensitive form reconstructs the expected
     preamble through this rather than transcribing the format, so
-    there is no duplicate that can drift from :func:`course_response`
-    / :func:`general_response`.
+    there is no duplicate that can drift from ``course_response``
+    / ``general_response``.
 
     Args:
         count: Number of in-window announcements.
@@ -295,15 +266,13 @@ def announcement_preamble(count: int) -> str:
     return _preamble(count)
 
 
-def course_entries(
-    instant: datetime, announcements: tuple[Announcement, ...]
-) -> tuple[str, ...]:
+def course_entries(instant: datetime, announcements: tuple[Announcement, ...]) -> tuple[str, ...]:
     """Return the per-entry blocks of a course response, without the index.
 
     Each element is one announcement's ``<Title>`` /
     ``    Date: <Date>`` / ``    Content: <Body>`` block as the tool
     must emit it, but without the leading ``<n>. `` sequence number;
-    :func:`course_response` re-applies the index. The order-insensitive
+    ``course_response`` re-applies the index. The order-insensitive
     acceptance form compares this index-free set as a multiset, so
     the per-entry construction is single-sourced here.
 
@@ -322,15 +291,13 @@ def course_entries(
     )
 
 
-def general_entries(
-    instant: datetime, announcements: tuple[Announcement, ...]
-) -> tuple[str, ...]:
+def general_entries(instant: datetime, announcements: tuple[Announcement, ...]) -> tuple[str, ...]:
     """Return the per-entry blocks of a general response, without the index.
 
-    Same as :func:`course_entries` plus a ``    Source: <attribution>``
+    Same as ``course_entries`` plus a ``    Source: <attribution>``
     line after the title: ``System`` for a system-wide announcement,
     the course code for a course announcement. The leading ``<n>. ``
-    sequence number is omitted; :func:`general_response` re-applies
+    sequence number is omitted; ``general_response`` re-applies
     it.
 
     Args:
@@ -353,22 +320,7 @@ def general_entries(
     return tuple(blocks)
 
 
-def _number(entries: tuple[str, ...]) -> str:
-    """Return ``entries`` re-numbered and joined into the populated body.
-
-    Re-applies the ``<n>. `` sequence prefix at the join site so the
-    ordered string is built from the same single-source per-entry
-    blocks the multiset form compares.
-    """
-    numbered = [
-        f"{index}. {entry}" for index, entry in enumerate(entries, start=1)
-    ]
-    return _preamble(len(entries)) + "\n\n" + "\n\n".join(numbered)
-
-
-def course_response(
-    instant: datetime, announcements: tuple[Announcement, ...]
-) -> str:
+def course_response(instant: datetime, announcements: tuple[Announcement, ...]) -> str:
     """Return the exact expected ``get_course_announcements`` success response.
 
     Empty input returns the empty-window string rather than a
@@ -387,12 +339,10 @@ def course_response(
     return _number(course_entries(instant, announcements))
 
 
-def general_response(
-    instant: datetime, announcements: tuple[Announcement, ...]
-) -> str:
+def general_response(instant: datetime, announcements: tuple[Announcement, ...]) -> str:
     """Return the exact expected ``get_general_announcements`` success response.
 
-    Same layout as :func:`course_response` plus a ``Source:`` line per
+    Same layout as ``course_response`` plus a ``Source:`` line per
     entry: ``System`` for a system-wide announcement, the course
     code for a course announcement.
 
@@ -424,31 +374,6 @@ def course_url(code: str) -> str:
     return f"{ECLASS_BASE_URL}/courses/{code}/"
 
 
-def _get_courses_form(courses: tuple[Course, ...], name_glued: bool) -> str:
-    """Return one ``get_courses`` form for the enrolled-course list.
-
-    Args:
-        courses: The user's courses in title-alphabetical order
-            (the openeclass portfolio link order).
-        name_glued: When ``True`` the entry name is the
-            openeclass-formatted ``<title><GLUE>(<code>)``; when
-            ``False`` it is the documented-clean ``<title>``.
-
-    Returns:
-        The exact response text for that form.
-    """
-    entries = []
-    for index, course in enumerate(courses, start=1):
-        if name_glued:
-            name = f"{course.title}{GET_COURSES_GLUE}({course.code})"
-        else:
-            name = course.title
-        entries.append(
-            f"{index}. {name}\n{URL_INDENT}URL: {course_url(course.code)}"
-        )
-    return f"Found {len(courses)} courses:\n\n" + "\n".join(entries)
-
-
 def get_courses_forms(courses: tuple[Course, ...]) -> tuple[str, str]:
     """Return the ``(faithful, documented_clean)`` ``get_courses`` forms.
 
@@ -470,3 +395,63 @@ def get_courses_forms(courses: tuple[Course, ...]) -> tuple[str, str]:
         _get_courses_form(courses, name_glued=True),
         _get_courses_form(courses, name_glued=False),
     )
+
+
+def _clock_token(instant: datetime) -> str:
+    """Return the 12-hour ``<h>:<mm><U+202F><AM|PM>`` clock token.
+
+    Args:
+        instant: The datetime whose time component to render. Every
+            announcement in a run shares this component.
+
+    Returns:
+        The clock token: a no-leading-zero 12-hour hour, a
+        colon-separated zero-padded minute, the U+202F narrow
+        no-break space, then ``AM`` or ``PM``.
+    """
+    period = "AM" if instant.hour < 12 else "PM"
+    hour12 = instant.hour % 12 or 12
+    return f"{hour12}:{instant.minute:02d}{NARROW_NBSP}{period}"
+
+
+def _preamble(count: int) -> str:
+    """Return the populated-response preamble for ``count`` entries."""
+    return f"Found {count} announcement(s):"
+
+
+def _number(entries: tuple[str, ...]) -> str:
+    """Return ``entries`` re-numbered and joined into the populated body.
+
+    Re-applies the ``<n>. `` sequence prefix at the join site so the
+    ordered string is built from the same single-source per-entry
+    blocks the multiset form compares.
+
+    Args:
+        entries: Index-free per-entry blocks, in display order.
+
+    Returns:
+        The populated response body: the preamble, then each entry
+        numbered ``<n>. `` and blank-line-separated.
+    """
+    numbered = [f"{index}. {entry}" for index, entry in enumerate(entries, start=1)]
+    return _preamble(len(entries)) + "\n\n" + "\n\n".join(numbered)
+
+
+def _get_courses_form(courses: tuple[Course, ...], name_glued: bool) -> str:
+    """Return one ``get_courses`` form for the enrolled-course list.
+
+    Args:
+        courses: The user's courses in title-alphabetical order
+            (the openeclass portfolio link order).
+        name_glued: When ``True`` the entry name is the
+            openeclass-formatted ``<title><GLUE>(<code>)``; when
+            ``False`` it is the documented-clean ``<title>``.
+
+    Returns:
+        The exact response text for that form.
+    """
+    entries = []
+    for index, course in enumerate(courses, start=1):
+        name = f"{course.title}{GET_COURSES_GLUE}({course.code})" if name_glued else course.title
+        entries.append(f"{index}. {name}\n{URL_INDENT}URL: {course_url(course.code)}")
+    return f"Found {len(courses)} courses:\n\n" + "\n".join(entries)

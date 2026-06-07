@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Baseline-tier protocol assertions (P.1.x / C.2.x).
+"""Baseline-tier protocol assertions (P.1.x / C.2.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server.
 Principal: ``student_courses``. All return a 5-tuple
@@ -60,11 +58,6 @@ LOGOUT_SUCCESS = f"Successfully logged out user {_PRINCIPAL.username}."
 LOGOUT_NO_OP = "Not logged in, nothing to do."
 AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {_PRINCIPAL.username}"
 AUTHSTATUS_NOT_LOGGED_IN = "Status: Not logged in"
-
-
-def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_courses principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}
 
 
 def test_authstatus_pre_login(
@@ -525,3 +518,8 @@ def test_logout_no_op(
                     )
                     detail = text
     return ok, msg, detail, leak_after(srv, memcheck), mode
+
+
+def _creds() -> dict[str, str]:
+    """Return credential env_overrides for the student_courses principal."""
+    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}

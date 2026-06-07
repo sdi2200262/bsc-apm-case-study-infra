@@ -1,26 +1,20 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Acceptance policy for the announcement-list scenario assertions.
+"""Acceptance policy for the announcement-list scenario assertions.
 
 Owns the two-form announcement matcher and the parsing and date
-canonicalisation it relies on. :func:`match_announcements` records
-``ANNOUNCEMENTS_ORDERED`` (the openeclass-derived order) or
-``ANNOUNCEMENTS_UNORDERED`` (the same byte-exact entries compared as
-an order-insensitive multiset), routing both forms through
-:func:`grader.protocol.matching._try_forms`. The shared dispatch,
-the mode constants, and the fixed-string matchers live in
-:mod:`grader.protocol.matching`; this module imports from it and
-is never imported by it, so the two form an acyclic pair.
+canonicalisation it relies on. The shared dispatch, the mode constants, and
+the fixed-string matchers live in ``grader.protocol.matching``; this module
+imports from it and is never imported by it, so the two form an acyclic
+pair.
 
-PRD §2 leaves the rendered date string as an unspecified
-``<Date String>`` placeholder, so each ``Date:`` line is canonicalised
-to a calendar date before comparison and any rendering whose parsed
-date matches the expected calendar date is a legitimate accept. Every
-other field (title, body, source, count, grammar) stays byte-asserted.
-The unordered form is a lenient acceptance warned for human review at
-end of grading (see :mod:`grader.scoring.reporting`).
+PRD §2 leaves the rendered date string as an unspecified ``<Date String>``
+placeholder, so each ``Date:`` line is canonicalised to a calendar date
+before comparison and any rendering whose parsed date matches the expected
+calendar date is a legitimate accept. Every other field (title, body,
+source, count, grammar) stays byte-asserted. The order-insensitive form is
+a lenient acceptance warned for human review at end of grading (see
+``grader.scoring.reporting``).
 """
 
 from __future__ import annotations
@@ -71,7 +65,7 @@ def match_announcements(
 
     The matched form is the recorded diagnostic; the unordered
     form is lenient and is warned for human review at end of
-    grading (see :mod:`grader.scoring.reporting`).
+    grading (see ``grader.scoring.reporting``).
 
     Args:
         text: The tool's response text.
@@ -79,7 +73,7 @@ def match_announcements(
             response.
         expected_entries: The index-free per-entry blocks the
             response must contain as a multiset, single-sourced
-            from :mod:`.expected`.
+            from ``expected``.
         expected_count: The number of in-window entries the preamble
             must declare and the response must carry.
         instant: The run's seed-apply instant. Resolves the
@@ -133,7 +127,7 @@ def _parse_announcement_entries(text: str, expected_count: int) -> list[str] | N
 
     Inverts the ``preamble + blank line + blank-line-separated
     entries`` construction (see
-    :func:`grader.protocol.expected.course_response`). The
+    ``grader.protocol.expected.course_response``). The
     space-family normalisation is applied to the whole response
     first; it touches only the space codepoints, so newlines and
     indentation are unaffected and the blank-line split is exact.
@@ -150,7 +144,7 @@ def _parse_announcement_entries(text: str, expected_count: int) -> list[str] | N
         text: The tool's response text.
         expected_count: The entry count the preamble must declare and
             the response must carry (always positive: the empty-window
-            rows use :func:`match_exact`, never this path).
+            rows use ``match_exact``, never this path).
 
     Returns:
         The index-free, space-normalised entry blocks, or ``None``
@@ -184,6 +178,15 @@ def _parse_date_to_calendar(
     variants, common compact shapes). ``instant`` resolves the
     openeclass-rendered ``today, h:mm AM/PM`` relative form,
     which dateutil treats as a word rather than a date.
+
+    Args:
+        value: The raw ``Date:`` line value to parse.
+        instant: The run's seed-apply instant, used to resolve the
+            ``today`` relative form.
+
+    Returns:
+        ``(year, month, day)`` on success; ``None`` when the value
+        does not parse.
     """
     s = value.strip()
     if s.lower().startswith("today"):
@@ -202,9 +205,18 @@ def _canonicalise_entries(
 ) -> list[str] | None:
     """Return ``entries`` with each ``Date:`` line rewritten to YYYY-MM-DD.
 
-    Returns ``None`` if any entry lacks a parseable ``Date:`` line;
-    that fails the match. Every other byte is preserved so title,
+    Every byte other than the ``Date:`` value is preserved, so title,
     body, source, and indentation are still byte-asserted.
+
+    Args:
+        entries: Index-free, space-normalised entry blocks.
+        instant: The run's seed-apply instant, forwarded to
+            ``_parse_date_to_calendar``.
+
+    Returns:
+        The entries with each ``Date:`` line replaced by
+        ``YYYY-MM-DD``; ``None`` when any entry lacks a parseable
+        ``Date:`` line, which fails the match.
     """
     out: list[str] = []
     for entry in entries:

@@ -1,68 +1,34 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Centralised acceptance policy for the exact-string scenario assertions.
+"""Centralised acceptance policy for the exact-string scenario assertions.
 
-``expected`` constructs the faithful openeclass output; this module
-owns the single decision of whether a tool response is accepted and,
-when it is, which form it took. Every string-matched rubric row runs
-its response through one matcher here and records the returned
-diagnostic as an unscored annotation, so the report states how each
-row matched rather than only that it passed.
+``expected`` constructs the faithful openeclass output; this module owns
+the single decision of whether a tool response is accepted and, when it is,
+which form it took. Every string-matched rubric row runs its response
+through one matcher here and records the returned diagnostic as an unscored
+annotation, so the report states how each row matched rather than only that
+it passed. A matcher returns ``None`` when the response is not accepted; the
+caller treats that as a failed row and records no diagnostic.
 
-The fixed-string rows (the error and empty-window responses) record
-one of two strictness modes:
+Two kinds of diagnostic are recorded. The fixed-string rows record a
+strictness mode:
 
-- ``BYTE_EXACT``: the response equalled the constructed expected
-  string byte for byte.
-- ``WHITESPACE_NORMALIZED``: the response equalled it only after the
-  non-breaking space family was mapped to an ASCII space. The PRD
-  requires rendered text to carry normalised whitespace, so a date
-  the platform renders with a narrow no-break space and one rendered
-  with a plain space are the same answer; this mode records that the
-  acceptance relied on that rule.
+- ``BYTE_EXACT``: the response equalled the constructed expected string byte
+  for byte.
+- ``WHITESPACE_NORMALIZED``: it equalled only after the non-breaking space
+  family was mapped to an ASCII space. The PRD requires rendered text to
+  carry normalised whitespace, so a date rendered with a narrow no-break
+  space and one rendered with a plain space are the same answer.
 
-Several rows accept one of two labelled forms and record the matched
-label as the diagnostic. :func:`match_get_courses` records
-``GET_COURSES_FAITHFUL`` (the openeclass-formatted layout) or
-``GET_COURSES_DOCUMENTED`` (the documented-clean layout).
-:func:`match_initialize` records ``CAP_FAITHFUL`` (the capabilities
-object the SDK serialises for a tools-only server) or
-``CAP_DOCUMENTED`` (the literal object the wire-protocol reference
-documents). :func:`match_missing_credentials` records
-``MISSING_CREDS_FAITHFUL`` (the two-sentence error the Python
-reference emits) or ``MISSING_CREDS_DOCUMENTED`` (the one-sentence
-error the reference doc documents). The two-form announcement
-matcher (``ANNOUNCEMENTS_ORDERED`` / ``ANNOUNCEMENTS_UNORDERED``)
-lives in :mod:`.announcement_matching`, which imports the mode
-constants and the shared dispatch from this module. All these
-matchers route through :func:`_try_forms`, which evaluates labelled
-predicates in order and returns the first accepted label, so the
-dispatch is identical across them and the per-form acceptance
-algorithm lives next to each call site. The non-breaking space
-normalisation is applied within each form unconditionally (the PRD
-whitespace rule), except the missing-credentials forms, whose fixed
-error text carries no rendered whitespace family and is compared
-byte for byte.
-
-The second, lenient form in each pair (``ANNOUNCEMENTS_UNORDERED``,
-``GET_COURSES_DOCUMENTED``, ``CAP_DOCUMENTED``,
-``MISSING_CREDS_DOCUMENTED``, collected in :data:`LENIENT_MODES`)
-is warned for human review at end of grading (see
-:mod:`grader.scoring.reporting`).
-
-The ``tools/list`` row (:func:`match_tools_list`) splits the
-contract by tool source: byte-exact ``name``, ``description``, and
-``inputSchema`` for the four baseline tools, byte-exact ``name``
-and ``inputSchema`` plus a presence-only ``description`` for the
-two announcement tools. The row records
-``DESCRIPTION_PRESENCE_ONLY`` whenever the presence check accepted
-at least one announcement-tool description, surfacing it in the
-WARNINGS block for manual semantic review.
-
-A matcher returns ``None`` when the response is not accepted; the
-caller treats ``None`` as a failed row and records no diagnostic.
+The two-form rows instead record which of two accepted forms matched,
+evaluated in order through ``_try_forms``: each matcher supplies its own
+per-form predicates while the dispatch (try in order, label the first match)
+lives in one place. Each pair has a faithful first form and a lenient second
+form; the lenient forms are collected in ``LENIENT_MODES``, which
+``grader.scoring.reporting`` imports to warn a human, at end of grading, of
+every row accepted only via a lenient form. The announcement two-form
+matcher lives in ``announcement_matching``, which imports the mode constants
+and the shared dispatch from this module.
 """
 
 from __future__ import annotations
@@ -88,7 +54,7 @@ WHITESPACE_NORMALIZED = "whitespace-normalized"
 # The published wire-protocol reference and the MCP SDK's actual
 # serialisation disagree on the capabilities object; both readings of
 # the task material are accepted, with ``CAP_DOCUMENTED`` flagged for
-# human review (see :data:`LENIENT_MODES`).
+# human review (see ``LENIENT_MODES``).
 CAP_FAITHFUL = "capabilities-faithful"
 CAP_DOCUMENTED = "capabilities-documented"
 
@@ -110,13 +76,13 @@ GET_COURSES_DOCUMENTED = "get-courses-documented"
 # reference doc documents a one-sentence form. Both are legitimate
 # readings of the published task material, so both are accepted, with
 # the documented one-sentence form gated to the C replica and flagged
-# for human review (see :data:`LENIENT_MODES`).
+# for human review (see ``LENIENT_MODES``).
 MISSING_CREDS_FAITHFUL = "missing-creds-faithful"
 MISSING_CREDS_DOCUMENTED = "missing-creds-documented"
 
 # Recorded on the ``tools/list`` row when at least one announcement
 # tool's ``description`` was accepted via the presence check; see
-# :func:`match_tools_list` for the contract split.
+# ``match_tools_list`` for the contract split.
 DESCRIPTION_PRESENCE_ONLY = "description-presence-only"
 
 # The lenient (second) accepted forms. ``reporting`` imports this
@@ -202,31 +168,6 @@ def match_response(actual: str, expected: str) -> str | None:
     return None
 
 
-def _try_forms(
-    forms: Iterable[tuple[str, Callable[[], bool]]],
-) -> str | None:
-    """Return the label of the first accepted form, or ``None``.
-
-    Each entry is a ``(label, accepts)`` pair; ``accepts`` is invoked
-    in order and the first one returning ``True`` settles the match.
-    The per-form acceptance algorithm stays with the caller so each
-    matcher decides what counts as a match for each of its forms
-    while the dispatch (try in order, label-of-first-match) lives in
-    one place.
-
-    Args:
-        forms: Ordered ``(label, accepts)`` pairs to evaluate.
-
-    Returns:
-        The label of the first form whose predicate returned
-        ``True``; ``None`` when none accepted.
-    """
-    for label, accepts in forms:
-        if accepts():
-            return label
-    return None
-
-
 def match_get_courses(
     text: str,
     courses: tuple[Course, ...],
@@ -239,13 +180,13 @@ def match_get_courses(
     legitimate readings of the task materials. The Python reference
     must emit the openeclass-formatted form, so only that form is a
     candidate for it; the C replica may emit either. Each candidate
-    is judged by :func:`match_response`, so the brittle U+00A0/CRLF/
+    is judged by ``match_response``, so the brittle U+00A0/CRLF/
     space glue is tolerated exactly as the rendered dates are. The
     recorded diagnostic is the matched layout: ``GET_COURSES_FAITHFUL``
     for the openeclass-formatted layout, ``GET_COURSES_DOCUMENTED``
     for the documented-clean layout. The documented-clean layout is a
     lenient acceptance and is warned for human review at end of
-    grading (see :mod:`grader.scoring.reporting`).
+    grading (see ``grader.scoring.reporting``).
 
     Args:
         text: The tool's response text.
@@ -281,7 +222,7 @@ def match_missing_credentials(
     documented: str,
     allow_documented: bool,
 ) -> str | None:
-    """Return the matched missing-credentials error form, or None.
+    """Return the matched missing-credentials error form, or ``None``.
 
     The Python reference server emits a two-sentence error verbatim;
     the reference doc documents a one-sentence form. Both are
@@ -295,13 +236,13 @@ def match_missing_credentials(
         text: The tool's response text.
         faithful: The two-sentence error the Python reference emits.
         documented: The one-sentence error the reference doc documents.
-        allow_documented: When True (the C replica) the documented
-            one-sentence form is also accepted; when False only the
+        allow_documented: When ``True`` (the C replica) the documented
+            one-sentence form is also accepted; when ``False`` only the
             two-sentence faithful form is.
 
     Returns:
-        MISSING_CREDS_FAITHFUL or MISSING_CREDS_DOCUMENTED for the
-        matched form, None when neither matches.
+        ``MISSING_CREDS_FAITHFUL`` or ``MISSING_CREDS_DOCUMENTED`` for
+        the matched form, ``None`` when neither matches.
     """
     forms: list[tuple[str, Callable[[], bool]]] = [
         (MISSING_CREDS_FAITHFUL, lambda: text == faithful),
@@ -321,7 +262,7 @@ def match_initialize(actual_result: dict) -> str | None:
     ``CAP_FAITHFUL``; the documented form (what the wire-protocol
     reference literally specifies) yields ``CAP_DOCUMENTED``. The
     documented form is a lenient acceptance and is warned for human
-    review at end of grading (see :mod:`grader.scoring.reporting`). Only
+    review at end of grading (see ``grader.scoring.reporting``). Only
     these three fields are the contract; an ``initialize`` result
     may carry further fields (an ``instructions`` string, SDK
     metadata) and those are outside the row's contract and ignored.
@@ -369,7 +310,7 @@ def match_tools_list(
 
     Returns:
         ``(True, summary, mode)`` when the contract holds, where
-        ``mode`` is :data:`DESCRIPTION_PRESENCE_ONLY` when at least
+        ``mode`` is ``DESCRIPTION_PRESENCE_ONLY`` when at least
         one announcement-tool description was accepted via the
         presence check and ``None`` otherwise. ``(False, reason,
         None)`` when the contract fails, naming the first divergence.
@@ -416,3 +357,28 @@ def match_tools_list(
 
     mode = DESCRIPTION_PRESENCE_ONLY if presence_only_fired else None
     return True, "all 6 tool objects match the expected contract", mode
+
+
+def _try_forms(
+    forms: Iterable[tuple[str, Callable[[], bool]]],
+) -> str | None:
+    """Return the label of the first accepted form, or ``None``.
+
+    Each entry is a ``(label, accepts)`` pair; ``accepts`` is invoked
+    in order and the first one returning ``True`` settles the match.
+    The per-form acceptance algorithm stays with the caller so each
+    matcher decides what counts as a match for each of its forms
+    while the dispatch (try in order, label-of-first-match) lives in
+    one place.
+
+    Args:
+        forms: Ordered ``(label, accepts)`` pairs to evaluate.
+
+    Returns:
+        The label of the first form whose predicate returned
+        ``True``; ``None`` when none accepted.
+    """
+    for label, accepts in forms:
+        if accepts():
+            return label
+    return None
