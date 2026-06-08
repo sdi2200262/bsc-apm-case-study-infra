@@ -5,7 +5,7 @@
 Grades a participant's ``eclass-mcp-server`` patch against the testing
 environment and writes a JSON results report scored against the rubric.
 The work is split across three subpackages:
-- ``environment``: testing-environment preflight, reset, provisioning,
+- ``environment``: grading-environment preflight, reset, provisioning,
   and the Python/C builds.
 - ``protocol``: the per-group test aggregators and the JSON-RPC client
   that drives the participant's MCP server.

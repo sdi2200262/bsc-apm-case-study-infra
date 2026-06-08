@@ -3,7 +3,7 @@
 Black-box testing suite for evaluating participant submissions
 against the pinned `eclass-mcp-server` baseline. The grader applies
 a participant's patch on a fresh test branch, runs the rubric
-checks against a separately-installed testing environment, and
+checks against a separately-installed grading environment, and
 writes a JSON results artefact the pipeline promotes into the
 dataset.
 
@@ -15,7 +15,7 @@ rubric of 90 atomic rows: 30 points to the Python implementation and
 every row and its points, the baseline-versus-feature split, and the
 per-section budget the grader asserts at import.
 
-The participant testing environment is shipped separately by the
+The participant workspace is shipped separately by the
 [`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task)
 repository; the grader probes its endpoints, invokes its reset script,
 and spawns participant MCP servers under environment variables
@@ -28,7 +28,7 @@ derived from its install prefix.
 **Required software.**
 
 - Python 3.12 or newer with `uv` on `PATH`.
-- Docker Engine plus Compose v2 (consumed by the testing environment).
+- Docker Engine plus Compose v2 (consumed by the grading environment).
 - Git.
 
 **Required for the C tests.**
@@ -54,19 +54,19 @@ package recommends to participants; the apt line covers the
 remaining system dependencies. On non-Ubuntu hosts substitute the
 equivalent package set.
 
-## Testing environment
+## Grading environment
 
 The `bsc-apm-case-study-task` repository ships per-architecture release
 tarballs (amd64 and arm64); install instructions, lifecycle scripts,
 and seed documentation live in that repository's
 [INSTALL.md](https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/docs/INSTALL.md).
-The grader expects the testing environment to be installed and
+The grader expects the grading environment to be installed and
 running before it is invoked.
 
 ## Quick start
 
 ```bash
-# Bring the testing environment up (one-time install plus scripts/up;
+# Bring the grading environment up (one-time install plus scripts/up;
 # see the env package's INSTALL.md for the per-arch download).
 ~/.bsc-apm/install
 ~/.bsc-apm/scripts/up
@@ -107,7 +107,7 @@ seed back to its baseline, then runs each rubric group in turn:
 5. Python course-announcements group (P.2.1 through P.2.9).
 6. Python general-announcements group (P.3.1 through P.3.7).
 7. C compile (`make c-server`, scored as C.1.1). C.1.1 is the sole hard gate: on fail every other C row is skip-recorded and the run proceeds to reporting.
-8. C tech-stack verification (`ldd` whitelist): C.1.2 libcurl, C.1.3 libxml2, C.1.4 no-JSON-library (no cascade from any of these).
+8. C stack verification (`ldd`): C.1.2 requires libcurl present, C.1.3 requires libxml2 present, C.1.4 requires no JSON-parsing library; transitive dependencies are otherwise unrestricted (no cascade from any of these).
 9. C configuration-surface probes: C.1.5 env-var surface, C.1.6 verbatim documented `.env` surface (no cascade; restores dual-provisioned state after).
 10. C baseline group (C.2.1 through C.2.12). C.2.3 through C.2.12 each also record a `.mem` sub-assertion scored only when the functional assertion passes.
 11. C course-announcements group (C.3.1 through C.3.9), each with a `.mem` sub-assertion.
@@ -146,8 +146,8 @@ results JSON on the verdicts, not by byte diff.
 | Component | Pinned at |
 |---|---|
 | `eclass-mcp-server` | commit `dbd2d16` on the `main` branch |
-| Testing environment (amd64) | `bsc-apm-case-study-task` release tag |
-| Testing environment (arm64) | `bsc-apm-case-study-task-arm64` release tag |
+| Grading environment (amd64) | `bsc-apm-case-study-task` release tag |
+| Grading environment (arm64) | `bsc-apm-case-study-task-arm64` release tag |
 
 ## Directory structure
 
@@ -164,7 +164,7 @@ grader/
 ├── SCORING.md
 ├── environment/                       # sandbox-preparation layer
 │   ├── __init__.py
-│   ├── preflight.py                   # HTTP probes against the testing environment
+│   ├── preflight.py                   # HTTP probes against the grading environment
 │   ├── reset.py                       # subprocess invocation of scripts/reset
 │   ├── patch.py                       # git apply / cleanup
 │   ├── provision.py                   # verbatim .env + certs/ provisioning from mock-root
@@ -204,7 +204,7 @@ grader/
 ## Related
 
 - [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task):
-  the participant testing environment and task specification the grader runs against.
+  the participant workspace and task specification the grader runs against.
 - [../parser/](../parser/): transcript parser for participant
   Claude Code session logs.
 - [../pipeline/](../pipeline/): submission processing pipeline

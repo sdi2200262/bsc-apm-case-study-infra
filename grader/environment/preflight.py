@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Pre-flight HTTP probes against the testing environment.
+"""Pre-flight HTTP probes against the grading environment.
 
-The grader runs against a separately-installed testing environment
+The grader runs against a separately-installed grading environment
 that provides the openeclass instance and the mock CAS service.
 Before any protocol test runs, the pre-flight check verifies that
 both services respond on their localhost ports. The probes are
@@ -28,7 +28,7 @@ PROBE_TIMEOUT_SECONDS = 5
 
 
 def run_preflight() -> None:
-    """Probe the testing environment's HTTP endpoints.
+    """Probe the grading environment's HTTP endpoints.
 
     Issues GET requests against both the openeclass landing page
     and the mock CAS health endpoint. Either service unreachable
@@ -65,7 +65,7 @@ def _probe(url: str, service: str, *, verify: bool) -> None:
     except requests.RequestException as error:
         raise PreflightError(
             f"{service} not reachable at {url}: {error}; "
-            "is the testing environment running? "
+            "is the grading environment running? "
             "see <mock-root>/scripts/up and <mock-root>/scripts/status"
         ) from error
     if not 200 <= response.status_code < 300:

@@ -35,7 +35,7 @@ LOGIN_FAIL: tuple[bool, str, str] = (
 TOOL_FAIL: tuple[bool, str, str] = (
     False,
     "server did not respond to the tool call",
-    "scoring tool call returned no response",
+    "tool call returned no response",
 )
 
 

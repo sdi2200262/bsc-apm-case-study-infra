@@ -31,7 +31,7 @@ def eclass_config_pairs(mock_root: Path) -> dict[str, str]:
     ``tls_trust_env``.
 
     Args:
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
 
     Returns:
         Mapping of ``ECLASS_*`` configuration keys to values.
@@ -54,7 +54,7 @@ def tls_trust_env(mock_root: Path) -> dict[str, str]:
     participant-documented configuration surface.
 
     Args:
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
 
     Returns:
         Mapping of TLS trust-anchor environment variables.
@@ -76,7 +76,7 @@ def mcp_server_env(mock_root: Path) -> dict[str, str]:
     fully configured via environment variables alone.
 
     Args:
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
 
     Returns:
         Mapping suitable for ``env_vars`` on a ``TestContext``.

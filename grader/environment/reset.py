@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Subprocess invocation of the testing environment's reset script.
+"""Subprocess invocation of the grading environment's reset script.
 
 The grader calls ``<mock-root>/scripts/reset`` once at the start
 of each grading run to guarantee a deterministic starting state:
@@ -25,10 +25,10 @@ RESET_TIMEOUT_SECONDS = 300
 
 
 def run_reset(mock_root: Path) -> None:
-    """Run the testing environment's reset script.
+    """Run the grading environment's reset script.
 
     Args:
-        mock_root: Resolved path to the testing environment install.
+        mock_root: Resolved path to the grading environment install.
 
     Raises:
         ResetError: When the script does not exist at
@@ -40,7 +40,7 @@ def run_reset(mock_root: Path) -> None:
     if not script.exists():
         raise ResetError(
             f"reset script not found at {script}; "
-            "is mock_root pointing at a valid testing environment install?"
+            "is mock_root pointing at a valid grading environment install?"
         )
     try:
         result = subprocess.run(

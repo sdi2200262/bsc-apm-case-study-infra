@@ -51,8 +51,8 @@ def check_tools_list(
 
     The contract split lives in
     ``grader.protocol.matching.match_tools_list``; this row
-    propagates its ``mode`` so a presence-only acceptance surfaces
-    in the WARNINGS block.
+    propagates its ``mode`` so a presence-only acceptance routes to
+    a REVIEW notice.
     """
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL

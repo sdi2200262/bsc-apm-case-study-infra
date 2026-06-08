@@ -149,7 +149,7 @@ def run_scenario(
     Args:
         scenario: Scenario to drive.
         eclass_root: Resolved path to the eclass-mcp-server checkout.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
 
     Returns:
         Tuple of ``(ok, summary, detail)``. ``ok`` is ``True`` only

@@ -2,7 +2,7 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Single-source ``.env`` reader shared by provisioning and the runner.
 
-Both config surfaces derive from the testing environment's own
+Both config surfaces derive from the grading environment's own
 ``<mock_root>/.env``: provisioning copies it verbatim, env-var
 injection parses it, so neither is hand-maintained. A leaf module
 (no intra-package imports) so ``provision`` and ``protocol.runner``

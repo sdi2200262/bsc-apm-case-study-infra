@@ -31,7 +31,7 @@ class GraderConfigError(GraderError):
 
 
 class PreflightError(GraderError):
-    """Raised when the testing environment is not reachable or healthy.
+    """Raised when the grading environment is not reachable or healthy.
 
     A pre-flight HTTP probe to the openeclass or mock CAS endpoint
     returned a non-2xx status, timed out, or could not connect.
@@ -40,7 +40,7 @@ class PreflightError(GraderError):
 
 
 class ResetError(GraderError):
-    """Raised when the testing environment's reset script fails.
+    """Raised when the grading environment's reset script fails.
 
     The script either could not be found at
     ``<mock-root>/scripts/reset`` or returned a non-zero exit code.

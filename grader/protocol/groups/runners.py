@@ -157,7 +157,7 @@ def run_c_baseline(
 
     Args:
         eclass_dir: Resolved eclass-mcp-server checkout path.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
         passed_tests: Unused; accepted so every C group entry takes a
             uniform call shape.
@@ -190,7 +190,7 @@ def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> Grou
 
     Args:
         eclass_dir: Resolved eclass-mcp-server checkout path.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
 
     Returns:
@@ -257,7 +257,7 @@ def run_c_memory(
 
     Args:
         eclass_dir: Resolved eclass-mcp-server checkout path.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
         debug: Unused; valgrind output is captured into the result detail.
         passed_tests: Rubric identifiers that have already passed this run.
 
@@ -304,7 +304,7 @@ def _run_rows(
         impl: ``"python"`` or ``"c"``.
         tests: The ordered ``(rubric_id, test)`` table for the group.
         eclass_dir: Resolved eclass-mcp-server checkout path.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
         instant: The per-run seed instant for announcement rows, or
             ``None`` for baseline rows whose tests take no instant.

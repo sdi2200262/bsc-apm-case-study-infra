@@ -2,7 +2,7 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Grader CLI entry point: grade one participant patch end to end.
 
-Parses arguments, resolves the testing-environment and eclass paths,
+Parses arguments, resolves the grading-environment and eclass paths,
 runs the preflight and reset, applies the participant's patch (or skips
 it in baseline mode), sequences the Python and C group modules, writes
 the JSON report beside the eclass-mcp-server checkout, and prints the
@@ -124,11 +124,11 @@ def _run(args: argparse.Namespace) -> int:
 
     _install_cleanup_signal_handlers(eclass_root)
 
-    log.info("preflight: probing testing environment endpoints")
+    log.info("preflight: probing grading environment endpoints")
     preflight.run_preflight()
     log.info("preflight: passed")
 
-    log.info("reset: running testing environment reset")
+    log.info("reset: running grading environment reset")
     reset.run_reset(mock_root)
     log.info("reset: complete")
 
@@ -158,7 +158,7 @@ def _run(args: argparse.Namespace) -> int:
     try:
         provision.provision(eclass_root, mock_root)
         log.info(
-            "provision: testing environment .env and certs/ copied "
+            "provision: grading environment .env and certs/ copied "
             "verbatim into the checkout"
         )
     except provision.ProvisioningError as error:
@@ -212,11 +212,11 @@ def _run_c_groups(
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run C compile, tech-stack, config surfaces, then protocol groups.
+    """Run C compile, stack, config surfaces, then protocol groups.
 
     C.1.1 compile is the sole hard gate: on fail every other C row
     (including all ``.mem`` and C.5 rows) is skip-recorded and the
-    function returns. The tech-stack (C.1.2/C.1.3/C.1.4) and config-
+    function returns. The stack (C.1.2/C.1.3/C.1.4) and config-
     surface (C.1.5/C.1.6) groups run independently with no cascade.
     Per-scenario ``.mem`` sub-assertions ride each C functional run.
     The multi-step memory group runs last, gated on its composed
@@ -309,7 +309,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build the argparse parser for the grader CLI."""
     parser = argparse.ArgumentParser(
         prog="python -m grader",
-        description="Grade participant submissions against the testing environment.",
+        description="Grade participant submissions against the grading environment.",
     )
     parser.add_argument(
         "patch_file",
@@ -348,7 +348,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--mock-root",
         type=Path,
         default=None,
-        help="path to the testing environment install (overrides grader.yaml)",
+        help="path to the grading environment install (overrides grader.yaml)",
     )
     return parser
 

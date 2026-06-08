@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""C build and tech-stack verification for the eclass-mcp-server's c-replica.
+"""C build and stack verification for the eclass-mcp-server's c-replica.
 
 The C replica lives at ``<eclass-root>/c-replica/`` and ships a
 Makefile whose ``c-server`` target builds the ``server`` binary.
@@ -147,7 +147,7 @@ def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
 
 
 def verify_stack(eclass_root: Path) -> dict[str, tuple[bool, str, str]]:
-    """Verify the c-replica binary's dynamic-link tech stack.
+    """Verify the c-replica binary's dynamic-link stack.
 
     Runs ``ldd`` once and derives three independently-scored verdicts:
 

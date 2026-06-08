@@ -12,8 +12,8 @@ grading run. Two tags are in use:
 
 ``collect_notices`` is the sole aggregator. It reads the populated
 ``Scorer`` and returns a tuple of notices in the canonical order: all
-REVIEW notices first, then all WARNING notices, each group in check
-order (the order tests are registered in the rubric). The shared
+REVIEW notices first, then all WARNING notices, each group in
+recording order (the order the rows were run and recorded). The shared
 rendering of that tuple to the terminal lives in the logging module
 (``grader.log.notice_block``); this module owns the notice content,
 not its presentation.
@@ -83,8 +83,8 @@ class Notice:
 def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
     """Aggregate all review and warning notices for a grading run.
 
-    Iterates the scorer's results in check order (the order tests are
-    registered in the rubric). REVIEW notices are collected first,
+    Iterates the scorer's results in recording order (the order the
+    rows were run and recorded). REVIEW notices are collected first,
     then WARNING notices, so the returned tuple always has all REVIEW
     entries before all WARNING entries within the group ordering.
 
@@ -94,7 +94,7 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
 
     Returns:
         A tuple of ``Notice`` objects, REVIEW notices before
-        WARNING notices, each group in check order.
+        WARNING notices, each group in recording order.
     """
     review: list[Notice] = []
     warning: list[Notice] = []

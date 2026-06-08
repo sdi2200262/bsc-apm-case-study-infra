@@ -9,8 +9,8 @@ announcement date is the seed-apply instant (the day-0 row); the
 expected date strings are constructed from it. The value is read as
 the literal stored ``DATETIME`` and parsed without a timezone
 conversion, because the server renders that same stored wall-clock;
-routing through a Unix epoch would shift it by any offset between
-the database and the host.
+converting it to an absolute timestamp and back would shift it by any
+offset between the database and the host.
 
 This module owns the single call that reads the seed instant from the
 grading environment's MariaDB container. The instant is read once per

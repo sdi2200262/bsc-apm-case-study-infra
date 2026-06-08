@@ -3,7 +3,7 @@
 """Deterministic dev-environment provisioning for the patched checkout.
 
 Replicates the documented local-development wiring by copying the
-testing environment's own ``<mock_root>/.env`` and ``<mock_root>/
+grading environment's own ``<mock_root>/.env`` and ``<mock_root>/
 certs/`` verbatim into the eclass checkout, single-sourced rather
 than reconstructed. Runs after a successful patch apply (which also
 avoids a ``git apply --check`` collision with a pre-created
@@ -35,17 +35,17 @@ CREDENTIAL_KEYS = ("ECLASS_USERNAME", "ECLASS_PASSWORD")
 class ProvisioningError(GraderError):
     """Raised when dev-environment provisioning cannot complete.
 
-    Triggered when the testing environment install is incomplete
+    Triggered when the grading environment install is incomplete
     (its ``.env`` or its ``certs/`` is absent); the message names
     the missing path and the operator action that resolves it.
     """
 
 
 def check_provisioning_sources(mock_root: Path) -> None:
-    """Verify the testing environment carries the artefacts to copy, before any copy.
+    """Verify the grading environment carries the artefacts to copy, before any copy.
 
     Args:
-        mock_root: Resolved testing-environment install path.
+        mock_root: Resolved grading-environment install path.
 
     Raises:
         ProvisioningError: When ``<mock_root>/.env`` or
@@ -56,7 +56,7 @@ def check_provisioning_sources(mock_root: Path) -> None:
     cert_source = mock_root / CERTS_DIRNAME / SSO_CERT_FILENAME
     if not dotenv_source.is_file() or not cert_source.is_file():
         raise ProvisioningError(
-            f"testing environment at {mock_root} is missing .env or "
+            f"grading environment at {mock_root} is missing .env or "
             "certs/sso_cert.pem; install the bsc-apm testing env first"
         )
 
@@ -66,10 +66,10 @@ def provision(eclass_root: Path, mock_root: Path) -> None:
 
     Args:
         eclass_root: Resolved patched eclass-mcp-server checkout path.
-        mock_root: Resolved testing-environment install path.
+        mock_root: Resolved grading-environment install path.
 
     Raises:
-        ProvisioningError: When the testing environment lacks its
+        ProvisioningError: When the grading environment lacks its
             ``.env`` or authoritative certificate.
     """
     check_provisioning_sources(mock_root)
@@ -82,7 +82,7 @@ def write_dotenv(eclass_root: Path, mock_root: Path) -> Path:
 
     Args:
         eclass_root: Resolved patched eclass-mcp-server checkout path.
-        mock_root: Resolved testing-environment install path (single source).
+        mock_root: Resolved grading-environment install path (single source).
 
     Returns:
         The path of the ``.env`` file written.
@@ -106,7 +106,7 @@ def install_sso_cert(eclass_root: Path, mock_root: Path) -> Path:
 
     Args:
         eclass_root: Resolved patched eclass-mcp-server checkout path.
-        mock_root: Resolved testing-environment install path.
+        mock_root: Resolved grading-environment install path.
 
     Returns:
         The destination ``certs/`` directory path.
@@ -119,7 +119,7 @@ def install_sso_cert(eclass_root: Path, mock_root: Path) -> Path:
     source = mock_root / CERTS_DIRNAME
     if not source.is_dir():
         raise ProvisioningError(
-            f"testing environment at {mock_root} is missing the certs/ "
+            f"grading environment at {mock_root} is missing the certs/ "
             "directory; install the bsc-apm testing env first"
         )
     destination = eclass_root / CERTS_DIRNAME

@@ -391,7 +391,7 @@ def spawn_server(
     Args:
         impl: Implementation under test.
         eclass_dir: Resolved eclass-mcp-server path.
-        mock_root: Resolved testing environment path.
+        mock_root: Resolved grading environment path.
         debug: Whether to echo server stdio.
         env_overrides: Optional credential / credential-state
             overrides. A non-empty principal here is written to

@@ -25,7 +25,7 @@ evaluated in order through ``_try_forms``: each matcher supplies its own
 per-form predicates while the dispatch (try in order, label the first match)
 lives in one place. Each pair has a faithful first form and a lenient second
 form; the lenient forms are collected in ``LENIENT_MODES``, which
-``grader.scoring.reporting`` imports to warn a human, at end of grading, of
+``grader.scoring.notices`` imports to warn a human, at end of grading, of
 every row accepted only via a lenient form. The announcement two-form
 matcher lives in ``announcement_matching``, which imports the mode constants
 and the shared dispatch from this module.
@@ -85,7 +85,7 @@ MISSING_CREDS_DOCUMENTED = "missing-creds-documented"
 # ``match_tools_list`` for the contract split.
 DESCRIPTION_PRESENCE_ONLY = "description-presence-only"
 
-# The lenient (second) accepted forms. ``reporting`` imports this
+# The lenient (second) accepted forms. ``notices`` imports this
 # single set to detect, at end of grading, every row accepted only
 # via a lenient form and warn a human to review it. Adding a future
 # lenient form requires only extending this constant.
@@ -186,7 +186,7 @@ def match_get_courses(
     for the openeclass-formatted layout, ``GET_COURSES_DOCUMENTED``
     for the documented-clean layout. The documented-clean layout is a
     lenient acceptance and is warned for human review at end of
-    grading (see ``grader.scoring.reporting``).
+    grading (see ``grader.scoring.notices``).
 
     Args:
         text: The tool's response text.
@@ -262,7 +262,7 @@ def match_initialize(actual_result: dict) -> str | None:
     ``CAP_FAITHFUL``; the documented form (what the wire-protocol
     reference literally specifies) yields ``CAP_DOCUMENTED``. The
     documented form is a lenient acceptance and is warned for human
-    review at end of grading (see ``grader.scoring.reporting``). Only
+    review at end of grading (see ``grader.scoring.notices``). Only
     these three fields are the contract; an ``initialize`` result
     may carry further fields (an ``instructions`` string, SDK
     metadata) and those are outside the row's contract and ignored.

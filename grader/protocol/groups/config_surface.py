@@ -3,7 +3,7 @@
 """Configuration-surface assertions for the C replica: C.1.5 and C.1.6.
 
 C.1.5 spawns the server with no ``.env`` on disk and only the
-``ECLASS_*`` values (parsed from the testing environment's own
+``ECLASS_*`` values (parsed from the grading environment's own
 ``.env``) plus the grader-side TLS anchors in the environment.
 C.1.6 provisions the verbatim documented ``.env`` and ``certs/``
 and places no ``ECLASS_*`` and no TLS variables in the environment.
@@ -65,7 +65,7 @@ def check_env_var_config_surface(
 
     Args:
         eclass_dir: Resolved eclass-mcp-server checkout path.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
 
     Returns:
@@ -83,7 +83,7 @@ def check_dotenv_config_surface(
 ) -> tuple[bool, str, str]:
     """C.1.6: server handshakes and logs in via the verbatim ``.env``.
 
-    The testing environment's own ``.env`` and its ``certs/``
+    The grading environment's own ``.env`` and its ``certs/``
     directory are copied verbatim into the checkout. No ``ECLASS_*``
     and no TLS trust-anchor variables are placed in the process
     environment; the copied ``.env`` carries ``SSL_CERT_FILE`` and
@@ -93,7 +93,7 @@ def check_dotenv_config_surface(
 
     Args:
         eclass_dir: Resolved eclass-mcp-server checkout path.
-        mock_root: Resolved testing environment install path.
+        mock_root: Resolved grading environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
 
     Returns:

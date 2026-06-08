@@ -4,7 +4,7 @@
 
 The grader requires two external paths to function:
 - the eclass root: the eclass-mcp-server clone the patch applies to.
-- the mock root: the testing environment install whose endpoints the
+- the mock root: the grading environment install whose endpoints the
   grader probes and whose reset script it runs between grading runs.
 
 Each path can be supplied via a CLI flag or a ``grader.yaml`` file
@@ -47,7 +47,7 @@ class GraderConfig:
     """Resolved configuration for a grader invocation.
 
     Attributes:
-        mock_root: Path to the testing environment install whose
+        mock_root: Path to the grading environment install whose
             endpoints the grader probes and whose reset script the
             grader invokes between grading runs. ``None`` when not
             configured.
@@ -75,7 +75,7 @@ def resolve_config(
         config_override: Path to a YAML config file. When ``None``,
             the resolver tries ``<search-root>/grader.yaml`` and
             tolerates its absence; when set, the file must exist.
-        mock_root_flag: CLI override for the testing environment
+        mock_root_flag: CLI override for the grading environment
             install path.
         eclass_root_flag: CLI override for the eclass-mcp-server
             clone path.

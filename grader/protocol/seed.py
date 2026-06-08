@@ -9,11 +9,13 @@ are built from. The grader and the grading environment ship in the
 same repository, so this module reads the seed file directly rather
 than a transcribed copy.
 
-The seed carries two users with disjoint enrolment. The grader
+The seed carries two users with disjoint enrolment; the grader
 authenticates as one of them per scenario group (the course and
 baseline suites as ``student_courses``, the general suite as
-``student_general``); a scenario selects its principal and the
-loader answers per-principal enrolment and window queries.
+``student_general``). That authenticated user is the scenario's
+principal: the seeded identity the grader logs in as. A scenario
+selects its principal and the loader answers per-principal enrolment
+and window queries.
 
 Boundary semantics: ``days_back=N`` is an inclusive filter on
 ``days_ago``. An announcement at ``days_ago=K`` is in scope iff
