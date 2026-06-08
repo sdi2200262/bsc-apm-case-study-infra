@@ -80,6 +80,20 @@ SERVER_STARTUP_WAIT_SECONDS = 0.5
 SERVER_SHUTDOWN_WAIT_SECONDS = 2.0
 NOTIFICATION_FLUSH_WAIT_SECONDS = 0.1
 
+# Cold-start readiness handshake. One ``initialize`` is sent, then its
+# reply is awaited across HANDSHAKE_READ_WINDOWS short ``select`` windows,
+# so an exited server is caught between windows by ``poll`` and fails
+# fast. The OS pipe buffers the request, so a warming server reads it
+# without a re-send. Window count times length is the plain-run budget,
+# sized for cold-start headroom above the steady-state
+# REQUEST_TIMEOUT_SECONDS of 10s; under valgrind the budget instead tracks
+# MEMCHECK_REQUEST_TIMEOUT_SECONDS so a valgrind-slowed start is not
+# latched. INITIALIZE_REQUEST_ID is distinct from every steady-state
+# request id, so a late reply is never mis-read as a later response.
+HANDSHAKE_READ_WINDOWS = 6
+HANDSHAKE_WINDOW_SECONDS = 2.5
+INITIALIZE_REQUEST_ID = 1
+
 PROTOCOL_VERSION = "2025-03-26"
 CLIENT_NAME = "grader"
 CLIENT_VERSION = "1.0.0"
@@ -122,9 +136,12 @@ class ServerProcess:
             after ``stop()`` for ``leak_verdict``.
         _proc_exit_code: Exit code recorded at ``stop()`` time; used
             by ``leak_verdict`` to check the error sentinel.
-        _server_unresponsive: Sticky flag set on the first
-            ``send_request`` returning no id-correlated response;
-            later calls short-circuit to ``None`` without the timeout.
+        _server_unresponsive: Sticky flag set when a steady-state
+            ``send_request`` gets no id-correlated response, or when
+            ``initialize_handshake`` exhausts its read budget. Later calls
+            then short-circuit to ``None`` without waiting the timeout.
+            The handshake sets it only on budget exhaustion, never on one
+            elapsed window, so a slow cold start is not latched early.
     """
 
     def __init__(self, ctx: TestContext) -> None:
@@ -320,6 +337,71 @@ class ServerProcess:
             self._server_unresponsive = True
         return response
 
+    def initialize_handshake(self) -> dict | None:
+        """Actively wait for the freshly-spawned server to answer ``initialize``.
+
+        One ``initialize`` is sent; the OS pipe buffers it, so a warming
+        server reads it without a re-send, and re-sending would risk a
+        duplicate reply colliding with a later steady-state request id. The
+        reply is awaited across several short ``select`` windows so an
+        exited server is caught between windows by ``poll`` and fails fast.
+        ``_server_unresponsive`` is set only once the budget is exhausted,
+        not on one elapsed window.
+
+        Returns:
+            The id-correlated ``initialize`` reply, or ``None`` when no
+            reply arrives within the budget, the server has exited, its
+            stdio is closed, or the write failed.
+        """
+        if self.proc is None or self.proc.stdin is None or self.proc.stdout is None:
+            return None
+        request = {
+            "jsonrpc": "2.0",
+            "id": INITIALIZE_REQUEST_ID,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
+            },
+        }
+        try:
+            line = json.dumps(request) + "\n"
+            if self.ctx.debug:
+                log.debug(f"handshake send: {line.strip()}")
+            self.proc.stdin.write(line)
+            self.proc.stdin.flush()
+        except OSError as error:
+            # A broken pipe means the server is gone; waiting cannot help.
+            if self.ctx.debug:
+                log.debug(f"handshake write error: {error}")
+            self._server_unresponsive = True
+            return None
+        # Valgrind cold start is far slower, so the budget tracks the
+        # memcheck timeout instead of the plain one; the window count is
+        # unchanged, each window simply widens.
+        budget = (
+            MEMCHECK_REQUEST_TIMEOUT_SECONDS
+            if self.ctx.memcheck
+            else HANDSHAKE_READ_WINDOWS * HANDSHAKE_WINDOW_SECONDS
+        )
+        window = budget / HANDSHAKE_READ_WINDOWS
+        for _window in range(HANDSHAKE_READ_WINDOWS):
+            response = read_correlated_response(
+                self.proc.stdout,
+                INITIALIZE_REQUEST_ID,
+                window,
+                self.ctx.debug,
+            )
+            if response is not None:
+                return response
+            # No reply this window; stop early if the server exited, else
+            # keep waiting on a still-warming one.
+            if self.proc.poll() is not None:
+                break
+        self._server_unresponsive = True
+        return None
+
     def send_notification(self, notification: dict) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if self.proc is None or self.proc.stdin is None:
@@ -445,17 +527,13 @@ def spawn_server(
 
 
 def initialize_server(server: ServerProcess) -> bool:
-    """Initialise the server; return whether the ``initialize`` handshake succeeded."""
-    response = server.send_request({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {"name": CLIENT_NAME, "version": CLIENT_VERSION},
-        },
-    })
+    """Initialise the server; return whether the ``initialize`` handshake succeeded.
+
+    Uses the active readiness handshake, which sends one ``initialize``
+    and awaits its reply across several short read windows, so a server
+    still warming up is waited out before being declared unresponsive.
+    """
+    response = server.initialize_handshake()
     if response is None or "result" not in response:
         return False
     server.send_notification({
