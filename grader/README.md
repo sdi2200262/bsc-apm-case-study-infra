@@ -10,16 +10,10 @@ dataset.
 ## Overview
 
 The grader scores a participant's submission against a 100-point
-rubric covering 90 atomic rows: 30 points to the Python
-implementation and 70 points to the C replica. The Python
-implementation contributes 11 baseline rows worth 11 points and 16
-feature rows worth 19 points (9 course-announcement rows worth 11
-points plus 7 general-announcement rows worth 8 points, with three
-of those feature rows worth 2 points each). The C replica
-contributes 37 functional and infrastructure rows (6 infra, 12
-baseline, 9 course, 7 general, 3 multi-step memory) plus 26
-per-scenario memory sub-assertions, each sub-assertion awarded only
-when its paired functional scenario passes.
+rubric of 90 atomic rows: 30 points to the Python implementation and
+70 to the C replica. [SCORING.md](SCORING.md) is the rubric itself:
+every row and its points, the baseline-versus-feature split, and the
+per-section budget the grader asserts at import.
 
 The participant testing environment is shipped separately by the
 [`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task)
@@ -33,7 +27,7 @@ derived from its install prefix.
 
 **Required software.**
 
-- Python 3.10 or newer with `uv` on `PATH`.
+- Python 3.12 or newer with `uv` on `PATH`.
 - Docker Engine plus Compose v2 (consumed by the testing environment).
 - Git.
 
@@ -129,74 +123,79 @@ the functional scenario passes AND valgrind exits cleanly with zero
 leaked bytes.
 
 The seed and the `.env`/`certs/` provisioning are separate
-mechanisms: the grader reads the grading environment's own
-`grader-env/seed/seed.yaml` (the same file the environment image is
-built from, in this repository) so the rubric's expected data
-values cannot drift from the environment under test; the
-`.env`/`certs/` copy guards that the participant server's wiring to
-the testing environment is the literal documented wiring.
+mechanisms. The grader reads the grading environment's own
+`grader-env/seed/seed.yaml` (the file the environment image is built
+from) so the rubric's expected values cannot drift from the
+environment under test; the `.env`/`certs/` copy guarantees the
+participant server's wiring is the literal documented wiring.
 
-Phase failures are recorded in the results JSON without halting
-the run. Patch-apply failures, provisioning failures, pre-flight
-failures, and reset failures terminate the run early; every such
-failure prints one actionable line on stderr.
+Phase failures are recorded in the results JSON without halting the
+run. Patch-apply, provisioning, pre-flight, and reset failures
+terminate the run early, each printing one actionable line on stderr.
 
-The scored verdicts in the results JSON are reproducible against
-the pinned references below; the captured `full_output` transcript
-text is not byte-stable across seedings. The testing environment's
-seed writes each announcement date at insert time as the seeding
-wall clock minus the entry's `days_ago`, and the C.1.2 `ldd`
-capture includes loader-assigned load addresses, so two grading
-environments seeded on different days yield identical scores but
-textually divergent transcripts. Compare results JSON on the
-verdicts, not by byte diff.
+The scored verdicts are reproducible against the pinned references
+below, but the captured `full_output` transcript is not byte-stable
+across seedings: the seed writes each announcement date relative to
+the seeding wall clock, and the C.1.2 `ldd` capture includes
+loader-assigned addresses, so two environments seeded on different
+days score identically but produce divergent transcripts. Compare
+results JSON on the verdicts, not by byte diff.
 
 ## Pinned references
 
 | Component | Pinned at |
 |---|---|
 | `eclass-mcp-server` | commit `dbd2d16` on the `main` branch |
-| Testing environment (amd64) | `bsc-apm-case-study-task` release tag `bsc-apm-case-study-task` |
-| Testing environment (arm64) | `bsc-apm-case-study-task` release tag `bsc-apm-case-study-task-arm64` |
+| Testing environment (amd64) | `bsc-apm-case-study-task` release tag |
+| Testing environment (arm64) | `bsc-apm-case-study-task-arm64` release tag |
 
 ## Directory structure
 
 ```
 grader/
 ├── __init__.py
-├── __main__.py                       # CLI entry: python -m grader
-├── inspect.py                        # results browser
-├── notes.py                          # CLI entry: python -m grader.notes
+├── __main__.py                        # CLI entry: python -m grader
+├── inspect.py                         # one-shot results browser (./inspect.py)
+├── notes.py                           # CLI entry: python -m grader.notes
+├── log.py                             # terminal-output routing (all human output)
+├── config.py                          # path resolution from CLI flags or grader.yaml
+├── errors.py                          # GraderError hierarchy
 ├── README.md
-└── src/
+├── SCORING.md
+├── environment/                       # sandbox-preparation layer
+│   ├── __init__.py
+│   ├── preflight.py                   # HTTP probes against the testing environment
+│   ├── reset.py                       # subprocess invocation of scripts/reset
+│   ├── patch.py                       # git apply / cleanup
+│   ├── provision.py                   # verbatim .env + certs/ provisioning from mock-root
+│   ├── env_file.py                    # single-source .env parser (provision + runner)
+│   ├── build_python.py                # uv sync for the Python implementation
+│   └── build_c.py                     # C.1.1 compile and C.1.2 to C.1.4 stack verification
+├── protocol/                          # MCP engine, oracle, assertion suites, aggregation
+│   ├── __init__.py
+│   ├── runner.py                      # server spawn, JSON-RPC framing, fixtures
+│   ├── _jsonrpc_io.py                 # line-level JSON-RPC stdio reads
+│   ├── _schema_validation.py          # tools/call argument validation against inputSchema
+│   ├── _memcheck.py                   # valgrind stderr parsing helpers
+│   ├── _assertion_support.py          # shared scenario scaffolding + .mem-recording helper
+│   ├── server_env.py                  # spawned-server environment block (from <mock-root>/.env)
+│   ├── calibration.py                 # per-run seed-apply instant from MariaDB
+│   ├── seed.py                        # grader-env seed loader and per-principal/window helpers
+│   ├── expected.py                    # expected response strings and the constructed handshake contract
+│   ├── matching.py                    # acceptance policy (byte-exact, whitespace-normalised, two-form)
+│   ├── announcement_matching.py       # announcement parsing and date canonicalisation
+│   ├── baseline_tests.py              # P.1 / C.2 assertions
+│   ├── frame_tests.py                 # tools/list and C initialize-frame assertions
+│   ├── course_announcements_tests.py  # P.2 / C.3 assertions
+│   ├── general_announcements_tests.py # P.3 / C.4 assertions
+│   ├── memory_tests.py                # C.5 multi-step scenarios under valgrind
+│   ├── config_surface.py              # C.1.5 / C.1.6 surface-isolated probes
+│   └── phases.py                      # per-(implementation, phase) aggregation entries
+└── scoring/                           # scoring + output layer
     ├── __init__.py
-    ├── config.py                     # path resolution from CLI flags or grader.yaml
-    ├── errors.py                     # GraderError hierarchy
-    ├── preflight.py                  # HTTP probes against the testing environment
-    ├── reset.py                      # subprocess invocation of scripts/reset
-    ├── patch.py                      # git apply / cleanup
-    ├── env_file.py                   # single-source .env parser (provision + runner)
-    ├── provision.py                  # verbatim .env + certs/ provisioning from mock-root
-    ├── build_python.py               # uv sync for the Python implementation
-    ├── build_c.py                    # C.1.1 compile and C.1.2/C.1.3/C.1.4 stack verification
-    ├── seed.py                       # grader-env seed loader and per-principal/window helpers
-    ├── scoring.py                    # rubric definitions and the Scorer
-    ├── reporting.py                  # JSON, text, and console writers
-    └── protocol/
-        ├── __init__.py
-        ├── runner.py                       # server spawn, JSON-RPC framing, schema-gated tools/call
-        ├── server_env.py                   # spawned-server environment block (single-sourced from <mock-root>/.env)
-        ├── _memcheck.py                    # valgrind stderr parsing helpers
-        ├── _assertion_support.py           # shared scenario scaffolding + .mem-recording helper
-        ├── calibration.py                  # per-run seed-apply instant from MariaDB
-        ├── expected.py                     # expected response strings and the constructed handshake contract
-        ├── matching.py                     # acceptance policy (byte-exact, whitespace-normalised, two-form)
-        ├── baseline_tests.py               # P.1 / C.2 assertions
-        ├── course_announcements_tests.py   # P.2 / C.3 assertions
-        ├── general_announcements_tests.py  # P.3 / C.4 assertions
-        ├── config_surface.py               # C.1.5 / C.1.6 surface-isolated probes
-        ├── memory_tests.py                 # C.5 multi-step scenarios under valgrind
-        └── phases.py                       # per-(implementation, phase) aggregation entries
+    ├── scoring.py                     # rubric definitions and the Scorer
+    ├── reporting.py                   # JSON and console report writers
+    └── notices.py                     # REVIEW/WARNING notice policy
 ```
 
 ## Related

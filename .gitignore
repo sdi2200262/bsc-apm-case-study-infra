@@ -16,6 +16,9 @@ venv/
 # Release-prep output
 release/
 
+# Local forensic bug log; kept on disk, never shipped
+grader/BUG.md
+
 # Editor and OS noise
 .vscode/
 .idea/

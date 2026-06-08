@@ -1,137 +1,154 @@
 # Scoring Rubric
 
 Total: 100 points across 90 atomic rows. The Python implementation
-contributes 30 points across 27 rows; the C replica contributes 70
-points across 63 rows (37 functional/infrastructure rows plus 26
-per-scenario memory sub-assertions). The grader (`grader/scoring/scoring.py`)
-declares every row and asserts the tier budget at import; a numeric
-drift between this document and the code is a bug in this document.
+holds 30 points across 27 rows; the C replica holds 70 across 63
+rows, of which 37 are functional or infrastructure rows and 26 are
+per-scenario memory sub-assertions. [scoring/scoring.py](scoring/scoring.py)
+declares every row and asserts this per-section budget at import; a
+numeric drift between this document and the code is a bug in this
+document.
 
 The grader is a JSON-RPC black box: it observes only the `text`
 content of each tool response and the dynamic-link stack of the C
-binary. It does not read the participant's source.
+binary, never the participant's source. Every row tests a behaviour
+[PRD §2] specifies for the two announcement tools, or an
+inherited-tool contract the PRD requires the deliverables to
+reproduce and delegates to the `eclass-mcp-server` reference docs, per
+[PRD §1] and [PRD §3]. [PRD §5] checks its acceptance criteria
+verbatim, failing validation on any deviation in punctuation,
+wording, or whitespace, so byte-exact matching is the default. The
+grader relaxes it only where the PRD leaves a rendering open or the
+referenced material disagrees with the upstream source it describes,
+and flags every relaxed acceptance for human review.
 
 ## Assertion model
 
 Every announcement and `get_courses` response, every error string,
-and every empty-window response is asserted against a full
-constructed string. There are no substring matches.
+and every empty-window response is matched against a full constructed
+string; there are no substring matches. Fixed-string rows (errors
+and empty-window responses) match under one of two strictness modes,
+recorded as the row's diagnostic
+([protocol/matching.py](protocol/matching.py)):
 
-Two strictness modes apply to the fixed-string rows (errors and
-empty-window responses):
+- `byte-exact`: the response equals the constructed string byte for
+  byte.
+- `whitespace-normalized`: the two match after the non-breaking space
+  family (U+00A0, U+2007, U+2009, U+202F) is mapped to an ASCII space
+  on both sides. The platform's locale renderer emits U+202F before
+  the meridiem in dates and the PRD treats normalised whitespace as
+  equivalent, so this mode records that the acceptance relied on that
+  rule.
 
-- `byte-exact`: the response equals the constructed expected string
-  byte for byte.
-- `whitespace-normalized`: the response equals the constructed
-  expected string after the non-breaking space family (U+00A0,
-  U+2007, U+2009, U+202F) is mapped to an ASCII space on both sides.
-  The participant testing environment renders dates with U+202F
-  before the meridiem under recent CLDR; the PRD's whitespace rule
-  treats normalised whitespace as equivalent, so this mode records
-  that the acceptance relied on that rule.
+The announcement success rows are not fixed strings. [PRD §2] fixes
+the announcement content and the recency filter, [PRD §4] leaves the
+date *rendering* locale-specific, and the PRD pins no presentation
+order, so the matcher in
+[protocol/announcement_matching.py](protocol/announcement_matching.py)
+canonicalises each `Date:` line to a calendar date, normalises the
+surrounding text, and accepts either form:
 
-Two acceptance forms apply to the announcement success rows and to
-`get_courses`, because the PRD specifies the response format and
-content but not a presentation order or a single layout:
+- `announcements-ordered`: the openeclass-derived entries in
+  date-descending order.
+- `announcements-unordered`: the same entry multiset and count, with
+  sequence and per-entry index not enforced. This is a lenient form;
+  see Review and warning flags.
 
-- Announcements (per-course and general):
-  - Form 1 `announcements-ordered`: the response equals the
-    openeclass-derived ordered string (per-course rows ordered
-    date-descending; general rows ordered across the system-wide and
-    enrolled-course union, newest first) under
-    `whitespace-normalized`.
-  - Form 2 `announcements-unordered`: the response parses by the
-    PRD's announcement grammar into the same multiset of byte-exact
-    entries (after whitespace normalisation) with the same count, but
-    the sequence and the per-entry index number are not enforced.
-- `get_courses`:
-  - Form 1 `get-courses-faithful`: the openeclass-formatted layout
-    (a course title followed by the openeclass-version-specific
-    layout glue and the `(code)` suffix).
-  - Form 2 `get-courses-documented`: the documented-clean layout per
-    `tools-reference.md` (the bare course title).
-- Missing-credentials error (C.2.7):
-  - Form 1 `missing-creds-faithful`: the two-sentence error the
-    Python reference emits verbatim (`Error:` prefix, the `.env`
-    requirement sentence followed by the `ECLASS_USERNAME` /
-    `ECLASS_PASSWORD` instruction sentence).
-  - Form 2 `missing-creds-documented`: the one-sentence form the
-    reference doc documents (`Error:` prefix and the single
-    `Username and password must be provided in the .env file`
-    message, no second sentence). Accepted for the C replica only.
+Three further rows accept two forms because the material the PRD
+points at disagrees with the upstream source it describes; the grader
+takes either the doc-faithful or the source-faithful reading.
+[protocol/expected.py](protocol/expected.py) constructs both forms
+per row and [protocol/matching.py](protocol/matching.py) records
+which matched:
 
-The `initialize` row (C.2.1) follows the same two-form pattern, with
-byte-exact `protocolVersion` and `serverInfo` plus one of two
-accepted `capabilities` objects:
+- `get_courses`. `get-courses-faithful` is the openeclass layout glue
+  and `(code)` suffix the reference server reproduces;
+  `get-courses-documented` is the clean bare title
+  `tools-reference.md` documents.
+- Missing credentials, C.2.7. `missing-creds-faithful` is the Python
+  reference's two-sentence error; `missing-creds-documented` is the
+  one-sentence form the reference doc documents.
+- `initialize` capabilities, C.2.1. `capabilities-faithful` is the
+  object the MCP SDK serialises for a tools-only server;
+  `capabilities-documented` is the object
+  `eclass-mcp-server/docs/reference/wire-protocol.md` documents.
 
-- Form 1 `capabilities-faithful`: the object the MCP SDK serialises
-  for a low-level tools-only server.
-- Form 2 `capabilities-documented`: the object the project's
-  wire-protocol reference (`eclass-mcp-server/docs/reference/
-  wire-protocol.md`) literally documents.
+The `tools/list` row, checked at P.1.1 and C.2.2, advertises exactly
+the six tools, order-insensitive, with none missing or extra and
+every entry a JSON object carrying a string `name`. Each tool's
+`name` and `inputSchema` are byte-exact: the four baseline tools
+against the wire-protocol reference, the two announcement tools
+against the schemas [PRD §2] prints verbatim. The `description` field
+is byte-exact for the four baseline tools, whose wording is the
+inherited reference contract; the PRD specifies no tool-level
+description for the two announcement tools, so theirs is accepted as
+any non-empty string and recorded as `description-presence-only`, a
+lenient form.
 
-The two differ; both are accepted because a participant who uses
-the SDK ends up at the faithful shape and a participant who reads
-the wire-protocol reference and transcribes it ends up at the
-documented shape.
+The `initialize` frame at C.2.1 matches `protocolVersion` and
+`serverInfo` byte-exact before the two-form capabilities check above.
 
-The accepted form is recorded as the row's diagnostic. The lenient
-second form in each pair (`announcements-unordered`,
-`get-courses-documented`, `capabilities-documented`,
-`missing-creds-documented`) prints a WARNINGS line to stdout at the
-end of grading that names the row and shows its response, prompting
-the operator to review the row and decide any manual deduction
-recorded in `results_notes.yaml`. The Python reference accepts only
-the openeclass-derived forms for the announcement and `get_courses`
-rows and the two-sentence form for the missing-credentials row; the
-C replica accepts either, because both are legitimate readings of
-the published task materials.
+## Review and warning flags
 
-The `tools/list` row (P.1.1 / C.2.2) is one byte-exact contract for
-both implementations: every tool object's `name`, `description`, and
-`inputSchema` must equal the constructed expected values byte for
-byte, order-insensitive, with no extra tools, and every advertised
-entry itself must be a JSON object with a string `name`. Per-tool
-divergence (an extra schema keyword, a regenerated description, a
-different serialised shape, a non-object entry) fails this row.
+[scoring/notices.py](scoring/notices.py) prints human-review flags
+after the scores, in two categories:
 
-The handshake rows (P.1.1, C.2.1, C.2.2) compare against
-SDK-emitted serialisation. A failure here may reflect a participant
-defect OR an SDK behavioural change since the expected values were
-captured; the WARNINGS block surfaces handshake-row failures
-alongside the lenient acceptances so the reviewer can inspect the
-detail before judging.
+- `REVIEW`: a row passed but via a lenient form. The five are
+  `announcements-unordered`, `get-courses-documented`,
+  `missing-creds-documented`, `capabilities-documented`, and
+  `description-presence-only`. The acceptance is qualitatively
+  ambiguous, so a reviewer inspects the response and records any
+  manual deduction in `results_notes.yaml`.
+- `WARNING`: a handshake row failed, one of P.1.1, C.2.1, or C.2.2.
+  These compare against SDK-emitted serialisation, so a failure may
+  be a participant defect, an SDK change since the expected values
+  were captured, or grader over-specification; check for uniform
+  cohort failure before judging.
+
+The Python reference accepts only the strict forms; the C replica
+accepts either form in each pair, because both are legitimate
+readings of the published task material.
 
 ## Boundary semantics
 
-`days_back=N` is an inclusive filter on the announcement's age in
-whole days. An announcement at `days_ago=K` is in scope iff
-`K <= N`. The per-course endpoint applies no backend date floor; the
-general endpoint clamps `days_back` to 30, matching the openeclass
-portfolio query's calendar-month floor on the seeded data.
+`days_back=N` is an inclusive calendar-day filter: an announcement
+`K` days old is in the window iff `K <= N`, per [PRD §2] and
+[PRD §4]. [PRD §2] puts no upper bound on the per-course tool, so
+`days_back=40` widens past the default 30. The general tool requires
+`days_back` in `[0, 30]` and returns `Error: Cannot retrieve
+announcements older than 30 days.` above 30, per [PRD §2] and
+[PRD §5]; the 30-day bound matches the openeclass portfolio query's
+calendar-month floor on the seeded data.
 
-The C functional scenarios (C.2 through C.4) run under
+## Memory checks
+
+The C functional scenarios C.2 through C.4 run under
 `valgrind --leak-check=full --show-leak-kinds=all
---track-origins=yes --error-exitcode=99` driven by the same JSON-RPC
-client as the Python rows. Each row records a functional verdict
-under `<id>` and a memory sub-assertion under `<id>.mem` scored only
-when the functional row passes AND valgrind ran to completion with
-zero `definitely lost` bytes and zero `indirectly lost` bytes. The
-`.mem` sub-assertions cover C.2.3 through C.2.12, C.3.1 through
-C.3.9, and C.4.1 through C.4.7 (26 rows in total). C.2.1, C.2.2, and
-the C.1 infrastructure rows carry no `.mem` sub-assertion.
+--track-origins=yes --error-exitcode=99`, driven by the same JSON-RPC
+client as the Python rows. Each records a functional verdict under
+`<id>` and a memory sub-assertion under `<id>.mem`, the latter scored
+only when the functional row passes AND the run is leak-clean: it
+completed with the leak summary present, was not signal-killed, did
+not exit with the sentinel 99, and reported zero `definitely lost`
+and zero `indirectly lost` bytes.
+[protocol/_memcheck.py](protocol/_memcheck.py) enforces that verdict,
+matching [PRD §5]. The 26 `.mem` sub-assertions cover C.2.3 through
+C.2.12, C.3.1 through C.3.9, and C.4.1 through C.4.7; C.2.1, C.2.2,
+and the C.1 infrastructure rows carry none.
 
-The C multi-step memory rows (C.5) drive the C binary once under
-valgrind with a scripted JSON-RPC sequence per scenario; each scenario
-names the functional rows whose call shapes it exercises and is
-skipped when any of those rows did not pass.
+The C.5 multi-step memory rows drive the binary once under the same
+valgrind invocation with a scripted JSON-RPC sequence per scenario.
+[protocol/memory_tests.py](protocol/memory_tests.py) gates each on
+the functional rows whose call shapes it exercises, listed in its
+`gates_on` tuple, and records a zero-point skip when any of those rows
+did not pass, rather than driving valgrind through the participant's
+error handling.
 
 ## Python Implementation (30 points across 27 rows)
 
 The Python implementation extends the upstream `eclass-mcp-server`
-reference with the two announcement tools the task PRD specifies.
-The baseline tier runs the four inherited tools against the seeded
-`student_courses` principal; the feature tiers run the two new tools
+reference with the two announcement tools the PRD adds. The baseline
+rows run the four inherited tools against the seeded
+`student_courses` principal; the feature rows run the two new tools
 against the principal's enrolled courses.
 
 ### Baseline (11 points across 11 rows)
@@ -153,9 +170,9 @@ against the principal's enrolled courses.
 ### Feature: Course Announcements (11 points across 9 rows)
 
 `get_course_announcements` fetches a single course's announcements
-and applies a client-side `days_back` filter. The per-course endpoint
-applies no backend date floor, so every seeded announcement is
-visible and all filtering is the participant's responsibility.
+and applies the `days_back` filter client-side; with no backend date
+floor, every seeded announcement is visible and all filtering is the
+participant's responsibility.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -171,13 +188,12 @@ visible and all filtering is the participant's responsibility.
 
 ### Feature: General Announcements (8 points across 7 rows)
 
-`get_general_announcements` unions the system-wide announcements
-with the announcements of every course the authenticated principal
-is enrolled in and orders the result newest first across both
-sources. The endpoint clamps `days_back` to 30. The general suite
-runs against the `student_general` principal (enrolled disjoint from
-the baseline and course suites) so the union covers both sources at
-the documented window probes.
+`get_general_announcements` unions the system-wide announcements with
+those of every course the authenticated principal is enrolled in,
+ordered newest first across both sources, and rejects `days_back`
+above 30. The general suite runs against the `student_general`
+principal, whose enrolment is disjoint from the baseline and course
+suites, so the union covers both sources at the probed windows.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -192,27 +208,27 @@ the documented window probes.
 ## C Replica (70 points across 63 rows)
 
 The C replica is a separate program under
-`<eclass-mcp-server>/c-replica/`. It is built by a participant-supplied
-Makefile and invoked by the grader as a subprocess. The technical
-stack constraint: `libcurl` and `libxml2` are required; no
-JSON-parsing library is permitted; the participant parses JSON-RPC
-manually. Transitive system dependencies of `libcurl` and `libxml2`
-are unrestricted.
+`<eclass-mcp-server>/c-replica/`, built by a participant-supplied
+Makefile and invoked as a subprocess. [PRD §3] constrains its
+technical stack: `libcurl` and `libxml2` are required, no
+JSON-parsing library is permitted, so the participant parses JSON-RPC
+manually, and transitive system dependencies are unrestricted.
 
 ### Build, technical stack, and configuration surfaces (6 points across 6 rows)
 
-C.1.1 is the sole hard gate: on fail, every other C row (including
-all `.mem` sub-assertions and the C.5 multi-step memory rows) is
-skip-recorded. C.1.2 through C.1.6 run independently with no
-cascade. The two configuration surfaces (C.1.5, C.1.6) are scored
-each on its own deliberate deprivation: C.1.5 deprives the on-disk
-`.env` and supplies the `ECLASS_*` values only as process
-environment variables; C.1.6 deprives the environment variables and
-supplies the values only as the verbatim `<mock-root>/.env` copied
-into the package root. Each probe drives one authenticated `login`
-to exercise the surface; a participant that implements only one
-surface is penalised once at the row that probes the missing
-surface, not in the behavioural suites.
+C.1.1 is the sole hard gate: on fail, every other C row is
+skip-recorded, the `.mem` sub-assertions and the C.5 rows included.
+C.1.2 through C.1.6 run independently with no cascade. [PRD §3] has
+one `.env` at the package root serve both implementations and adds no
+C-only configuration surface, so the grader scores each of the two
+ways those values can reach the server on its own deprivation, in
+[protocol/config_surface.py](protocol/config_surface.py): C.1.5
+removes the on-disk `.env` and supplies the `ECLASS_*` values only as
+process environment variables; C.1.6 removes the environment
+variables and supplies them only as the verbatim `<mock-root>/.env`
+copied into the package root. Each drives one authenticated `login`,
+so a participant implementing only one surface is penalised once at
+the probing row, not across the behavioural suites.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -223,19 +239,20 @@ surface, not in the behavioural suites.
 | C.1.5 | 1 | serves a tool configured by environment variables only |
 | C.1.6 | 1 | serves a tool configured by the package-root `.env` only |
 
-The forbidden JSON-parser library names match the regex
-`^lib(json|cjson|jansson|yajl|jq|parson)`. The behavioural suites
-(C.2 through C.5) run with both configuration surfaces provisioned
-so a participant who implements only one surface is still measured
-on every behaviour.
+[environment/build_c.py](environment/build_c.py) rejects any
+dynamically-linked name matching
+`^lib(json|cjson|jansson|yajl|jq|parson)` as a forbidden JSON parser.
+The behavioural suites C.2 through C.5 run with both configuration
+surfaces provisioned, so a participant implementing only one is still
+measured on every behaviour.
 
 ### Baseline (13 points across 12 rows)
 
-The C replica must implement the four baseline tools from scratch
-plus the two announcement tools the PRD adds. There is no upstream
-C reference to inherit. Each row mirrors a P.1 behaviour, executed
-against the C binary. C.2.1 (the constructed initialize frame) is
-worth 2 points because it asserts the entire handshake contract.
+The C replica implements the four baseline tools from scratch plus
+the two announcement tools, with no upstream C reference to inherit;
+each row mirrors a P.1 behaviour against the C binary. C.2.1, the
+constructed initialize frame, is worth 2 points because it asserts
+the whole handshake contract.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -280,15 +297,13 @@ worth 2 points because it asserts the entire handshake contract.
 
 ### Multi-step memory (6 points across 3 scenarios)
 
-The multi-step memory scenarios drive the C binary once under
-valgrind with a scripted JSON-RPC sequence. A scenario passes when
-valgrind reports zero `definitely lost` and zero `indirectly lost`
-bytes and the run completes (no signal exit, leak summary present,
-exit code not the error sentinel 99). Each scenario names the
-functional rows whose call shapes it exercises in its `gates_on`
-tuple; a scenario whose gates have not all passed is recorded as a
-zero-point skip rather than driving valgrind on a path that
-short-circuits through the participant's error handling.
+The multi-step scenarios are scored as described under Memory checks:
+the binary is driven once under valgrind with a scripted JSON-RPC
+sequence, and a scenario passes only on a clean leak verdict, namely
+zero `definitely lost` and zero `indirectly lost` bytes, run
+complete, no signal exit, and exit code not the sentinel 99. Each
+gates on the functional rows it exercises and is a zero-point skip
+when any has not passed.
 
 | ID | Points | Description |
 |----|--------|-------------|
@@ -298,32 +313,25 @@ short-circuits through the participant's error handling.
 
 ### Per-scenario memory sub-assertions (26 points across 26 rows)
 
-Every C functional scenario from C.2.3 through C.4.7 also records a
-one-point memory sub-assertion under `<id>.mem` derived from the
-same valgrind run that produced the functional verdict. The
-sub-assertion is awarded only when the functional row passed AND
-valgrind reported a clean leak verdict; a server that fails the
-functional contract receives no `.mem` credit, and a leak under a
-passing functional row deducts the `.mem` point without affecting
-the functional verdict.
-
-The 26 paired ids are: C.2.3 through C.2.12, C.3.1 through C.3.9,
-and C.4.1 through C.4.7. The pairing is mechanical (every
-behavioural row that runs under valgrind carries a `.mem`); the
-single per-row point allocation is the rubric's even weighting of
-correctness against leak hygiene on the same execution.
+Every C functional row from C.2.3 through C.4.7 also records a
+one-point `<id>.mem` sub-assertion from the same valgrind run that
+produced its functional verdict, awarded only when the functional row
+passed AND the leak verdict was clean, as defined under Memory checks.
+A failed functional row earns no `.mem` credit; a leak under a passing
+row deducts the `.mem` point without affecting the functional verdict.
+The pairing is mechanical, and the single per-row point weights
+correctness against leak hygiene evenly on the same execution.
 
 ## Expected score upper bounds
 
 | Submission shape | Score |
 |---|---|
-| No patch (baseline run against the unmodified upstream) | the rubric's deterministic reference; verified at instrument rebuild and reproducible by re-running `python -m grader --no-patch` |
+| No patch (baseline run against the unmodified upstream) | TBC |
 | Python implementation only (no C replica produced) | 30/100 (C.1.1 fails its sole hard gate; every other C row skip-records) |
 | Complete correct implementation | 100/100 |
 
-The no-patch numeric is not asserted here because it is a property
-of the live grading environment (the unmodified upstream's
-behaviour against the seeded mock) and is verified empirically when
-the grading VM is rebuilt; this document keeps only the mechanical
-maxima that are derivable from the rubric table in
-`grader/scoring/scoring.py` without a live run.
+[PRD §1]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#1-overview
+[PRD §2]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#2-announcement-tools-implementation
+[PRD §3]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#3-native-c-replica-implementation
+[PRD §4]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#4-cross-cutting-requirements
+[PRD §5]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#5-acceptance-criteria
