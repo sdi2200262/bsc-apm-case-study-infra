@@ -156,7 +156,7 @@ against the principal's enrolled courses.
 
 | ID | Points | Description |
 |----|--------|-------------|
-| P.1.1 | 1 | `tools/list` exposes all six tools with exact name, description, and schema |
+| P.1.1 | 1 | `tools/list` exposes all six tools with exact name and schema, descriptions byte-exact for the four baseline tools and presence-checked for the two announcement tools |
 | P.1.2 | 1 | `authstatus` before login reports not-logged-in |
 | P.1.3 | 1 | login with valid credentials succeeds |
 | P.1.4 | 1 | `authstatus` on the live session reports the logged-in user |
@@ -258,7 +258,7 @@ the whole handshake contract.
 | ID | Points | Description |
 |----|--------|-------------|
 | C.2.1 | 2 | the hand-written initialize frame (protocolVersion, capabilities, serverInfo) |
-| C.2.2 | 1 | `tools/list` exposes all six tools with exact name, description, and schema |
+| C.2.2 | 1 | `tools/list` exposes all six tools with exact name and schema, descriptions byte-exact for the four baseline tools and presence-checked for the two announcement tools |
 | C.2.3 | 1 | `authstatus` before login reports not-logged-in |
 | C.2.4 | 1 | login with valid credentials succeeds |
 | C.2.5 | 1 | `authstatus` on the live session reports the logged-in user |

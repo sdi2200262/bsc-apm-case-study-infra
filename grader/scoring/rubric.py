@@ -52,7 +52,7 @@ class TestDefinition:
 
 
 PYTHON_BASELINE_TESTS: tuple[TestDefinition, ...] = (
-    TestDefinition("P.1.1", 1, "protocol", "python", "tools/list exposes all six tools with exact name, description, and schema", "baseline"),
+    TestDefinition("P.1.1", 1, "protocol", "python", "tools/list exposes all six tools with exact name and schema, descriptions byte-exact for the four baseline tools and presence-checked for the two announcement tools", "baseline"),
     TestDefinition("P.1.2", 1, "protocol", "python", "authstatus before login reports not-logged-in", "baseline"),
     TestDefinition("P.1.3", 1, "protocol", "python", "login with valid credentials succeeds", "baseline"),
     TestDefinition("P.1.4", 1, "protocol", "python", "authstatus on the live session reports the logged-in user", "baseline"),
@@ -98,7 +98,7 @@ C_INFRA_TESTS: tuple[TestDefinition, ...] = (
 
 C_BASELINE_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.2.1", 2, "protocol", "c", "the hand-written initialize frame (protocolVersion, capabilities, serverInfo)", "baseline"),
-    TestDefinition("C.2.2", 1, "protocol", "c", "tools/list exposes all six tools with exact name, description, and schema", "baseline"),
+    TestDefinition("C.2.2", 1, "protocol", "c", "tools/list exposes all six tools with exact name and schema, descriptions byte-exact for the four baseline tools and presence-checked for the two announcement tools", "baseline"),
     TestDefinition("C.2.3", 1, "protocol", "c", "authstatus before login reports not-logged-in", "baseline"),
     TestDefinition("C.2.4", 1, "protocol", "c", "login with valid credentials succeeds", "baseline"),
     TestDefinition("C.2.5", 1, "protocol", "c", "authstatus on the live session reports the logged-in user", "baseline"),
