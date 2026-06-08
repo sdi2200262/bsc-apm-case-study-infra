@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""
-Seed-data loader for grader assertions.
+"""Seed-data loader for grader assertions.
 
 Loads the grading environment's ``grader-env/seed/seed.yaml``, which
 defines the users, courses, and announcements the rubric assertions

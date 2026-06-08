@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .. import log
 from .notices import collect_notices
-from .scoring import (
+from .rubric import (
     C_BASELINE_TESTS,
     C_COURSE_TESTS,
     C_GENERAL_TESTS,
@@ -30,9 +30,9 @@ from .scoring import (
     PYTHON_BASELINE_TESTS,
     PYTHON_COURSE_TESTS,
     PYTHON_GENERAL_TESTS,
-    Scorer,
     TestDefinition,
 )
+from .scoring import Scorer
 
 VERBOSE_MESSAGE_LIMIT = 60
 

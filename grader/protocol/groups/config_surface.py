@@ -11,7 +11,7 @@ Each probe drives ``initialize`` plus one authenticated ``login``:
 only a real login proves the surface under test was read.
 
 Missing-credentials handling is a single behavioural row
-(P.1.6 / C.2.7) in ``baseline_tests`` with both surfaces deprived
+(P.1.6 / C.2.7) in ``baseline`` with both surfaces deprived
 together; this module only owns the two positive surface probes.
 """
 
@@ -21,13 +21,13 @@ import json
 import os
 from pathlib import Path
 
-from ..environment.provision import (
+from ...environment.provision import (
     DOTENV_FILENAME,
     install_sso_cert,
     write_dotenv,
 )
-from .expected import login_success
-from .runner import (
+from ..expected import login_success
+from ..runner import (
     CLIENT_NAME,
     CLIENT_VERSION,
     PROTOCOL_VERSION,
@@ -38,7 +38,7 @@ from .runner import (
     extract_text,
     tls_trust_env,
 )
-from .seed import SEED, user
+from ..seed import SEED, user
 
 TLS_TRUST_ENV_KEYS = (
     "SSL_CERT_FILE",
@@ -53,7 +53,7 @@ LOGIN_SUCCESS = login_success(_PRINCIPAL.username)
 IMPL = "c"
 
 
-def test_env_var_config_surface(
+def check_env_var_config_surface(
     eclass_dir: Path, mock_root: Path, debug: bool
 ) -> tuple[bool, str, str]:
     """C.1.5: server handshakes and logs in configured via ``ECLASS_*`` only.
@@ -78,7 +78,7 @@ def test_env_var_config_surface(
     return _probe("C.1.5", eclass_dir, env, debug, "env-var surface")
 
 
-def test_dotenv_config_surface(
+def check_dotenv_config_surface(
     eclass_dir: Path, mock_root: Path, debug: bool
 ) -> tuple[bool, str, str]:
     """C.1.6: server handshakes and logs in via the verbatim ``.env``.

@@ -19,8 +19,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..environment.provision import blank_dotenv_credentials, write_dotenv
-from ._assertion_support import (
+from ...environment.provision import blank_dotenv_credentials, write_dotenv
+from ..expected import ERR_NOT_LOGGED_IN, login_success
+from ..matching import (
+    match_exact,
+    match_get_courses,
+    match_missing_credentials,
+)
+from ..runner import (
+    ServerProcess,
+    call_tool,
+    extract_text,
+    initialize_server,
+    spawn_server,
+)
+from ..seed import SEED, enrolled_courses, user
+from ._support import (
     HANDSHAKE_FAIL,
     LOGIN_FAIL,
     SERVER_START_FAIL,
@@ -28,20 +42,6 @@ from ._assertion_support import (
     Result5,
     leak_after,
 )
-from .expected import ERR_NOT_LOGGED_IN, login_success
-from .matching import (
-    match_exact,
-    match_get_courses,
-    match_missing_credentials,
-)
-from .runner import (
-    ServerProcess,
-    call_tool,
-    extract_text,
-    initialize_server,
-    spawn_server,
-)
-from .seed import SEED, enrolled_courses, user
 
 # Two-principal seed; baseline suite runs as student_courses.
 _PRINCIPAL = user(SEED, "student_courses")
@@ -60,7 +60,7 @@ AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {_PRINCIPAL.username}"
 AUTHSTATUS_NOT_LOGGED_IN = "Status: Not logged in"
 
 
-def test_authstatus_pre_login(
+def check_authstatus_pre_login(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -100,7 +100,7 @@ def test_authstatus_pre_login(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_login_success(
+def check_login_success(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -140,7 +140,7 @@ def test_login_success(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_authstatus_post_login(
+def check_authstatus_post_login(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -184,7 +184,7 @@ def test_authstatus_post_login(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_login_already(
+def check_login_already(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -228,7 +228,7 @@ def test_login_already(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_missing_credentials(
+def check_missing_credentials(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -297,7 +297,7 @@ def test_missing_credentials(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_get_courses_logged_in(
+def check_get_courses_logged_in(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -351,7 +351,7 @@ def test_get_courses_logged_in(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_logout_success(
+def check_logout_success(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -395,7 +395,7 @@ def test_logout_success(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_authstatus_post_logout(
+def check_authstatus_post_logout(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -440,7 +440,7 @@ def test_authstatus_post_logout(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_get_courses_not_logged_in(
+def check_get_courses_not_logged_in(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -480,7 +480,7 @@ def test_get_courses_not_logged_in(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_logout_no_op(
+def check_logout_no_op(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,

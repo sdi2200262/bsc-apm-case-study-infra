@@ -80,11 +80,11 @@ def seed_instant(mock_root: Path) -> datetime.datetime:
             timeout=CALIBRATION_TIMEOUT_SECONDS,
         )
     except FileNotFoundError:
-        raise CalibrationError(
+        raise CalibrationError(  # noqa: B904 (re-raised as a clean domain error)
             "docker not on PATH; cannot calibrate the seed instant"
         )
     except subprocess.TimeoutExpired:
-        raise CalibrationError(
+        raise CalibrationError(  # noqa: B904 (re-raised as a clean domain error)
             f"docker compose exec timed out after {CALIBRATION_TIMEOUT_SECONDS}s "
             "while reading the seed instant"
         )

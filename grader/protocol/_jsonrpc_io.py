@@ -18,7 +18,7 @@ from typing import IO
 
 from .. import log
 
-__all__ = ["read_line_with_timeout", "read_correlated_response"]
+__all__ = ["read_line_with_timeout", "read_correlated_response"]  # noqa: RUF022 (read-flow order)
 
 
 def read_line_with_timeout(stream: IO[str], timeout: float, debug: bool) -> str:

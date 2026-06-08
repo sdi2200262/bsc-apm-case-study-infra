@@ -29,20 +29,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._memcheck import (
+from .._memcheck import (
     VALGRIND_STDERR_TAIL_LINES,
     classify_leak_verdict,
     tail_lines,
 )
-from .expected import course_url
-from .runner import (
+from ..expected import course_url
+from ..runner import (
     BASELINE_TOOL_NAMES,
     CLIENT_NAME,
     CLIENT_VERSION,
     PROTOCOL_VERSION,
     mcp_server_env,
 )
-from .seed import SEED, user
+from ..seed import SEED, user
 
 VALGRIND_TIMEOUT_SECONDS = 120
 

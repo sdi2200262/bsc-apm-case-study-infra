@@ -2,10 +2,10 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Shared scaffolding and result helpers for the scenario assertion suites.
 
-Every ``*_tests.py`` module returns the same five-tuple result shape and
-the same step-failure sentinels, and the C aggregators all record ``.mem``
-sub-assertions with one outcome wording. Centralising them here removes the
-copy-pasted scaffolding from the scenario modules and keeps the sentinel
+Every check suite in this package returns the same five-tuple result
+shape and the same step-failure sentinels, and the C runners all record
+``.mem`` sub-assertions with one outcome wording. Centralising them here
+removes the copy-pasted scaffolding from the suites and keeps the sentinel
 text and the ``.mem`` recording wording from drifting between suites.
 """
 

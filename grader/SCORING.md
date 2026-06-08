@@ -3,8 +3,9 @@
 Total: 100 points across 90 atomic rows. The Python implementation
 holds 30 points across 27 rows; the C replica holds 70 across 63
 rows, of which 37 are functional or infrastructure rows and 26 are
-per-scenario memory sub-assertions. [scoring/scoring.py](scoring/scoring.py)
-declares every row and asserts this per-section budget at import; a
+per-scenario memory sub-assertions. [scoring/rubric.py](scoring/rubric.py)
+declares every row and [scoring/scoring.py](scoring/scoring.py) asserts
+this per-section budget at import; a
 numeric drift between this document and the code is a bug in this
 document.
 
@@ -137,7 +138,7 @@ and the C.1 infrastructure rows carry none.
 
 The C.5 multi-step memory rows drive the binary once under the same
 valgrind invocation with a scripted JSON-RPC sequence per scenario.
-[protocol/memory_tests.py](protocol/memory_tests.py) gates each on
+[protocol/groups/memory.py](protocol/groups/memory.py) gates each on
 the functional rows whose call shapes it exercises, listed in its
 `gates_on` tuple, and records a zero-point skip when any of those rows
 did not pass, rather than driving valgrind through the participant's
@@ -222,7 +223,7 @@ C.1.2 through C.1.6 run independently with no cascade. [PRD §3] has
 one `.env` at the package root serve both implementations and adds no
 C-only configuration surface, so the grader scores each of the two
 ways those values can reach the server on its own deprivation, in
-[protocol/config_surface.py](protocol/config_surface.py): C.1.5
+[protocol/groups/config_surface.py](protocol/groups/config_surface.py): C.1.5
 removes the on-disk `.env` and supplies the `ECLASS_*` values only as
 process environment variables; C.1.6 removes the environment
 variables and supplies them only as the verbatim `<mock-root>/.env`

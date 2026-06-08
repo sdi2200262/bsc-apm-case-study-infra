@@ -121,9 +121,13 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
                 Notice(
                     tag=TAG_WARNING,
                     label=test_id,
-                    summary="handshake row failed; may be participant defect, SDK change, or grader over-specification",
+                    summary=(
+                        "handshake row failed; may be participant defect, "
+                        "SDK change, or grader over-specification"
+                    ),
                     detail=(
-                        "inspect the JSON report and check for uniform cohort failure before judging"
+                        "inspect the JSON report and check for uniform "
+                        "cohort failure before judging"
                     ),
                 )
             )

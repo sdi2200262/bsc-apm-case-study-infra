@@ -8,8 +8,8 @@ hand-written ``initialize`` frame. Both run against a freshly-spawned
 MCP server as the ``student_courses`` principal and return the same
 5-tuple as the other baseline rows
 (``(ok, msg, detail, leak_tuple|None, mode|None)``; see
-``grader.protocol.baseline_tests`` for the tuple contract). The
-form-acceptance policy lives in ``.matching``; this module owns only
+``grader.protocol.groups.baseline`` for the tuple contract). The
+form-acceptance policy lives in ``..matching``; this module owns only
 the frame exchange and the result wiring.
 """
 
@@ -18,15 +18,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ._assertion_support import (
-    HANDSHAKE_FAIL,
-    SERVER_START_FAIL,
-    TOOL_FAIL,
-    Result5,
-    leak_after,
-)
-from .matching import match_initialize, match_tools_list
-from .runner import (
+from ..matching import match_initialize, match_tools_list
+from ..runner import (
     CLIENT_NAME,
     CLIENT_VERSION,
     PROTOCOL_VERSION,
@@ -34,13 +27,20 @@ from .runner import (
     initialize_server,
     spawn_server,
 )
-from .seed import SEED, user
+from ..seed import SEED, user
+from ._support import (
+    HANDSHAKE_FAIL,
+    SERVER_START_FAIL,
+    TOOL_FAIL,
+    Result5,
+    leak_after,
+)
 
 # Two-principal seed; baseline suite runs as student_courses.
 _PRINCIPAL = user(SEED, "student_courses")
 
 
-def test_tools_list(
+def check_tools_list(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -92,7 +92,7 @@ def test_tools_list(
     return ok, msg, detail, leak_after(srv, memcheck), mode
 
 
-def test_initialize_frame(
+def check_initialize_frame(
     impl: str,
     eclass_dir: Path,
     mock_root: Path,
@@ -104,7 +104,7 @@ def test_initialize_frame(
     Asserts the C replica's ``protocolVersion`` and ``serverInfo``
     equal the invariant constructed constants and its
     ``capabilities`` object is one of the two accepted constructed
-    forms (see ``.expected``). The matched form, recorded as the
+    forms (see ``..expected``). The matched form, recorded as the
     row's diagnostic, is ``capabilities-faithful`` or
     ``capabilities-documented``. The expected response is constructed, never
     captured from the submission. C-only: a non-C implementation does not

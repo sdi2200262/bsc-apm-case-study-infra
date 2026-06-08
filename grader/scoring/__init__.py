@@ -4,7 +4,8 @@
 
 Submodules:
 
-- ``scoring``: rubric definitions and the ``Scorer`` aggregator.
+- ``rubric``: the test definitions and their per-group groupings.
+- ``scoring``: the ``Scorer`` aggregator and the point-budget guard.
 - ``reporting``: JSON and console report writers.
 - ``notices``: review and warning notices surfaced after scoring.
 """

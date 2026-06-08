@@ -59,7 +59,7 @@ from ._memcheck import (
 from ._schema_validation import validate_against_schema
 from .server_env import eclass_config_pairs, mcp_server_env, tls_trust_env
 
-__all__ = [
+__all__ = [  # noqa: RUF022 (grouped by role, not alphabetically)
     "ServerProcess",
     "TestContext",
     "spawn_server",
@@ -177,7 +177,9 @@ class ServerProcess:
             log.debug(f"cwd: {cwd}")
         try:
             if self.ctx.impl == "c" and self.ctx.memcheck:
-                self._valgrind_stderr_file = tempfile.NamedTemporaryFile(
+                # The handle outlives this scope (valgrind writes to it for the
+                # server's lifetime); it is closed in the process teardown.
+                self._valgrind_stderr_file = tempfile.NamedTemporaryFile(  # noqa: SIM115
                     mode="w+",
                     suffix=".valgrind.txt",
                     delete=False,
@@ -244,7 +246,7 @@ class ServerProcess:
         if self.proc is None:
             return
         if self.proc.stdin is not None:
-            try:
+            try:  # noqa: SIM105 (two distinct exception types; suppress is less clear here)
                 self.proc.stdin.close()
             except (OSError, BrokenPipeError):
                 pass

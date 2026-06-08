@@ -17,21 +17,12 @@ Submodules:
   reference-derived initialize frame) and the recorded match mode.
 - ``announcement_matching``: announcement-response parsing and date
   canonicalisation, extracted from ``matching``.
-- ``baseline_tests``: assertion functions for the baseline rubric
-  rows (P.1.x / C.2.x), parameterised by implementation.
-- ``frame_tests``: the tools/list and C-only initialize-frame
-  assertions, extracted from ``baseline_tests``.
-- ``course_announcements_tests``: assertion functions for the
-  course-announcement rubric rows (P.2.x / C.3.x).
-- ``general_announcements_tests``: assertion functions for the
-  general-announcement rubric rows (P.3.x / C.4.x).
-- ``memory_tests``: the three C.5.x multi-step memory scenarios.
-- ``config_surface``: the two positive configuration-surface
-  probes (C.1.5, C.1.6).
 - ``groups``: the per-(implementation, group) run entry points over
-  one shared row loop (collapsing the former per-implementation
-  aggregator modules); returns the per-test-id result mapping the
-  grader CLI driver consumes.
+  one shared row loop, alongside the per-group assertion suites they
+  drive (baseline, frame, announcement, memory, and configuration-
+  surface checks) and their shared result scaffolding; see its own
+  inventory. The entry points return the per-test-id result mapping
+  the grader CLI driver consumes.
 """
 
 from __future__ import annotations

@@ -171,29 +171,32 @@ grader/
 │   ├── env_file.py                    # single-source .env parser (provision + runner)
 │   ├── build_python.py                # uv sync for the Python implementation
 │   └── build_c.py                     # C.1.1 compile and C.1.2 to C.1.4 stack verification
-├── protocol/                          # MCP engine, oracle, assertion suites, aggregation
+├── protocol/                          # MCP engine, oracle, and the rubric-group suites
 │   ├── __init__.py
 │   ├── runner.py                      # server spawn, JSON-RPC framing, fixtures
 │   ├── _jsonrpc_io.py                 # line-level JSON-RPC stdio reads
 │   ├── _schema_validation.py          # tools/call argument validation against inputSchema
 │   ├── _memcheck.py                   # valgrind stderr parsing helpers
-│   ├── _assertion_support.py          # shared scenario scaffolding + .mem-recording helper
 │   ├── server_env.py                  # spawned-server environment block (from <mock-root>/.env)
 │   ├── calibration.py                 # per-run seed-apply instant from MariaDB
 │   ├── seed.py                        # grader-env seed loader and per-principal/window helpers
 │   ├── expected.py                    # expected response strings and the constructed handshake contract
 │   ├── matching.py                    # acceptance policy (byte-exact, whitespace-normalised, two-form)
 │   ├── announcement_matching.py       # announcement parsing and date canonicalisation
-│   ├── baseline_tests.py              # P.1 / C.2 assertions
-│   ├── frame_tests.py                 # tools/list and C initialize-frame assertions
-│   ├── course_announcements_tests.py  # P.2 / C.3 assertions
-│   ├── general_announcements_tests.py # P.3 / C.4 assertions
-│   ├── memory_tests.py                # C.5 multi-step scenarios under valgrind
-│   ├── config_surface.py              # C.1.5 / C.1.6 surface-isolated probes
-│   └── groups.py                      # per-(implementation, group) aggregation entries
+│   └── groups/                        # rubric-group runners and the per-group assertion suites
+│       ├── __init__.py                # re-exports the eight run_* entry points
+│       ├── runners.py                 # per-(implementation, group) aggregation entries
+│       ├── _support.py                # shared scenario scaffolding + .mem-recording helper
+│       ├── baseline.py                # P.1 / C.2 assertions
+│       ├── frame.py                   # tools/list and C initialize-frame assertions
+│       ├── course_announcements.py    # P.2 / C.3 assertions
+│       ├── general_announcements.py   # P.3 / C.4 assertions
+│       ├── memory.py                  # C.5 multi-step scenarios under valgrind
+│       └── config_surface.py          # C.1.5 / C.1.6 surface-isolated probes
 └── scoring/                           # scoring + output layer
     ├── __init__.py
-    ├── scoring.py                     # rubric definitions and the Scorer
+    ├── rubric.py                      # the 90 test definitions and their groupings
+    ├── scoring.py                     # the Scorer and the point-budget guard
     ├── reporting.py                   # JSON and console report writers
     └── notices.py                     # REVIEW/WARNING notice policy
 ```
