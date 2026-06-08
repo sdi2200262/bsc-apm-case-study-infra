@@ -26,12 +26,20 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 BUILD_TIMEOUT_SECONDS = 120
 CLEAN_TIMEOUT_SECONDS = 30
 LDD_TIMEOUT_SECONDS = 10
 VERSION_PROBE_TIMEOUT_SECONDS = 5
+
+# The compile is attempted at most twice. A kill-by-signal, i.e. a
+# negative return code, is the OOM/resource-kill transient under a loaded
+# host, so it is retried once after a short pause. A normal non-zero exit
+# is a real build error and is not retried.
+MAX_COMPILE_ATTEMPTS = 2
+COMPILE_RETRY_BACKOFF_SECONDS = 1.0
 
 MIN_LIBCURL_VERSION = "7.81.0"
 MIN_LIBXML2_VERSION = "2.9.13"
@@ -58,6 +66,11 @@ _LIBCURL_FAILURE_PATTERN = re.compile(
 def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
     """Compile the C replica and verify the produced binary.
 
+    A kill-by-signal is retried once; success and a normal non-zero build
+    error are both handled on the first attempt. Each attempt re-runs
+    ``make clean`` first, so a half-written object tree from the killed
+    run does not poison the retry.
+
     Args:
         eclass_root: Resolved path to the eclass-mcp-server
             checkout containing the ``c-replica/`` subdirectory.
@@ -80,29 +93,40 @@ def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
     versions_ok, versions_msg = _check_library_versions()
     warning = "" if versions_ok else f"WARNING: {versions_msg}. Attempting build anyway..."
 
-    subprocess.run(
-        ["make", "clean"],
-        cwd=c_replica,
-        capture_output=True,
-        timeout=CLEAN_TIMEOUT_SECONDS,
-    )
-
-    try:
-        result = subprocess.run(
-            ["make", "c-server"],
+    attempt = 0
+    while True:
+        attempt += 1
+        subprocess.run(
+            ["make", "clean"],
             cwd=c_replica,
             capture_output=True,
-            text=True,
-            timeout=BUILD_TIMEOUT_SECONDS,
+            timeout=CLEAN_TIMEOUT_SECONDS,
         )
-    except FileNotFoundError:
-        return False, "make command not found", "make command not found in PATH"
-    except subprocess.TimeoutExpired:
-        return (
-            False,
-            f"make c-server timed out ({BUILD_TIMEOUT_SECONDS}s)",
-            f"make c-server timed out after {BUILD_TIMEOUT_SECONDS} seconds",
-        )
+
+        try:
+            result = subprocess.run(
+                ["make", "c-server"],
+                cwd=c_replica,
+                capture_output=True,
+                text=True,
+                timeout=BUILD_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError:
+            return False, "make command not found", "make command not found in PATH"
+        except subprocess.TimeoutExpired:
+            return (
+                False,
+                f"make c-server timed out ({BUILD_TIMEOUT_SECONDS}s)",
+                f"make c-server timed out after {BUILD_TIMEOUT_SECONDS} seconds",
+            )
+
+        # Retry only a kill-by-signal, and only within the attempt budget;
+        # a normal non-zero exit falls straight through to the deterministic
+        # build-error handling below.
+        if result.returncode < 0 and attempt < MAX_COMPILE_ATTEMPTS:
+            time.sleep(COMPILE_RETRY_BACKOFF_SECONDS)
+            continue
+        break
 
     if result.returncode != 0:
         err = (result.stderr + "\n" + result.stdout).strip()
