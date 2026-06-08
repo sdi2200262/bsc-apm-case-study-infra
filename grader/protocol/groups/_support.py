@@ -45,7 +45,7 @@ def leak_after(server: object, memcheck: bool) -> LeakTuple | None:
     Args:
         server: The ``ServerProcess`` returned from ``spawn_server``,
             or ``None`` when the server failed to start.
-        memcheck: Whether the spawn projected a valgrind wrapper.
+        memcheck: Whether the spawn set up a valgrind wrapper.
 
     Returns:
         ``server.leak_verdict()`` when both ``memcheck`` is ``True``

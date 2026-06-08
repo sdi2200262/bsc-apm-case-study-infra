@@ -198,13 +198,13 @@ class Scorer:
             Mapping from category label to ``(score, max)``.
         """
         tests = PYTHON_TESTS if target == "python" else C_TESTS
-        buckets: dict[str, list[int]] = {}
+        by_category: dict[str, list[int]] = {}
         for test in tests:
-            entry = buckets.setdefault(test.category, [0, 0])
+            entry = by_category.setdefault(test.category, [0, 0])
             entry[1] += test.points
             if self._passed(test.id):
                 entry[0] += test.points
-        return {category: (scores[0], scores[1]) for category, scores in buckets.items()}
+        return {category: (scores[0], scores[1]) for category, scores in by_category.items()}
 
     def to_dict(self) -> dict:
         """Return the JSON shape consumed by the pipeline and the inspect tool."""

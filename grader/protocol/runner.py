@@ -21,11 +21,11 @@ JSON-RPC stdio. The public surface (``__all__``):
 
 On a credential-bearing spawn (``env_overrides`` carrying a non-empty
 ``ECLASS_USERNAME`` and ``ECLASS_PASSWORD``) ``spawn_server`` also
-projects that principal onto the checkout's on-disk ``.env`` for the
+writes that principal to the checkout's on-disk ``.env`` for the
 duration of the spawn and restores the provisioned ``.env``
 afterward, so both documented configuration surfaces carry the
 scenario's principal. An all-empty credential override (the
-missing-credentials deprivation probe) is not projected; the caller's
+missing-credentials deprivation probe) is not written; the caller's
 own ``.env`` deprivation stays in force.
 
 When ``memcheck=True`` and ``impl="c"``, ``spawn_server`` wraps the
@@ -380,12 +380,12 @@ def spawn_server(
     ``server.leak_verdict()`` on the still-live reference.
 
     When ``env_overrides`` carries a non-empty ``ECLASS_USERNAME``
-    and ``ECLASS_PASSWORD``, that principal is also projected onto
+    and ``ECLASS_PASSWORD``, that principal is also written to
     the checkout's on-disk ``.env`` for the spawn and the
     provisioned ``.env`` is restored afterward, so a server reading
     only the documented ``.env`` authenticates as the same principal
     the env-var surface carries. An all-empty credential override is
-    the missing-credentials deprivation probe: it is not projected,
+    the missing-credentials deprivation probe: it is not written,
     so the caller's own ``.env`` deprivation stays in force.
 
     Args:
@@ -394,7 +394,7 @@ def spawn_server(
         mock_root: Resolved testing environment path.
         debug: Whether to echo server stdio.
         env_overrides: Optional credential / credential-state
-            overrides. A non-empty principal here is projected onto
+            overrides. A non-empty principal here is written to
             the on-disk ``.env`` as well; an all-empty deprivation
             override is not.
         memcheck: Run under valgrind (C only).
@@ -402,7 +402,7 @@ def spawn_server(
     env = mcp_server_env(mock_root)
     if env_overrides:
         env.update(env_overrides)
-    # Project a principal-bearing override onto the on-disk .env as
+    # Write a principal-bearing override to the on-disk .env as
     # well, so a server that reads only the documented .env file
     # (PRD section 4 makes that surface legitimate) authenticates as
     # the same principal the env-var surface carries. The guard
@@ -410,13 +410,13 @@ def spawn_server(
     # missing-credentials probe passes "" / "" to deprive both
     # surfaces and has already blanked the on-disk .env itself, so
     # re-writing it here would defeat that deprivation.
-    projected = False
+    wrote_env = False
     if env_overrides:
         username = env_overrides.get("ECLASS_USERNAME")
         password = env_overrides.get("ECLASS_PASSWORD")
         if username and password:
             provision.set_dotenv_credentials(eclass_dir, username, password)
-            projected = True
+            wrote_env = True
     try:
         ctx = TestContext(
             impl=impl,
@@ -436,11 +436,11 @@ def spawn_server(
     finally:
         # Restore the provisioned .env verbatim (single-sourced from
         # <mock_root>/.env, so SSL_CERT_FILE and every non-credential
-        # key are exactly as provisioned) only when this spawn
-        # projected a principal, so non-credential spawns and the
+        # key are exactly as provisioned) only when this spawn wrote
+        # a principal to the .env, so non-credential spawns and the
         # missing-credentials probe's own .env management are left
         # untouched.
-        if projected:
+        if wrote_env:
             provision.write_dotenv(eclass_dir, mock_root)
 
 

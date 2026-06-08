@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Render an emitted grader results artifact in a human-readable form.
+"""Render an emitted grader results artefact in a human-readable form.
 
 The grader writes a results JSON document for each graded patch:
 per-test pass-or-fail status, points awarded against the rubric, and
-diagnostic messages. This module reads such an artifact and prints a
+diagnostic messages. This module reads such an artefact and prints a
 one-shot view selected by flags: the score summary (the default), a
 single test's detail, a filtered list, the available categories, or one
 test's raw ``full_output`` for piping. It is non-interactive and runs to
 completion without prompting.
 
 A sibling utility under ``../parser/`` renders the parser's metrics
-artifact in the same style.
+artefact in the same style.
 
 Invocation:
     ./inspect.py <results.json>                  # score summary

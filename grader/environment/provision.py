@@ -11,7 +11,7 @@ avoids a ``git apply --check`` collision with a pre-created
 runs. The ``ECLASS_*`` env-var surface parses the same ``.env``
 (``grader.environment.env_file``), so both config surfaces carry
 identical values by construction. When a behavioural scenario
-switches principal, the principal is projected onto both surfaces
+switches principal, the principal is written to both surfaces
 together (``set_dotenv_credentials`` for the on-disk ``.env``,
 env-var overrides for the other), so that invariant holds across
 the switch and a server reading either surface authenticates as
@@ -41,7 +41,7 @@ class ProvisioningError(GraderError):
     """
 
 
-def preflight_provisioning(mock_root: Path) -> None:
+def check_provisioning_sources(mock_root: Path) -> None:
     """Verify the testing environment carries the artefacts to copy, before any copy.
 
     Args:
@@ -62,7 +62,7 @@ def preflight_provisioning(mock_root: Path) -> None:
 
 
 def provision(eclass_root: Path, mock_root: Path) -> None:
-    """Preflight, then copy the documented ``.env`` and ``certs/`` verbatim. Idempotent.
+    """Check the sources, then copy the documented ``.env`` and ``certs/`` verbatim. Idempotent.
 
     Args:
         eclass_root: Resolved patched eclass-mcp-server checkout path.
@@ -72,7 +72,7 @@ def provision(eclass_root: Path, mock_root: Path) -> None:
         ProvisioningError: When the testing environment lacks its
             ``.env`` or authoritative certificate.
     """
-    preflight_provisioning(mock_root)
+    check_provisioning_sources(mock_root)
     write_dotenv(eclass_root, mock_root)
     install_sso_cert(eclass_root, mock_root)
 
@@ -150,7 +150,7 @@ def blank_dotenv_credentials(eclass_root: Path) -> None:
 def set_dotenv_credentials(
     eclass_root: Path, username: str, password: str
 ) -> None:
-    """Project a principal onto the checkout's ``.env`` credentials, in place.
+    """Write a principal to the checkout's ``.env`` credentials, in place.
 
     Rewrites only the two ``CREDENTIAL_KEYS`` lines to the given
     principal; every other line (comments, ordering, all
@@ -169,7 +169,7 @@ def set_dotenv_credentials(
     Raises:
         FileNotFoundError: When the checkout has no ``.env``. The
             verbatim ``.env`` is written by ``provision`` before
-            any principal is projected, so a missing file is a real
+            any principal is written, so a missing file is a real
             precondition failure surfaced loudly, not a silent
             fallback.
     """
@@ -205,7 +205,8 @@ def _rewrite_credentials(
     is in ``CREDENTIAL_KEYS``; every other line (comments, blank
     lines, ordering, all non-credential keys) is preserved verbatim.
     The new value for a matched key is supplied by ``value_for``, so the
-    blanking and principal-projection callers share this one rewrite loop.
+    credential-blanking and credential-writing callers share this one
+    rewrite loop.
 
     Args:
         eclass_root: Resolved patched eclass-mcp-server checkout path.

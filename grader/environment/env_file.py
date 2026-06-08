@@ -29,7 +29,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
     Raises:
         FileNotFoundError: When ``path`` does not exist (the
-            provisioning preflight checks first; a raise here means
+            provisioning source check runs first; a raise here means
             it was bypassed).
     """
     pairs: dict[str, str] = {}

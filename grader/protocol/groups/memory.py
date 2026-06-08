@@ -15,7 +15,7 @@ announcement responses is not asserted in these multi-step runs
 
 Scenario gate logic: a scenario whose ``gates_on`` are not all in
 the caller-supplied ``passed_tests`` set is skipped (recorded as a
-zero-point fail) because valgrind on a feature path the participant
+zero-point fail) because valgrind on a code path the participant
 did not implement correctly verifies leaks on a short-circuited
 error path, not the path the rubric awards points for.
 """

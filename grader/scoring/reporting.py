@@ -5,11 +5,13 @@
 The JSON report at ``<workspace>/results_<patch>.json`` is the
 machine-readable artefact the pipeline's grade stage promotes; its
 shape is fixed so downstream consumers continue to read it. The
-console summary reports each rubric section's score against its
+console summary reports each rubric group's score against its
 maximum; in verbose mode it also lists every row's pass/fail status
-and short message. The eight sections (Python baseline, Python
-course, Python general, C infra, C baseline, C course, C general, C
-memory) mirror the rubric structure.
+and short message. The report rolls the rubric's two memory budget
+groups (multi-step and per-scenario) into one "C MEMORY" group, so
+its eight groups (Python baseline, Python course, Python general, C
+infra, C baseline, C course, C general, C memory) cover the nine
+budget groups the scorer enforces.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from .scoring import Scorer
 
 VERBOSE_MESSAGE_LIMIT = 60
 
-SECTION_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
+GROUP_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
     ("PYTHON BASELINE", PYTHON_BASELINE_TESTS),
     ("PYTHON COURSE", PYTHON_COURSE_TESTS),
     ("PYTHON GENERAL", PYTHON_GENERAL_TESTS),
@@ -113,7 +115,7 @@ def print_console_summary(
         paths: Report path resolution from ``report_paths``.
         scorer: Populated scorer for the totals.
         verbose: When ``True``, prints each rubric row's status
-            and short message under the matching section header.
+            and short message under the matching group header.
     """
     log.blank()
     log.line()
@@ -123,9 +125,9 @@ def print_console_summary(
     if verbose:
         _print_verbose(scorer)
 
-    for header, tests in SECTION_LAYOUT:
-        section_score, section_max = _section_totals(scorer, tests)
-        log.info(f"{header.title():18s} {section_score:3d}/{section_max:<3d}")
+    for header, tests in GROUP_LAYOUT:
+        group_score, group_max = _group_totals(scorer, tests)
+        log.info(f"{header.title():18s} {group_score:3d}/{group_max:<3d}")
     log.line()
     py_total = scorer.python_total_score()
     c_total = scorer.c_score()
@@ -142,23 +144,23 @@ def print_console_summary(
     log.line()
 
 
-def _section_totals(
+def _group_totals(
     scorer: Scorer, tests: tuple[TestDefinition, ...]
 ) -> tuple[int, int]:
-    """Return ``(score, max)`` for one rubric section's tests."""
+    """Return ``(score, max)`` for one rubric group's tests."""
     score = 0
-    section_max = 0
+    group_max = 0
     for test in tests:
-        section_max += test.points
+        group_max += test.points
         result = scorer.results.get(test.id)
         if result is not None and result.passed:
             score += test.points
-    return score, section_max
+    return score, group_max
 
 
 def _print_verbose(scorer: Scorer) -> None:
-    """Print per-test status under each rubric section header."""
-    for header, tests in SECTION_LAYOUT:
+    """Print per-test status under each rubric group header."""
+    for header, tests in GROUP_LAYOUT:
         log.blank()
         log.info(f"{header}:")
         for test in tests:

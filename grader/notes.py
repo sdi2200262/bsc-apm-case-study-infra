@@ -6,7 +6,7 @@ The grader produces a per-submission ``results.json`` that scores
 every rubric row and carries the per-test message the assertion
 emitted. Sometimes a row's outcome needs a free-prose note that
 records the cause behind the score in a way the structured
-message cannot: a feature path that traces leak-free under
+message cannot: a code path that traces leak-free under
 valgrind because the participant's handler short-circuits before
 allocating, a strict match that passes because the participant
 matched a peripheral seed value rather than the intended

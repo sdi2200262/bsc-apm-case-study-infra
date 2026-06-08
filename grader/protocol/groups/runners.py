@@ -249,7 +249,7 @@ def run_c_memory(
     debug: bool = False,
     passed_tests: Iterable[str] = (),
 ) -> GroupResults:
-    """Run the C multi-step memory scenarios whose feature gates have passed.
+    """Run the C multi-step memory scenarios whose prerequisite rows have passed.
 
     A scenario whose ``gates_on`` is not a subset of ``passed_tests`` is
     skipped (recorded as a zero-point fail naming the missing rows) rather
@@ -272,7 +272,8 @@ def run_c_memory(
         missing = tuple(test_id for test_id in scenario.gates_on if test_id not in passed_set)
         if missing:
             reason = (
-                f"{scenario.scenario_id}: skipped, feature gate did not pass ({', '.join(missing)})"
+                f"{scenario.scenario_id}: skipped, prerequisite rows "
+                f"did not pass ({', '.join(missing)})"
             )
             results[scenario.scenario_id] = (False, reason, reason, None)
             continue
