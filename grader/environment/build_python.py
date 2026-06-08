@@ -98,22 +98,26 @@ def build(eclass_root: Path) -> tuple[bool, str, str]:
         except subprocess.TimeoutExpired:
             # A whole-invocation timeout is not a fast-clearing blip, and
             # retrying would multiply the wall-clock cost, so report as-is.
-            return False, f"uv sync timed out ({BUILD_TIMEOUT_SECONDS}s)", \
-                f"uv sync timed out after {BUILD_TIMEOUT_SECONDS} seconds"
+            return (
+                False,
+                f"uv sync timed out ({BUILD_TIMEOUT_SECONDS}s)",
+                f"uv sync timed out after {BUILD_TIMEOUT_SECONDS} seconds",
+            )
 
         if result.returncode == 0:
             return True, "uv sync completed successfully", result.stdout or "uv sync completed"
 
         combined = (result.stderr + "\n" + result.stdout).strip()
         if result.returncode < 0:
-            failure = (False, f"uv sync killed by signal {-result.returncode}", combined
-                       or f"uv sync killed by signal {-result.returncode}")
+            failure = (
+                False,
+                f"uv sync killed by signal {-result.returncode}",
+                combined or f"uv sync killed by signal {-result.returncode}",
+            )
         else:
             failure = (False, f"uv sync failed: {combined[:300]}", combined)
 
-        if attempt >= MAX_BUILD_ATTEMPTS or not _is_transient_failure(
-            result.returncode, combined
-        ):
+        if attempt >= MAX_BUILD_ATTEMPTS or not _is_transient_failure(result.returncode, combined):
             return failure
         # Exponential backoff before the next attempt: 2s, then 4s.
         time.sleep(RETRY_BACKOFF_BASE_SECONDS * 2 ** (attempt - 1))

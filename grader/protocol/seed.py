@@ -64,10 +64,7 @@ GENERAL_BACKEND_FLOOR_DAYS = 30
 # repository: <infra>/grader-env/seed/seed.yaml, three parents up
 # from this file (grader/protocol/seed.py -> grader/protocol -> grader -> infra).
 _GRADER_ENV_SEED = (
-    Path(__file__).resolve().parent.parent.parent
-    / "grader-env"
-    / "seed"
-    / "seed.yaml"
+    Path(__file__).resolve().parent.parent.parent / "grader-env" / "seed" / "seed.yaml"
 )
 
 
@@ -207,11 +204,7 @@ def enrolled_courses(seed: SeedData, username: str) -> tuple[Course, ...]:
     Returns:
         The user's courses ordered alphabetically by title.
     """
-    courses = [
-        course
-        for course in seed.courses.values()
-        if username in course.enrolled_users
-    ]
+    courses = [course for course in seed.courses.values() if username in course.enrolled_users]
     courses.sort(key=lambda c: c.title)
     return tuple(courses)
 
@@ -266,14 +259,10 @@ def general_announcements_in_window(
         enrolled-course entries together.
     """
     effective = min(days_back, GENERAL_BACKEND_FLOOR_DAYS)
-    in_scope: list[Announcement] = [
-        a for a in seed.admin_announcements if a.days_ago <= effective
-    ]
+    in_scope: list[Announcement] = [a for a in seed.admin_announcements if a.days_ago <= effective]
     for course in seed.courses.values():
         if username in course.enrolled_users:
-            in_scope.extend(
-                a for a in course.announcements if a.days_ago <= effective
-            )
+            in_scope.extend(a for a in course.announcements if a.days_ago <= effective)
     in_scope.sort(key=lambda a: a.days_ago)
     return tuple(in_scope)
 
@@ -370,9 +359,7 @@ def _parse_announcements(
         location = f"{parent}[{index}]"
         days_ago = entry.get("days_ago")
         if not isinstance(days_ago, int) or days_ago < 0:
-            raise SeedError(
-                f"seed: {location}.days_ago must be a non-negative integer"
-            )
+            raise SeedError(f"seed: {location}.days_ago must be a non-negative integer")
         parsed.append(
             Announcement(
                 course_code=course_code,

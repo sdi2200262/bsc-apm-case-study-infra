@@ -160,7 +160,11 @@ def _prepare_clean_checkout(repo_path: Path) -> None:
     """
     repo_path = Path(repo_path).resolve()
     ok, status_out = _git(
-        repo_path, "status", "--untracked-files=all", "--ignored", "--porcelain",
+        repo_path,
+        "status",
+        "--untracked-files=all",
+        "--ignored",
+        "--porcelain",
     )
     if not ok or not status_out.strip():
         return

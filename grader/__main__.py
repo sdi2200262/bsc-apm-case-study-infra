@@ -41,9 +41,7 @@ from .errors import GraderError
 from .protocol import groups
 from .scoring import reporting, scoring
 
-GroupRunner = Callable[
-    [Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]
-]
+GroupRunner = Callable[[Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -90,6 +88,7 @@ def _install_cleanup_signal_handlers(eclass_root: Path) -> None:
     Args:
         eclass_root: Resolved eclass-mcp-server checkout path.
     """
+
     def handler(signum: int, _frame: object) -> None:
         try:
             provision.reset_provisioning(eclass_root)
@@ -157,10 +156,7 @@ def _run(args: argparse.Namespace) -> int:
 
     try:
         provision.provision(eclass_root, mock_root)
-        log.info(
-            "provision: grading environment .env and certs/ copied "
-            "verbatim into the checkout"
-        )
+        log.info("provision: grading environment .env and certs/ copied verbatim into the checkout")
     except provision.ProvisioningError as error:
         log.error(f"provisioning failed: {error}")
         if patch_path is not None and not args.no_cleanup:
@@ -198,12 +194,25 @@ def _run_python_groups(
             f"skipped: python build failed ({summary})",
         )
         return
-    _record_group(scorer, "python baseline", groups.run_python_baseline,
-                  eclass_root, mock_root, debug)
-    _record_group(scorer, "python course", groups.run_python_course_announcements,
-                  eclass_root, mock_root, debug)
-    _record_group(scorer, "python general", groups.run_python_general_announcements,
-                  eclass_root, mock_root, debug)
+    _record_group(
+        scorer, "python baseline", groups.run_python_baseline, eclass_root, mock_root, debug
+    )
+    _record_group(
+        scorer,
+        "python course",
+        groups.run_python_course_announcements,
+        eclass_root,
+        mock_root,
+        debug,
+    )
+    _record_group(
+        scorer,
+        "python general",
+        groups.run_python_general_announcements,
+        eclass_root,
+        mock_root,
+        debug,
+    )
 
 
 def _run_c_groups(
@@ -244,23 +253,19 @@ def _run_c_groups(
 
     log.info("c baseline group")
     for test_id, result in groups.run_c_baseline(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2],
-                      diagnostic=result[3])
+        scorer.record(test_id, result[0], result[1], result[2], diagnostic=result[3])
 
-    _record_group(scorer, "c course", groups.run_c_course_announcements,
-                  eclass_root, mock_root, debug)
-    _record_group(scorer, "c general", groups.run_c_general_announcements,
-                  eclass_root, mock_root, debug)
+    _record_group(
+        scorer, "c course", groups.run_c_course_announcements, eclass_root, mock_root, debug
+    )
+    _record_group(
+        scorer, "c general", groups.run_c_general_announcements, eclass_root, mock_root, debug
+    )
 
     log.info("c memory group")
-    passed_tests = frozenset(
-        test_id for test_id, result in scorer.results.items() if result.passed
-    )
-    for test_id, result in groups.run_c_memory(
-        eclass_root, mock_root, debug, passed_tests
-    ).items():
-        scorer.record(test_id, result[0], result[1], result[2],
-                      diagnostic=result[3])
+    passed_tests = frozenset(test_id for test_id, result in scorer.results.items() if result.passed)
+    for test_id, result in groups.run_c_memory(eclass_root, mock_root, debug, passed_tests).items():
+        scorer.record(test_id, result[0], result[1], result[2], diagnostic=result[3])
 
 
 def _record_group(
@@ -280,8 +285,7 @@ def _record_group(
     """
     log.info(f"{label} group")
     for test_id, result in run_func(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2],
-                       diagnostic=result[3])
+        scorer.record(test_id, result[0], result[1], result[2], diagnostic=result[3])
 
 
 def _skip_remaining(
@@ -329,7 +333,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="leave the test branch in place after grading",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="print individual test results to stdout",
     )

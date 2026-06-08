@@ -94,9 +94,7 @@ def _assert_rubric_balance() -> None:
         )
     c_total = sum(t.points for t in C_TESTS)
     if c_total != _EXPECTED_C_POINTS:
-        raise RubricImbalanceError(
-            f"c total sums to {c_total}, expected {_EXPECTED_C_POINTS}"
-        )
+        raise RubricImbalanceError(f"c total sums to {c_total}, expected {_EXPECTED_C_POINTS}")
     grand_total = sum(t.points for t in ALL_TESTS)
     if grand_total != _EXPECTED_GRAND_POINTS:
         raise RubricImbalanceError(

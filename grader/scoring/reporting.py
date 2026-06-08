@@ -106,9 +106,7 @@ def write_json(
     return paths.json_path
 
 
-def print_console_summary(
-    paths: ReportPaths, scorer: Scorer, verbose: bool = False
-) -> None:
+def print_console_summary(paths: ReportPaths, scorer: Scorer, verbose: bool = False) -> None:
     """Print the summary block to stdout, with optional per-test detail.
 
     Args:
@@ -136,17 +134,13 @@ def print_console_summary(
     log.info(f"C Total:           {c_total[0]:3d}/{c_total[1]:<3d}")
     log.info(f"TOTAL:             {grand[0]:3d}/{grand[1]:<3d}")
 
-    log.notice_block(
-        (n.tag, n.label, n.summary, n.detail) for n in collect_notices(scorer)
-    )
+    log.notice_block((n.tag, n.label, n.summary, n.detail) for n in collect_notices(scorer))
     log.blank()
     log.info(f"JSON report: {paths.json_path}")
     log.line()
 
 
-def _group_totals(
-    scorer: Scorer, tests: tuple[TestDefinition, ...]
-) -> tuple[int, int]:
+def _group_totals(scorer: Scorer, tests: tuple[TestDefinition, ...]) -> tuple[int, int]:
     """Return ``(score, max)`` for one rubric group's tests."""
     score = 0
     group_max = 0
@@ -168,10 +162,7 @@ def _print_verbose(scorer: Scorer) -> None:
             if result is None:
                 continue
             status = "PASS" if result.passed else "FAIL"
-            log.info(
-                f"  {test.id} {status}: "
-                f"{_truncate(result.message, VERBOSE_MESSAGE_LIMIT)}"
-            )
+            log.info(f"  {test.id} {status}: {_truncate(result.message, VERBOSE_MESSAGE_LIMIT)}")
     log.blank()
 
 

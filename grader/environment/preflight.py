@@ -59,9 +59,7 @@ def _probe(url: str, service: str, *, verify: bool) -> None:
             returns a non-2xx status code.
     """
     try:
-        response = requests.get(
-            url, timeout=PROBE_TIMEOUT_SECONDS, verify=verify
-        )
+        response = requests.get(url, timeout=PROBE_TIMEOUT_SECONDS, verify=verify)
     except requests.RequestException as error:
         raise PreflightError(
             f"{service} not reachable at {url}: {error}; "

@@ -38,11 +38,7 @@ def eclass_config_pairs(mock_root: Path) -> dict[str, str]:
     """
     mock_root = Path(mock_root).resolve()
     parsed = parse_env_file(mock_root / DOTENV_FILENAME)
-    return {
-        key: value
-        for key, value in parsed.items()
-        if key.startswith(ECLASS_KEY_PREFIX)
-    }
+    return {key: value for key, value in parsed.items() if key.startswith(ECLASS_KEY_PREFIX)}
 
 
 def tls_trust_env(mock_root: Path) -> dict[str, str]:

@@ -51,13 +51,10 @@ def run_reset(mock_root: Path) -> None:
         )
     except subprocess.TimeoutExpired as error:
         raise ResetError(
-            f"reset script at {script} timed out after "
-            f"{RESET_TIMEOUT_SECONDS}s"
+            f"reset script at {script} timed out after {RESET_TIMEOUT_SECONDS}s"
         ) from error
     except OSError as error:
-        raise ResetError(
-            f"reset script at {script} could not be executed: {error}"
-        ) from error
+        raise ResetError(f"reset script at {script} could not be executed: {error}") from error
     if result.returncode != 0:
         combined = (result.stderr + "\n" + result.stdout).strip().splitlines()
         snippet = "\n  ".join(combined[-10:]) if combined else "(no output)"
@@ -67,6 +64,5 @@ def run_reset(mock_root: Path) -> None:
                 f"{-result.returncode}; tail:\n  {snippet}"
             )
         raise ResetError(
-            f"reset script at {script} exited with code "
-            f"{result.returncode}; tail:\n  {snippet}"
+            f"reset script at {script} exited with code {result.returncode}; tail:\n  {snippet}"
         )

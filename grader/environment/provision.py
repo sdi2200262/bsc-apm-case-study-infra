@@ -147,9 +147,7 @@ def blank_dotenv_credentials(eclass_root: Path) -> None:
     _rewrite_credentials(eclass_root, lambda _key: "")
 
 
-def set_dotenv_credentials(
-    eclass_root: Path, username: str, password: str
-) -> None:
+def set_dotenv_credentials(eclass_root: Path, username: str, password: str) -> None:
     """Write a principal to the checkout's ``.env`` credentials, in place.
 
     Rewrites only the two ``CREDENTIAL_KEYS`` lines to the given
@@ -196,9 +194,7 @@ def reset_provisioning(eclass_root: Path) -> None:
     shutil.rmtree(certs_dir, ignore_errors=True)
 
 
-def _rewrite_credentials(
-    eclass_root: Path, value_for: Callable[[str], str]
-) -> None:
+def _rewrite_credentials(eclass_root: Path, value_for: Callable[[str], str]) -> None:
     """Rewrite the ``CREDENTIAL_KEYS`` lines of the checkout's ``.env``.
 
     Walks the file line by line and replaces only the lines whose key
@@ -230,5 +226,3 @@ def _rewrite_credentials(
                 continue
         rewritten.append(line)
     dotenv_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
-
-

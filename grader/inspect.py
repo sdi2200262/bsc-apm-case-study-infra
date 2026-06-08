@@ -342,32 +342,38 @@ Categories:
         help="Path to the results JSON file",
     )
     parser.add_argument(
-        "--summary", "-s",
+        "--summary",
+        "-s",
         action="store_true",
         help="Print score summary and exit (the default when no view flag is given)",
     )
     parser.add_argument(
-        "--test", "-t",
+        "--test",
+        "-t",
         metavar="ID",
         help="Show details for a specific test ID (e.g., P.1.4, P.2.5, C.5.3)",
     )
     parser.add_argument(
-        "--failed", "-f",
+        "--failed",
+        "-f",
         action="store_true",
         help="List all failed tests",
     )
     parser.add_argument(
-        "--passed", "-p",
+        "--passed",
+        "-p",
         action="store_true",
         help="List all passed tests",
     )
     parser.add_argument(
-        "--category", "-c",
+        "--category",
+        "-c",
         metavar="CAT",
         help="Filter tests by category (protocol, course, general, build, stack, memory)",
     )
     parser.add_argument(
-        "--full-output", "-o",
+        "--full-output",
+        "-o",
         metavar="ID",
         help="Print only the full_output field for a test (useful for piping)",
     )

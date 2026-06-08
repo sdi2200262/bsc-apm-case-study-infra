@@ -112,14 +112,10 @@ def load_notes(directory: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for index, entry in enumerate(notes):
         if not isinstance(entry, dict):
-            raise NotesError(
-                f"sidecar at {path} entry {index} must be a mapping"
-            )
+            raise NotesError(f"sidecar at {path} entry {index} must be a mapping")
         note_value = entry.get("note")
         if not isinstance(note_value, str) or not note_value.strip():
-            raise NotesError(
-                f"sidecar at {path} entry {index} 'note' must be a non-empty string"
-            )
+            raise NotesError(f"sidecar at {path} entry {index} 'note' must be a non-empty string")
         entry_out: dict[str, Any] = {"note": note_value.rstrip()}
         test_ids = entry.get("test_ids")
         if test_ids is not None:
@@ -231,9 +227,7 @@ def _read_results(directory: Path) -> dict[str, Any]:
     """Load ``results.json`` from ``directory`` for test-ID validation."""
     path = directory / RESULTS_FILENAME
     if not path.is_file():
-        raise NotesError(
-            f"{RESULTS_FILENAME} not found in {directory}; run the grader first"
-        )
+        raise NotesError(f"{RESULTS_FILENAME} not found in {directory}; run the grader first")
     with path.open("r", encoding="utf-8") as source:
         try:
             return json.load(source)
@@ -274,18 +268,13 @@ def _cmd_add(args: argparse.Namespace) -> int:
         known = _known_test_ids(results)
         unknown = [tid for tid in args.test_ids if tid not in known]
         if unknown:
-            raise NotesError(
-                f"test_ids {unknown!r} not in {RESULTS_FILENAME}'s tests block"
-            )
+            raise NotesError(f"test_ids {unknown!r} not in {RESULTS_FILENAME}'s tests block")
         entry["test_ids"] = list(args.test_ids)
     notes = load_notes(directory)
     notes.append(entry)
     save_notes(directory, notes)
     if "test_ids" in entry:
-        log.info(
-            f"added note for tests {', '.join(entry['test_ids'])} "
-            f"(now {len(notes)} note(s))"
-        )
+        log.info(f"added note for tests {', '.join(entry['test_ids'])} (now {len(notes)} note(s))")
     else:
         log.info(f"added submission-level note (now {len(notes)} note(s))")
     return 0
@@ -345,16 +334,10 @@ def _cmd_remove(args: argparse.Namespace) -> int:
     if not notes:
         raise NotesError(f"no notes to remove in {directory / NOTES_FILENAME}")
     if args.index < 0 or args.index >= len(notes):
-        raise NotesError(
-            f"index {args.index} out of range; sidecar has {len(notes)} entries"
-        )
+        raise NotesError(f"index {args.index} out of range; sidecar has {len(notes)} entries")
     removed = notes.pop(args.index)
     save_notes(directory, notes)
-    target = (
-        ", ".join(removed["test_ids"])
-        if removed.get("test_ids")
-        else "submission-level"
-    )
+    target = ", ".join(removed["test_ids"]) if removed.get("test_ids") else "submission-level"
     log.info(f"removed note ({target}; now {len(notes)} note(s))")
     return 0
 

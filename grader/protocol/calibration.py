@@ -65,11 +65,20 @@ def seed_instant(mock_root: Path) -> datetime.datetime:
     compose_file = Path(mock_root).resolve() / "compose.yaml"
     sql = "SELECT MAX(`date`) FROM announcement;"
     cmd = [
-        "docker", "compose",
-        "-f", str(compose_file),
-        "exec", "-T", "db",
-        "mariadb", "-uroot", "-psecret", "-N", "-B",
-        "-e", sql,
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "exec",
+        "-T",
+        "db",
+        "mariadb",
+        "-uroot",
+        "-psecret",
+        "-N",
+        "-B",
+        "-e",
+        sql,
         "eclass",
     ]
     try:
@@ -111,6 +120,4 @@ def seed_instant(mock_root: Path) -> datetime.datetime:
             return datetime.datetime.strptime(raw, fmt)
         except ValueError:
             continue
-    raise CalibrationError(
-        f"seed-instant query returned an unparseable DATETIME: {raw[:80]!r}"
-    )
+    raise CalibrationError(f"seed-instant query returned an unparseable DATETIME: {raw[:80]!r}")

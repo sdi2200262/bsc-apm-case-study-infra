@@ -45,9 +45,7 @@ MIN_LIBCURL_VERSION = "7.81.0"
 MIN_LIBXML2_VERSION = "2.9.13"
 
 REQUIRED_LIBRARIES: tuple[str, ...] = ("libcurl.so", "libxml2.so")
-FORBIDDEN_LIBRARY_PATTERN = re.compile(
-    r"^lib(json|cjson|jansson|yajl|jq|parson)"
-)
+FORBIDDEN_LIBRARY_PATTERN = re.compile(r"^lib(json|cjson|jansson|yajl|jq|parson)")
 _LDD_LINE_PATTERN = re.compile(r"\s*([^\s/=]+\.so[^\s]*)")
 
 # Specific build-failure signatures. A naive substring such as

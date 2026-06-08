@@ -51,6 +51,9 @@ class TestDefinition:
     bucket: str
 
 
+# Keep each rubric row on one line so the table stays scannable; without
+# this fence ``ruff format`` wraps every row across six lines and buries it.
+# fmt: off
 PYTHON_BASELINE_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("P.1.1", 1, "protocol", "python", "tools/list exposes all six tools with exact name and schema, descriptions byte-exact for the four baseline tools and presence-checked for the two announcement tools", "baseline"),
     TestDefinition("P.1.2", 1, "protocol", "python", "authstatus before login reports not-logged-in", "baseline"),
@@ -138,6 +141,7 @@ C_MULTISTEP_MEMORY_TESTS: tuple[TestDefinition, ...] = (
     TestDefinition("C.5.2", 2, "memory", "c", "session-state replacement on re-login and idempotent teardown", "feature"),
     TestDefinition("C.5.3", 2, "memory", "c", "leak and responsiveness on the pure baseline regression surface", "feature"),
 )
+# fmt: on
 
 # The 26 C functional scenarios observed under valgrind on their own
 # execution. Each is a one-point sub-assertion keyed
@@ -163,24 +167,13 @@ C_SCENARIO_MEMORY_TESTS: tuple[TestDefinition, ...] = tuple(
     for base in _MEMORY_PAIRED_IDS
 )
 
-PYTHON_FEATURE_TESTS: tuple[TestDefinition, ...] = (
-    PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS
-)
-PYTHON_TESTS: tuple[TestDefinition, ...] = (
-    PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS
-)
+PYTHON_FEATURE_TESTS: tuple[TestDefinition, ...] = PYTHON_COURSE_TESTS + PYTHON_GENERAL_TESTS
+PYTHON_TESTS: tuple[TestDefinition, ...] = PYTHON_BASELINE_TESTS + PYTHON_FEATURE_TESTS
 C_FEATURE_TESTS: tuple[TestDefinition, ...] = (
-    C_COURSE_TESTS
-    + C_GENERAL_TESTS
-    + C_MULTISTEP_MEMORY_TESTS
-    + C_SCENARIO_MEMORY_TESTS
+    C_COURSE_TESTS + C_GENERAL_TESTS + C_MULTISTEP_MEMORY_TESTS + C_SCENARIO_MEMORY_TESTS
 )
 # Combined alias used by reporting.py for the "C MEMORY" report section.
-C_MEMORY_TESTS: tuple[TestDefinition, ...] = (
-    C_MULTISTEP_MEMORY_TESTS + C_SCENARIO_MEMORY_TESTS
-)
+C_MEMORY_TESTS: tuple[TestDefinition, ...] = C_MULTISTEP_MEMORY_TESTS + C_SCENARIO_MEMORY_TESTS
 
-C_TESTS: tuple[TestDefinition, ...] = (
-    C_INFRA_TESTS + C_BASELINE_TESTS + C_FEATURE_TESTS
-)
+C_TESTS: tuple[TestDefinition, ...] = C_INFRA_TESTS + C_BASELINE_TESTS + C_FEATURE_TESTS
 ALL_TESTS: tuple[TestDefinition, ...] = PYTHON_TESTS + C_TESTS

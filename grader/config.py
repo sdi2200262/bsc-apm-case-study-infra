@@ -131,9 +131,7 @@ def require_path(value: Path | None, role: str, stage: str) -> Path:
         )
     resolved = value.resolve()
     if not resolved.exists():
-        raise GraderConfigError(
-            f"{stage}: configured {role} does not exist: {resolved}"
-        )
+        raise GraderConfigError(f"{stage}: configured {role} does not exist: {resolved}")
     return resolved
 
 
@@ -167,9 +165,7 @@ def _load_yaml_paths(
     if config_override is not None:
         candidate = config_override
         if not candidate.exists():
-            raise GraderConfigError(
-                f"config file does not exist: {candidate}"
-            )
+            raise GraderConfigError(f"config file does not exist: {candidate}")
     else:
         candidate = search_root / DEFAULT_CONFIG_FILENAME
         if not candidate.exists():
@@ -183,12 +179,8 @@ def _load_yaml_paths(
         )
     paths_section = payload.get(KEY_PATHS, {})
     if not isinstance(paths_section, dict):
-        raise GraderConfigError(
-            f"config file at {candidate}: '{KEY_PATHS}' must be a mapping"
-        )
-    return candidate.resolve(), {
-        str(key): str(value) for key, value in paths_section.items()
-    }
+        raise GraderConfigError(f"config file at {candidate}: '{KEY_PATHS}' must be a mapping")
+    return candidate.resolve(), {str(key): str(value) for key, value in paths_section.items()}
 
 
 def _read_yaml(path: Path) -> Any:
@@ -207,9 +199,7 @@ def _read_yaml(path: Path) -> Any:
         with path.open("r", encoding="utf-8") as source:
             return yaml.safe_load(source)
     except yaml.YAMLError as error:
-        raise GraderConfigError(
-            f"invalid YAML in config file at {path}: {error}"
-        ) from error
+        raise GraderConfigError(f"invalid YAML in config file at {path}: {error}") from error
 
 
 def _resolve_path(

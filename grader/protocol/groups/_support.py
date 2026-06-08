@@ -92,9 +92,7 @@ def record_mem(
             start)`` wording shared by every C functional group.
     """
     if no_verdict_msg is None:
-        no_verdict_msg = (
-            f"skipped: {test_id} produced no leak verdict (server did not start)"
-        )
+        no_verdict_msg = f"skipped: {test_id} produced no leak verdict (server did not start)"
     if leak is not None:
         leak_clean, leak_detail = leak
         mem_ok = ok and leak_clean

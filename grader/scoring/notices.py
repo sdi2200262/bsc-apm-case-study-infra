@@ -49,9 +49,7 @@ _LENIENT_FORM_PHRASE: dict[str, str] = {
         "accepted via the presence-only description check; "
         "review the participant's wording in the response below"
     ),
-    MISSING_CREDS_DOCUMENTED: (
-        "accepted via the documented one-sentence missing-credentials form"
-    ),
+    MISSING_CREDS_DOCUMENTED: ("accepted via the documented one-sentence missing-credentials form"),
 }
 
 # Rubric rows whose pass/fail depends on SDK-emitted serialisation

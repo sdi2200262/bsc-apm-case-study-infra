@@ -225,8 +225,7 @@ class ServerProcess:
             return True
         except OSError as error:
             log.error(
-                f"server start failed: {self.ctx.impl} subprocess "
-                f"could not be launched: {error}"
+                f"server start failed: {self.ctx.impl} subprocess could not be launched: {error}"
             )
             return False
 
@@ -297,9 +296,7 @@ class ServerProcess:
         self._valgrind_stderr_file.seek(0)
         raw = self._valgrind_stderr_file.read()
         report = tail_lines(raw, VALGRIND_STDERR_TAIL_LINES)
-        exit_code = (
-            self._proc_exit_code if self._proc_exit_code is not None else 0
-        )
+        exit_code = self._proc_exit_code if self._proc_exit_code is not None else 0
         clean, _reason = classify_leak_verdict(exit_code, raw)
         return clean, report
 
@@ -321,9 +318,7 @@ class ServerProcess:
             self.proc.stdin.write(line)
             self.proc.stdin.flush()
             timeout = (
-                MEMCHECK_REQUEST_TIMEOUT_SECONDS
-                if self.ctx.memcheck
-                else REQUEST_TIMEOUT_SECONDS
+                MEMCHECK_REQUEST_TIMEOUT_SECONDS if self.ctx.memcheck else REQUEST_TIMEOUT_SECONDS
             )
             response = read_correlated_response(
                 self.proc.stdout, request.get("id"), timeout, self.ctx.debug
@@ -426,12 +421,14 @@ class ServerProcess:
 
     def _fetch_advertised_tools(self) -> dict[str, dict | None]:
         """Send ``tools/list`` and return the name-to-inputSchema mapping."""
-        response = self.send_request({
-            "jsonrpc": "2.0",
-            "id": 50,
-            "method": "tools/list",
-            "params": {},
-        })
+        response = self.send_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 50,
+                "method": "tools/list",
+                "params": {},
+            }
+        )
         if not response or "result" not in response:
             return {}
         advertised: dict[str, dict | None] = {}
@@ -536,10 +533,12 @@ def initialize_server(server: ServerProcess) -> bool:
     response = server.initialize_handshake()
     if response is None or "result" not in response:
         return False
-    server.send_notification({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized",
-    })
+    server.send_notification(
+        {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+        }
+    )
     return True
 
 
@@ -559,12 +558,14 @@ def call_tool(server: ServerProcess, tool: str, args: dict) -> dict | None:
             error_response = validate_against_schema(args, schema)
             if error_response is not None:
                 return error_response
-    return server.send_request({
-        "jsonrpc": "2.0",
-        "id": 99,
-        "method": "tools/call",
-        "params": {"name": tool, "arguments": args},
-    })
+    return server.send_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": args},
+        }
+    )
 
 
 def extract_text(response: dict | None) -> str:

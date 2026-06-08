@@ -30,9 +30,7 @@ def parse_leak_bytes(output: str, leak_type: str) -> int:
         The byte count for that leak category, or ``0`` when the
         pattern is absent.
     """
-    pattern = re.compile(
-        rf"{re.escape(leak_type)}:\s*([\d,]+)\s*bytes", re.IGNORECASE
-    )
+    pattern = re.compile(rf"{re.escape(leak_type)}:\s*([\d,]+)\s*bytes", re.IGNORECASE)
     found = pattern.search(output)
     if found:
         return int(found.group(1).replace(",", ""))
@@ -53,9 +51,7 @@ def tail_lines(text: str, n: int) -> str:
     return "\n".join(lines[-n:])
 
 
-def classify_leak_verdict(
-    returncode: int, stderr: str
-) -> tuple[bool, str]:
+def classify_leak_verdict(returncode: int, stderr: str) -> tuple[bool, str]:
     """Return ``(clean, reason)`` for a valgrind run from its outputs.
 
     The shared decision both the multi-step scenarios and the
