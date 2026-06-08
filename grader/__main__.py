@@ -4,12 +4,12 @@
 
 Parses arguments, resolves the testing-environment and eclass paths,
 runs the preflight and reset, applies the participant's patch (or skips
-it in baseline mode), sequences the Python and C phase modules, writes
+it in baseline mode), sequences the Python and C group modules, writes
 the JSON report beside the eclass-mcp-server checkout, and prints the
-console summary. The per-phase ordering and the C compile gate live with
-the phase runners ``_run_python_phases`` and ``_run_c_phases``.
+console summary. The per-group ordering and the C compile gate live with
+the group runners ``_run_python_groups`` and ``_run_c_groups``.
 
-Exit codes: ``0`` on a clean run (phase-test failures are recorded in the
+Exit codes: ``0`` on a clean run (test failures are recorded in the
 report and do not change the exit code); ``1`` on a configuration,
 preflight, reset, provisioning, or patch-application failure; ``2`` on an
 argument error or a missing patch file.
@@ -38,10 +38,10 @@ from .environment import (
     reset,
 )
 from .errors import GraderError
-from .protocol import phases
+from .protocol import groups
 from .scoring import reporting, scoring
 
-PhaseRunner = Callable[
+GroupRunner = Callable[
     [Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]
 ]
 
@@ -169,8 +169,8 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        _run_python_phases(scorer, eclass_root, mock_root, args.debug)
-        _run_c_phases(scorer, eclass_root, mock_root, args.debug)
+        _run_python_groups(scorer, eclass_root, mock_root, args.debug)
+        _run_c_groups(scorer, eclass_root, mock_root, args.debug)
     finally:
         provision.reset_provisioning(eclass_root)
         if patch_path is not None and not args.no_cleanup:
@@ -181,13 +181,13 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_python_phases(
+def _run_python_groups(
     scorer: scoring.Scorer,
     eclass_root: Path,
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run the Python dependency install, then the Python phases."""
+    """Run the Python dependency install, then the Python groups."""
     log.info("python build: uv sync")
     ok, summary, _detail = build_python.build(eclass_root)
     log.info(f"python build: {summary}")
@@ -198,28 +198,28 @@ def _run_python_phases(
             f"skipped: python build failed ({summary})",
         )
         return
-    _record_phase(scorer, "python baseline", phases.run_python_baseline,
+    _record_group(scorer, "python baseline", groups.run_python_baseline,
                   eclass_root, mock_root, debug)
-    _record_phase(scorer, "python course", phases.run_python_course_announcements,
+    _record_group(scorer, "python course", groups.run_python_course_announcements,
                   eclass_root, mock_root, debug)
-    _record_phase(scorer, "python general", phases.run_python_general_announcements,
+    _record_group(scorer, "python general", groups.run_python_general_announcements,
                   eclass_root, mock_root, debug)
 
 
-def _run_c_phases(
+def _run_c_groups(
     scorer: scoring.Scorer,
     eclass_root: Path,
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Run C compile, tech-stack, config surfaces, then protocol phases.
+    """Run C compile, tech-stack, config surfaces, then protocol groups.
 
     C.1.1 compile is the sole hard gate: on fail every other C row
     (including all ``.mem`` and C.5 rows) is skip-recorded and the
     function returns. The tech-stack (C.1.2/C.1.3/C.1.4) and config-
-    surface (C.1.5/C.1.6) phases run independently with no cascade.
+    surface (C.1.5/C.1.6) groups run independently with no cascade.
     Per-scenario ``.mem`` sub-assertions ride each C functional run.
-    The multi-step memory phase runs last, gated on its composed
+    The multi-step memory group runs last, gated on its composed
     single-call scenarios.
     """
     log.info("c compile: make c-server")
@@ -240,45 +240,45 @@ def _run_c_phases(
         scorer.record(test_id, result[0], result[1], result[2])
         log.info(f"c stack {test_id}: {result[1]}")
 
-    _record_phase(scorer, "c config", phases.run_c_config, eclass_root, mock_root, debug)
+    _record_group(scorer, "c config", groups.run_c_config, eclass_root, mock_root, debug)
 
-    log.info("c baseline phase")
-    for test_id, result in phases.run_c_baseline(eclass_root, mock_root, debug).items():
+    log.info("c baseline group")
+    for test_id, result in groups.run_c_baseline(eclass_root, mock_root, debug).items():
         scorer.record(test_id, result[0], result[1], result[2],
                       diagnostic=result[3])
 
-    _record_phase(scorer, "c course", phases.run_c_course_announcements,
+    _record_group(scorer, "c course", groups.run_c_course_announcements,
                   eclass_root, mock_root, debug)
-    _record_phase(scorer, "c general", phases.run_c_general_announcements,
+    _record_group(scorer, "c general", groups.run_c_general_announcements,
                   eclass_root, mock_root, debug)
 
-    log.info("c memory phase")
+    log.info("c memory group")
     passed_tests = frozenset(
         test_id for test_id, result in scorer.results.items() if result.passed
     )
-    for test_id, result in phases.run_c_memory(
+    for test_id, result in groups.run_c_memory(
         eclass_root, mock_root, debug, passed_tests
     ).items():
         scorer.record(test_id, result[0], result[1], result[2],
                       diagnostic=result[3])
 
 
-def _record_phase(
+def _record_group(
     scorer: scoring.Scorer,
     label: str,
-    run_func: PhaseRunner,
+    run_func: GroupRunner,
     eclass_root: Path,
     mock_root: Path,
     debug: bool,
 ) -> None:
-    """Drive one phase aggregator and record its results into the scorer.
+    """Drive one group aggregator and record its results into the scorer.
 
     Every aggregator yields ``(passed, message, full_output, mode)``;
     ``mode`` is the ``matching`` mode the row was accepted under and
     is recorded as the unscored per-test diagnostic (``None`` for a
     failed or non-string-matched row).
     """
-    log.info(f"{label} phase")
+    log.info(f"{label} group")
     for test_id, result in run_func(eclass_root, mock_root, debug).items():
         scorer.record(test_id, result[0], result[1], result[2],
                        diagnostic=result[3])
@@ -336,7 +336,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="print MCP-server stdio for each phase test",
+        help="print MCP-server stdio for each test",
     )
     parser.add_argument(
         "--eclass-dir",

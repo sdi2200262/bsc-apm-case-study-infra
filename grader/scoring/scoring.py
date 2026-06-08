@@ -11,7 +11,7 @@ multi-step memory behaviours) and every other row is one point. The
 ``<scenario>.mem``; each is awarded only when its paired functional
 scenario passes, the gating the runner enforces before recording.
 
-Per-tier budgets are declared in ``_EXPECTED_TIER_POINTS`` and
+Per-group budgets are declared in ``_EXPECTED_GROUP_POINTS`` and
 enforced at import by ``_assert_rubric_balance``; see SCORING.md for
 the full rubric. ``Scorer`` accumulates per-test results and
 computes the aggregate scores the report writer consumes.
@@ -47,7 +47,7 @@ class TestDefinition:
         target: Implementation under test, ``"python"`` or ``"c"``.
         description: Short human-readable description for the
             report writer.
-        group: Either ``"baseline"`` or ``"feature"``; partitions
+        bucket: Either ``"baseline"`` or ``"feature"``; partitions
             the per-implementation totals into the rubric's
             baseline-vs-feature buckets.
     """
@@ -57,7 +57,7 @@ class TestDefinition:
     category: str
     target: str
     description: str
-    group: str
+    bucket: str
 
 
 PYTHON_BASELINE_TESTS: tuple[TestDefinition, ...] = (
@@ -194,11 +194,11 @@ C_TESTS: tuple[TestDefinition, ...] = (
 )
 ALL_TESTS: tuple[TestDefinition, ...] = PYTHON_TESTS + C_TESTS
 
-# Required per-tier and per-implementation point budget. The rubric
+# Required per-group and per-implementation point budget. The rubric
 # is balanced by construction; this table is the single source of
 # truth a future edit is checked against so an unintended imbalance
 # fails loudly at import rather than silently skewing scores.
-_EXPECTED_TIER_POINTS: tuple[tuple[str, tuple[TestDefinition, ...], int], ...] = (
+_EXPECTED_GROUP_POINTS: tuple[tuple[str, tuple[TestDefinition, ...], int], ...] = (
     ("python baseline", PYTHON_BASELINE_TESTS, 11),
     ("python course", PYTHON_COURSE_TESTS, 11),
     ("python general", PYTHON_GENERAL_TESTS, 8),
@@ -218,27 +218,27 @@ class RubricImbalanceError(AssertionError):
     """Raised at import when the rubric point budget does not balance.
 
     The grand total must be 100, the Python implementation 30, the C
-    replica 70, and each tier its documented sub-total. A raised
-    instance names the tier whose sum drifted and the expected and
+    replica 70, and each group its documented sub-total. A raised
+    instance names the group whose sum drifted and the expected and
     actual values so the corrective edit is unambiguous.
     """
 
 
 def _assert_rubric_balance() -> None:
-    """Verify the rubric sums to its documented per-tier budget.
+    """Verify the rubric sums to its documented per-group budget.
 
     Raises:
-        RubricImbalanceError: When any tier sub-total, the Python
+        RubricImbalanceError: When any group sub-total, the Python
             total, the C total, or the grand total differs from the
-            documented value. The message names the failing bucket
+            documented value. The message names the failing group
             and the expected versus actual point counts so the fix
             does not require recomputing the whole table by hand.
     """
-    for label, tests, expected in _EXPECTED_TIER_POINTS:
+    for label, tests, expected in _EXPECTED_GROUP_POINTS:
         actual = sum(t.points for t in tests)
         if actual != expected:
             raise RubricImbalanceError(
-                f"rubric tier '{label}' sums to {actual}, expected {expected}"
+                f"rubric group '{label}' sums to {actual}, expected {expected}"
             )
     python_total = sum(t.points for t in PYTHON_TESTS)
     if python_total != _EXPECTED_PYTHON_POINTS:

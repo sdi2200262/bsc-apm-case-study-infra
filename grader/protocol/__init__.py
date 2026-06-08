@@ -28,8 +28,8 @@ Submodules:
 - ``memory_tests``: the three C.5.x multi-step memory scenarios.
 - ``config_surface``: the two positive configuration-surface
   probes (C.1.5, C.1.6).
-- ``phases``: the per-(implementation, phase) run entry points over
-  one shared phase loop (collapsing the former per-implementation
+- ``groups``: the per-(implementation, group) run entry points over
+  one shared row loop (collapsing the former per-implementation
   aggregator modules); returns the per-test-id result mapping the
   grader CLI driver consumes.
 """

@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Per-(implementation, phase) aggregation entry points.
+"""Per-(implementation, group) aggregation entry points.
 
-Each ``run_*`` entry runs one rubric phase for one implementation and
+Each ``run_*`` entry runs one rubric group for one implementation and
 returns ``{rubric_id: (passed, summary, detail, mode)}`` for the scorer;
-``__main__`` drives them in rubric order. The uniform phases (the C and
+``__main__`` drives them in rubric order. The uniform groups (the C and
 Python course and general suites, and the Python baseline) share one row
 loop (``_run_rows``) and differ only in their ``(rubric_id, test)`` table,
 whether a seed instant is threaded in, and whether each row runs under
-valgrind. The three structurally distinct C phases keep dedicated entries:
+valgrind. The three structurally distinct C groups keep dedicated entries:
 the C baseline carries the protocol-frame rows C.2.1/C.2.2 ahead of its
 valgrind rows, the C config surface restores provisioning in ``finally``,
-and the C memory phase gates each scenario on its predecessor rows.
+and the C memory group gates each scenario on its predecessor rows.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from . import (
 from ._assertion_support import Result5, record_mem
 from .calibration import seed_instant
 
-PhaseResults = dict[str, tuple[bool, str, str, str | None]]
+GroupResults = dict[str, tuple[bool, str, str, str | None]]
 _RubricTests = tuple[tuple[str, Callable[..., Result5]], ...]
 
 # C baseline valgrind rows C.2.3 through C.2.12 (C.2.1/C.2.2 are the
@@ -109,15 +109,15 @@ _PY_GENERAL_TESTS: _RubricTests = (
 )
 
 
-def run_python_baseline(eclass_dir: Path, mock_root: Path, debug: bool = False) -> PhaseResults:
-    """Run the Python baseline phase (P.1.1 through P.1.11)."""
+def run_python_baseline(eclass_dir: Path, mock_root: Path, debug: bool = False) -> GroupResults:
+    """Run the Python baseline group (P.1.1 through P.1.11)."""
     return _run_rows("python", _PY_BASELINE_TESTS, eclass_dir, mock_root, debug)
 
 
 def run_python_course_announcements(
     eclass_dir: Path, mock_root: Path, debug: bool = False
-) -> PhaseResults:
-    """Run the Python course-announcement phase (P.2.1 through P.2.9)."""
+) -> GroupResults:
+    """Run the Python course-announcement group (P.2.1 through P.2.9)."""
     return _run_rows(
         "python",
         _PY_COURSE_TESTS,
@@ -130,8 +130,8 @@ def run_python_course_announcements(
 
 def run_python_general_announcements(
     eclass_dir: Path, mock_root: Path, debug: bool = False
-) -> PhaseResults:
-    """Run the Python general-announcement phase (P.3.1 through P.3.7)."""
+) -> GroupResults:
+    """Run the Python general-announcement group (P.3.1 through P.3.7)."""
     return _run_rows(
         "python",
         _PY_GENERAL_TESTS,
@@ -147,8 +147,8 @@ def run_c_baseline(
     mock_root: Path,
     debug: bool = False,
     passed_tests: Iterable[str] = (),
-) -> PhaseResults:
-    """Run the C baseline phase (C.2.1 through C.2.12).
+) -> GroupResults:
+    """Run the C baseline group (C.2.1 through C.2.12).
 
     C.2.1 (the hand-written initialize frame) and C.2.2 (tools/list) are
     protocol-frame rows with no memory sub-assertion. C.2.3 through C.2.12
@@ -159,14 +159,14 @@ def run_c_baseline(
         eclass_dir: Resolved eclass-mcp-server checkout path.
         mock_root: Resolved testing environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
-        passed_tests: Unused; accepted so every C phase entry takes a
+        passed_tests: Unused; accepted so every C group entry takes a
             uniform call shape.
 
     Returns:
         Mapping of rubric identifier to ``(passed, summary, detail, mode)``.
     """
     del passed_tests
-    results: PhaseResults = {}
+    results: GroupResults = {}
     init_ok, init_msg, init_detail, _init_leak, init_mode = frame_tests.test_initialize_frame(
         "c", eclass_dir, mock_root, debug
     )
@@ -181,7 +181,7 @@ def run_c_baseline(
     return results
 
 
-def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> PhaseResults:
+def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> GroupResults:
     """Run the C configuration-surface probes (C.1.5, C.1.6).
 
     Runs the env-var probe then the verbatim-``.env`` probe, then restores
@@ -198,7 +198,7 @@ def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> Phas
         ``mode`` is ``None`` (a surface probe is a login-succeeded verdict,
         not a string match).
     """
-    results: PhaseResults = {}
+    results: GroupResults = {}
     try:
         env_ok, env_msg, env_detail = config_surface.test_env_var_config_surface(
             eclass_dir, mock_root, debug
@@ -215,8 +215,8 @@ def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> Phas
 
 def run_c_course_announcements(
     eclass_dir: Path, mock_root: Path, debug: bool = False
-) -> PhaseResults:
-    """Run the C course-announcement phase (C.3.1 through C.3.9, under valgrind)."""
+) -> GroupResults:
+    """Run the C course-announcement group (C.3.1 through C.3.9, under valgrind)."""
     return _run_rows(
         "c",
         _C_COURSE_TESTS,
@@ -230,8 +230,8 @@ def run_c_course_announcements(
 
 def run_c_general_announcements(
     eclass_dir: Path, mock_root: Path, debug: bool = False
-) -> PhaseResults:
-    """Run the C general-announcement phase (C.4.1 through C.4.7, under valgrind)."""
+) -> GroupResults:
+    """Run the C general-announcement group (C.4.1 through C.4.7, under valgrind)."""
     return _run_rows(
         "c",
         _C_GENERAL_TESTS,
@@ -248,7 +248,7 @@ def run_c_memory(
     mock_root: Path,
     debug: bool = False,
     passed_tests: Iterable[str] = (),
-) -> PhaseResults:
+) -> GroupResults:
     """Run the C multi-step memory scenarios whose feature gates have passed.
 
     A scenario whose ``gates_on`` is not a subset of ``passed_tests`` is
@@ -267,7 +267,7 @@ def run_c_memory(
     """
     del debug
     passed_set = frozenset(passed_tests)
-    results: PhaseResults = {}
+    results: GroupResults = {}
     for scenario in memory_tests.SCENARIOS:
         missing = tuple(test_id for test_id in scenario.gates_on if test_id not in passed_set)
         if missing:
@@ -290,7 +290,7 @@ def _run_rows(
     *,
     instant: datetime | None = None,
     memcheck: bool = False,
-) -> PhaseResults:
+) -> GroupResults:
     """Run a uniform sequence of rows and return their result mapping.
 
     Each row calls its test with ``(impl, eclass_dir, mock_root, debug)``,
@@ -301,7 +301,7 @@ def _run_rows(
 
     Args:
         impl: ``"python"`` or ``"c"``.
-        tests: The ordered ``(rubric_id, test)`` table for the phase.
+        tests: The ordered ``(rubric_id, test)`` table for the group.
         eclass_dir: Resolved eclass-mcp-server checkout path.
         mock_root: Resolved testing environment install path.
         debug: When ``True``, server stdio is echoed to stdout.
@@ -314,7 +314,7 @@ def _run_rows(
         Mapping of rubric identifier to ``(passed, summary, detail, mode)``,
         plus a ``<id>.mem`` entry per row when ``memcheck`` is set.
     """
-    results: PhaseResults = {}
+    results: GroupResults = {}
     for test_id, fn in tests:
         if instant is None:
             ok, msg, detail, leak, mode = fn(impl, eclass_dir, mock_root, debug, memcheck=memcheck)

@@ -4,7 +4,7 @@
 
 The grader runs against a separately-installed testing environment
 that provides the openeclass instance and the mock CAS service.
-Before any phase test runs, the pre-flight check verifies that
+Before any protocol test runs, the pre-flight check verifies that
 both services respond on their localhost ports. The probes are
 idempotent and read-only; they do not mutate any state on either
 service.

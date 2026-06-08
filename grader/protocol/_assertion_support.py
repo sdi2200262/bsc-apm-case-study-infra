@@ -89,7 +89,7 @@ def record_mem(
         no_verdict_msg: The message recorded when ``leak`` is
             ``None``. Defaults to the standard
             ``skipped: <id> produced no leak verdict (server did not
-            start)`` wording shared by every C functional phase.
+            start)`` wording shared by every C functional group.
     """
     if no_verdict_msg is None:
         no_verdict_msg = (

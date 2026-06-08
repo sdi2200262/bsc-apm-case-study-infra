@@ -6,7 +6,7 @@ The grader runs ``uv sync`` against the participant's checkout to
 install the Python implementation's dependencies. A successful
 return indicates the dependencies resolved and the package is
 importable inside the checkout's environment; the actual server
-spawn happens in the protocol-test phase.
+spawn happens during the protocol tests.
 """
 
 from __future__ import annotations

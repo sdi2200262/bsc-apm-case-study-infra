@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Baseline-tier protocol assertions (P.1.x / C.2.x).
+"""Baseline protocol assertions (P.1.x / C.2.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server.
 Principal: ``student_courses``. All return a 5-tuple

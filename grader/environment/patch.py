@@ -7,7 +7,7 @@ created from the pinned eclass-mcp-server commit
 (``PATCH_BASELINE_PIN``). The participant's instructions check the
 same commit out before they begin work, so grader and participant
 share a byte-identical baseline regardless of where the upstream
-``main`` branch has advanced. After the phase tests run, the
+``main`` branch has advanced. After the protocol tests run, the
 cleanup helper deletes the test branch and returns the working
 tree to the pinned commit (detached HEAD).
 

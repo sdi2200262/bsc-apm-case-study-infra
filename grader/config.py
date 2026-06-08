@@ -116,7 +116,7 @@ def require_path(value: Path | None, role: str, stage: str) -> Path:
         value: The candidate path, possibly ``None``.
         role: Human-readable role name (``"mock root"``,
             ``"eclass root"``).
-        stage: Phase name reporting the requirement.
+        stage: Name of the step reporting the requirement.
 
     Returns:
         The path, resolved to an absolute path.

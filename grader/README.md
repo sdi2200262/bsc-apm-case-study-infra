@@ -3,7 +3,7 @@
 Black-box testing suite for evaluating participant submissions
 against the pinned `eclass-mcp-server` baseline. The grader applies
 a participant's patch on a fresh test branch, runs the rubric
-phases against a separately-installed testing environment, and
+checks against a separately-installed testing environment, and
 writes a JSON results artefact the pipeline promotes into the
 dataset.
 
@@ -98,21 +98,21 @@ The grader is a black-box sequencer. On every grading run the
 grader probes the environment's HTTP endpoints
 (`http://localhost/` for openeclass, `https://localhost:18443/health`
 for the mock CAS), invokes `<mock-root>/scripts/reset` to flush the
-seed back to its baseline, then sequences the phase modules:
+seed back to its baseline, then runs each rubric group in turn:
 
 1. Apply the patch on a fresh test branch (or skip in `--no-patch` baseline mode).
 2. Provision the dev environment: copy `<mock-root>/.env` and `<mock-root>/certs/` verbatim into the checkout, overwriting any `.env` or cert shipped inside the patch. A preflight verifies both source artefacts are present. Provisioning is reset per submission.
 3. Python dependency install (`uv sync` against the participant's checkout) as a non-scored prerequisite. Failure skips every Python rubric row.
-4. Python baseline phase (P.1.1 through P.1.11).
-5. Python course-announcements phase (P.2.1 through P.2.9).
-6. Python general-announcements phase (P.3.1 through P.3.7).
+4. Python baseline group (P.1.1 through P.1.11).
+5. Python course-announcements group (P.2.1 through P.2.9).
+6. Python general-announcements group (P.3.1 through P.3.7).
 7. C compile (`make c-server`, scored as C.1.1). C.1.1 is the sole hard gate: on fail every other C row is skip-recorded and the run proceeds to reporting.
 8. C tech-stack verification (`ldd` whitelist): C.1.2 libcurl, C.1.3 libxml2, C.1.4 no-JSON-library (no cascade from any of these).
 9. C configuration-surface probes: C.1.5 env-var surface, C.1.6 verbatim documented `.env` surface (no cascade; restores dual-provisioned state after).
-10. C baseline phase (C.2.1 through C.2.12). C.2.3 through C.2.12 each also record a `.mem` sub-assertion scored only when the functional assertion passes.
-11. C course-announcements phase (C.3.1 through C.3.9), each with a `.mem` sub-assertion.
-12. C general-announcements phase (C.4.1 through C.4.7), each with a `.mem` sub-assertion.
-13. C memory phase: three multi-step valgrind scenarios (C.5.1 through C.5.3), each gated on the composed single-call scenarios named in its `gates_on` tuple.
+10. C baseline group (C.2.1 through C.2.12). C.2.3 through C.2.12 each also record a `.mem` sub-assertion scored only when the functional assertion passes.
+11. C course-announcements group (C.3.1 through C.3.9), each with a `.mem` sub-assertion.
+12. C general-announcements group (C.4.1 through C.4.7), each with a `.mem` sub-assertion.
+13. C memory group: three multi-step valgrind scenarios (C.5.1 through C.5.3), each gated on the composed single-call scenarios named in its `gates_on` tuple.
 
 Each protocol test spawns the participant's MCP server as a
 subprocess (Python: `uv run python -m src.eclass_mcp_server.server`;
@@ -129,7 +129,7 @@ from) so the rubric's expected values cannot drift from the
 environment under test; the `.env`/`certs/` copy guarantees the
 participant server's wiring is the literal documented wiring.
 
-Phase failures are recorded in the results JSON without halting the
+Test failures are recorded in the results JSON without halting the
 run. Patch-apply, provisioning, pre-flight, and reset failures
 terminate the run early, each printing one actionable line on stderr.
 
@@ -190,7 +190,7 @@ grader/
 │   ├── general_announcements_tests.py # P.3 / C.4 assertions
 │   ├── memory_tests.py                # C.5 multi-step scenarios under valgrind
 │   ├── config_surface.py              # C.1.5 / C.1.6 surface-isolated probes
-│   └── phases.py                      # per-(implementation, phase) aggregation entries
+│   └── groups.py                      # per-(implementation, group) aggregation entries
 └── scoring/                           # scoring + output layer
     ├── __init__.py
     ├── scoring.py                     # rubric definitions and the Scorer
