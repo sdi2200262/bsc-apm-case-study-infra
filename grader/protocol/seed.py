@@ -132,8 +132,8 @@ class SeedData:
     """Parsed contents of the grading environment seed.
 
     Attributes:
-        users: Mapping of username to :class:`User`.
-        courses: Mapping of course code to :class:`Course`, in seed
+        users: Mapping of username to ``User``.
+        courses: Mapping of course code to ``Course``, in seed
             order of insertion.
         admin_announcements: System-wide announcements ordered by
             ``days_ago`` ascending (newest first).
@@ -145,7 +145,7 @@ class SeedData:
 
 
 def load_seed(path: Path | None = None) -> SeedData:
-    """Load the grading-environment seed YAML and return a :class:`SeedData`.
+    """Load the grading-environment seed YAML and return a ``SeedData``.
 
     Args:
         path: Optional path to a seed file. Defaults to the
@@ -171,7 +171,7 @@ def load_seed(path: Path | None = None) -> SeedData:
 
 
 def user(seed: SeedData, username: str) -> User:
-    """Return the seeded :class:`User` for ``username``.
+    """Return the seeded ``User`` for ``username``.
 
     Args:
         seed: Loaded seed data.
@@ -268,13 +268,13 @@ def general_announcements_in_window(
 
 
 def _build_seed_data(raw: dict[str, Any]) -> SeedData:
-    """Validate the parsed YAML and construct a :class:`SeedData`.
+    """Validate the parsed YAML and construct a ``SeedData``.
 
     Args:
         raw: The YAML mapping at the seed file's top level.
 
     Returns:
-        The validated :class:`SeedData`.
+        The validated ``SeedData``.
 
     Raises:
         SeedError: When any required key is missing, malformed, or

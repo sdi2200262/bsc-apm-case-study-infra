@@ -2,7 +2,7 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Offline grader for BSc APM Case Study participant submissions.
 
-Grades a participant's ``eclass-mcp-server`` patch against the testing
+Grades a participant's ``eclass-mcp-server`` patch against the grading
 environment and writes a JSON results report scored against the rubric.
 The work is split across three subpackages:
 - ``environment``: grading-environment preflight, reset, provisioning,

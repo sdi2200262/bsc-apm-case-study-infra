@@ -14,7 +14,7 @@ to a common width and ANSI colour applied to the token only, and only
 when the destination stream is a TTY. ``error`` writes to stderr; every
 other level writes to stdout. ``debug`` emits only when the environment
 variable named by ``DEBUG_ENV_VAR`` is set (the ``--debug`` flag turns
-it on via :func:`enable_debug`). ``line`` and ``blank`` are structural:
+it on via ``enable_debug``). ``line`` and ``blank`` are structural:
 ``line`` is the only separator rule, replacing raw banner constants,
 and ``blank`` is an empty line. There are no emojis.
 """
