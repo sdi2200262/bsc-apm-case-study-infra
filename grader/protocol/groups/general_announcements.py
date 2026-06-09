@@ -4,9 +4,11 @@
 
 Principal: ``student_general`` (enrolled in BIO110 only). Each
 function accepts an optional ``instant`` (per-run seed-apply
-timestamp) and ``memcheck``. Return shape is a 5-tuple
-``(ok, msg, detail, leak_tuple|None, mode|None)`` following the
-same convention as ``course_announcements``.
+timestamp) and ``memcheck``. Return shape is a 6-tuple
+``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)``
+following the same convention as ``course_announcements``. A
+non-passing announcement row carries the edit-distance similarity
+against its expected ordered form.
 
 Leak-verdict pattern: functional result is saved inside the ``with``
 block; ``leak_after`` is called after the block exits so
@@ -30,12 +32,13 @@ from ..expected import (
 from ..matching import match_exact
 from ..runner import ServerProcess, call_tool, extract_text, initialize_server, spawn_server
 from ..seed import SEED, general_announcements_in_window, user
+from ..similarity import similarity_ratio
 from ._support import (
     HANDSHAKE_FAIL,
     LOGIN_FAIL,
     SERVER_START_FAIL,
     TOOL_FAIL,
-    Result5,
+    RowResult,
     leak_after,
 )
 
@@ -50,11 +53,12 @@ def check_general_not_logged_in(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.1 / C.4.1: tool without login returns the not-logged-in error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(impl, eclass_dir, mock_root, debug, memcheck=memcheck) as server:
         srv = server
         if server is not None:
@@ -74,7 +78,8 @@ def check_general_not_logged_in(
                         else (f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}")
                     )
                     detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                    similarity = similarity_ratio(text, [ERR_NOT_LOGGED_IN])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_general_negative_days(
@@ -84,11 +89,12 @@ def check_general_negative_days(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.2 / C.4.2: days_back=-1 returns the non-negative-integer error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -119,7 +125,8 @@ def check_general_negative_days(
                             else (f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [ERR_NEGATIVE_DAYS_BACK])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_general_over_thirty(
@@ -129,11 +136,12 @@ def check_general_over_thirty(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.3 / C.4.3: days_back=31 returns the upper-bound error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -164,7 +172,8 @@ def check_general_over_thirty(
                             else (f"expected {ERR_GENERAL_UPPER_BOUND!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [ERR_GENERAL_UPPER_BOUND])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_general_days_zero(
@@ -174,11 +183,12 @@ def check_general_days_zero(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.4 / C.4.4: days_back=0 returns the empty-window string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -209,7 +219,8 @@ def check_general_days_zero(
                             else (f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [NO_ANNOUNCEMENTS])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_general_days_5(
@@ -219,7 +230,7 @@ def check_general_days_5(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.5 / C.4.5: days_back=5 returns 1 item (BIO110 a1 at 3d)."""
     assert instant is not None, "instant is required for this row"
     anns = general_announcements_in_window(SEED, "student_general", 5)
@@ -228,6 +239,7 @@ def check_general_days_5(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -260,7 +272,8 @@ def check_general_days_5(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_general_days_8(
@@ -270,7 +283,7 @@ def check_general_days_8(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.6 / C.4.6: days_back=8 returns 2 items (BIO110 a1, SYS1).
 
     Exercises the union of enrolled-course and system announcements
@@ -283,6 +296,7 @@ def check_general_days_8(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -315,7 +329,8 @@ def check_general_days_8(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_general_default(
@@ -325,7 +340,7 @@ def check_general_default(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.3.7 / C.4.7: days_back omitted returns the default-window response.
 
     Default = 30; student_general sees BIO110 a1 (3d), SYS1 (7d),
@@ -338,6 +353,7 @@ def check_general_default(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -370,7 +386,8 @@ def check_general_default(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def _creds() -> dict[str, str]:

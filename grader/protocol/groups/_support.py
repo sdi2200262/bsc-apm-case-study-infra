@@ -2,17 +2,25 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Shared scaffolding and result helpers for the scenario assertion suites.
 
-Every check suite in this package returns the same five-tuple result
+Every check suite in this package returns the same six-tuple result
 shape and the same step-failure sentinels, and the C runners all record
 ``.mem`` sub-assertions with one outcome wording. Centralising them here
 removes the copy-pasted scaffolding from the suites and keeps the sentinel
 text and the ``.mem`` recording wording from drifting between suites.
+
+A ``RowResult`` is ``(ok, msg, detail, leak_tuple|None, mode|None,
+similarity|None)``: the functional verdict and its summary and detail,
+the valgrind leak verdict (or ``None`` off ``memcheck``), the accepted
+``matching`` mode (or ``None`` on a fail or non-string row), and the
+edit-distance similarity ratio for a non-passing string row (or ``None``
+when the row passed or has no string contract), which the scorer turns
+into a partial-credit verdict.
 """
 
 from __future__ import annotations
 
 LeakTuple = tuple[bool, str]
-Result5 = tuple[bool, str, str, LeakTuple | None, str | None]
+RowResult = tuple[bool, str, str, LeakTuple | None, str | None, float | None]
 
 SERVER_START_FAIL: tuple[bool, str, str] = (
     False,
@@ -57,7 +65,7 @@ def leak_after(server: object, memcheck: bool) -> LeakTuple | None:
 
 
 def record_mem(
-    results: dict[str, tuple[bool, str, str, str | None]],
+    results: dict[str, tuple[bool, str, str, str | None, float | None]],
     test_id: str,
     ok: bool,
     leak: LeakTuple | None,
@@ -102,6 +110,6 @@ def record_mem(
             mem_msg = f"skipped: {test_id} functional did not pass"
         else:
             mem_msg = f"{test_id}.mem: leaks detected"
-        results[f"{test_id}.mem"] = (mem_ok, mem_msg, leak_detail, None)
+        results[f"{test_id}.mem"] = (mem_ok, mem_msg, leak_detail, None, None)
     else:
-        results[f"{test_id}.mem"] = (False, no_verdict_msg, no_verdict_msg, None)
+        results[f"{test_id}.mem"] = (False, no_verdict_msg, no_verdict_msg, None, None)

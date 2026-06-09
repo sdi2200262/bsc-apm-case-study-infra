@@ -3,7 +3,7 @@
 """Per-(implementation, group) aggregation entry points.
 
 Each ``run_*`` entry runs one rubric group for one implementation and
-returns ``{rubric_id: (passed, summary, detail, mode)}`` for the scorer;
+returns ``{rubric_id: (passed, summary, detail, mode, similarity)}`` for the scorer;
 ``__main__`` drives them in rubric order. The uniform groups (the C and
 Python course and general suites, and the Python baseline) share one row
 loop (``_run_rows``) and differ only in their ``(rubric_id, test)`` table,
@@ -30,10 +30,10 @@ from . import (
     general_announcements,
     memory,
 )
-from ._support import Result5, record_mem
+from ._support import RowResult, record_mem
 
-GroupResults = dict[str, tuple[bool, str, str, str | None]]
-_RubricTests = tuple[tuple[str, Callable[..., Result5]], ...]
+GroupResults = dict[str, tuple[bool, str, str, str | None, float | None]]
+_RubricTests = tuple[tuple[str, Callable[..., RowResult]], ...]
 
 # C baseline valgrind rows C.2.3 through C.2.12 (C.2.1/C.2.2 are the
 # protocol-frame rows handled directly by run_c_baseline).
@@ -163,18 +163,18 @@ def run_c_baseline(
             uniform call shape.
 
     Returns:
-        Mapping of rubric identifier to ``(passed, summary, detail, mode)``.
+        Mapping of rubric identifier to ``(passed, summary, detail, mode, similarity)``.
     """
     del passed_tests
     results: GroupResults = {}
-    init_ok, init_msg, init_detail, _init_leak, init_mode = frame.check_initialize_frame(
+    init_ok, init_msg, init_detail, _init_leak, init_mode, init_sim = frame.check_initialize_frame(
         "c", eclass_dir, mock_root, debug
     )
-    results["C.2.1"] = (init_ok, init_msg, init_detail, init_mode)
-    tl_ok, tl_msg, tl_detail, _tl_leak, tl_mode = frame.check_tools_list(
+    results["C.2.1"] = (init_ok, init_msg, init_detail, init_mode, init_sim)
+    tl_ok, tl_msg, tl_detail, _tl_leak, tl_mode, tl_sim = frame.check_tools_list(
         "c", eclass_dir, mock_root, debug
     )
-    results["C.2.2"] = (tl_ok, tl_msg, tl_detail, tl_mode)
+    results["C.2.2"] = (tl_ok, tl_msg, tl_detail, tl_mode, tl_sim)
     results.update(
         _run_rows("c", _C_BASELINE_MEM_TESTS, eclass_dir, mock_root, debug, memcheck=True)
     )
@@ -194,7 +194,7 @@ def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> Grou
         debug: When ``True``, server stdio is echoed to stdout.
 
     Returns:
-        Mapping of rubric identifier to ``(passed, summary, detail, mode)``;
+        Mapping of rubric identifier to ``(passed, summary, detail, mode, similarity)``;
         ``mode`` is ``None`` (a surface probe is a login-succeeded verdict,
         not a string match).
     """
@@ -203,11 +203,11 @@ def run_c_config(eclass_dir: Path, mock_root: Path, debug: bool = False) -> Grou
         env_ok, env_msg, env_detail = config_surface.check_env_var_config_surface(
             eclass_dir, mock_root, debug
         )
-        results["C.1.5"] = (env_ok, env_msg, env_detail, None)
+        results["C.1.5"] = (env_ok, env_msg, env_detail, None, None)
         dot_ok, dot_msg, dot_detail = config_surface.check_dotenv_config_surface(
             eclass_dir, mock_root, debug
         )
-        results["C.1.6"] = (dot_ok, dot_msg, dot_detail, None)
+        results["C.1.6"] = (dot_ok, dot_msg, dot_detail, None, None)
     finally:
         provision(eclass_dir, mock_root)
     return results
@@ -262,7 +262,7 @@ def run_c_memory(
         passed_tests: Rubric identifiers that have already passed this run.
 
     Returns:
-        Mapping of rubric identifier to ``(passed, summary, detail, mode)``;
+        Mapping of rubric identifier to ``(passed, summary, detail, mode, similarity)``;
         ``mode`` is ``None`` (a leak-hygiene verdict is not a string match).
     """
     del debug
@@ -275,10 +275,10 @@ def run_c_memory(
                 f"{scenario.scenario_id}: skipped, prerequisite rows "
                 f"did not pass ({', '.join(missing)})"
             )
-            results[scenario.scenario_id] = (False, reason, reason, None)
+            results[scenario.scenario_id] = (False, reason, reason, None, None)
             continue
         ok, summary, detail = memory.run_scenario(scenario, eclass_dir, mock_root)
-        results[scenario.scenario_id] = (ok, summary, detail, None)
+        results[scenario.scenario_id] = (ok, summary, detail, None, None)
     return results
 
 
@@ -312,18 +312,20 @@ def _run_rows(
             its ``<id>.mem`` sub-assertion.
 
     Returns:
-        Mapping of rubric identifier to ``(passed, summary, detail, mode)``,
+        Mapping of rubric identifier to ``(passed, summary, detail, mode, similarity)``,
         plus a ``<id>.mem`` entry per row when ``memcheck`` is set.
     """
     results: GroupResults = {}
     for test_id, fn in tests:
         if instant is None:
-            ok, msg, detail, leak, mode = fn(impl, eclass_dir, mock_root, debug, memcheck=memcheck)
+            ok, msg, detail, leak, mode, similarity = fn(
+                impl, eclass_dir, mock_root, debug, memcheck=memcheck
+            )
         else:
-            ok, msg, detail, leak, mode = fn(
+            ok, msg, detail, leak, mode, similarity = fn(
                 impl, eclass_dir, mock_root, debug, instant=instant, memcheck=memcheck
             )
-        results[test_id] = (ok, msg, detail, mode)
+        results[test_id] = (ok, msg, detail, mode, similarity)
         if memcheck:
             record_mem(results, test_id, ok, leak)
     return results

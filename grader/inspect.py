@@ -219,6 +219,9 @@ def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False)
     log.blank()
     log.info(f"{test_id} {status} ({points} pts) - {category}")
     log.info(f"Description: {description}")
+    similarity = test_data.get("similarity")
+    if similarity is not None:
+        log.info(f"Similarity: {similarity:.3f} (partial credit)")
     log.info(f"Message: {truncate(message)}")
 
     if show_full:

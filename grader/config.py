@@ -14,15 +14,20 @@ absent path raises ``GraderConfigError`` at use time via
 ``require_path``; the resolver itself does not raise on absence, so a
 caller that does not need a path can run without it.
 
+The partial-credit floor follows the same idiom: a CLI flag wins over
+the ``grader.yaml`` value, which wins over a built-in default.
+
 The YAML's top-level shape:
 
     paths:
       mock_root: /path/to/bsc-apm-case-study-task/installed-prefix
       eclass_root: /path/to/eclass-mcp-server
+    partial:
+      floor: 0.45
 
-A missing ``paths`` section is treated as an empty mapping; absent
-keys are treated as no default. Unknown top-level keys are
-tolerated for forward compatibility.
+A missing ``paths`` or ``partial`` section is treated as an empty
+mapping; absent keys are treated as no default. Unknown top-level keys
+are tolerated for forward compatibility.
 """
 
 from __future__ import annotations
@@ -37,9 +42,18 @@ from .errors import GraderConfigError
 
 DEFAULT_CONFIG_FILENAME = "grader.yaml"
 
+# Similarity floor at or above which a non-passing string row is
+# credited as ``partial`` rather than ``failed``. Sits in the wide gap
+# the cohort forensic shows between near-misses (around 0.85) and
+# genuine errors (around 0.18). Overridable via ``grader.yaml`` or the
+# ``--partial-floor`` CLI flag.
+DEFAULT_PARTIAL_FLOOR = 0.45
+
 KEY_PATHS = "paths"
 KEY_MOCK_ROOT = "mock_root"
 KEY_ECLASS_ROOT = "eclass_root"
+KEY_PARTIAL = "partial"
+KEY_FLOOR = "floor"
 
 
 @dataclass(frozen=True)
@@ -56,17 +70,21 @@ class GraderConfig:
         config_path: Absolute path of the ``grader.yaml`` file the
             non-CLI defaults came from, or ``None`` when no config
             file was loaded.
+        partial_floor: Resolved similarity floor for partial credit
+            (CLI over ``grader.yaml`` over ``DEFAULT_PARTIAL_FLOOR``).
     """
 
     mock_root: Path | None
     eclass_root: Path | None
     config_path: Path | None
+    partial_floor: float
 
 
 def resolve_config(
     config_override: Path | None = None,
     mock_root_flag: Path | None = None,
     eclass_root_flag: Path | None = None,
+    partial_floor_flag: float | None = None,
     search_root: Path | None = None,
 ) -> GraderConfig:
     """Resolve a ``GraderConfig`` from CLI flags and an optional YAML file.
@@ -79,6 +97,8 @@ def resolve_config(
             install path.
         eclass_root_flag: CLI override for the eclass-mcp-server
             clone path.
+        partial_floor_flag: CLI override for the partial-credit
+            similarity floor.
         search_root: Directory to search for a default
             ``grader.yaml``. Defaults to the current working
             directory.
@@ -93,13 +113,18 @@ def resolve_config(
     """
     if search_root is None:
         search_root = Path.cwd()
-    config_path, yaml_paths = _load_yaml_paths(config_override, search_root)
-    mock_root = _resolve_path(mock_root_flag, yaml_paths.get(KEY_MOCK_ROOT))
-    eclass_root = _resolve_path(eclass_root_flag, yaml_paths.get(KEY_ECLASS_ROOT))
+    config_path, mapping = _load_config_mapping(config_override, search_root)
+    paths = _paths_section(mapping, config_path)
+    mock_root = _resolve_path(mock_root_flag, paths.get(KEY_MOCK_ROOT))
+    eclass_root = _resolve_path(eclass_root_flag, paths.get(KEY_ECLASS_ROOT))
+    partial_floor = _resolve_partial_floor(
+        partial_floor_flag, _partial_floor_setting(mapping, config_path)
+    )
     return GraderConfig(
         mock_root=mock_root,
         eclass_root=eclass_root,
         config_path=config_path,
+        partial_floor=partial_floor,
     )
 
 
@@ -135,16 +160,18 @@ def require_path(value: Path | None, role: str, stage: str) -> Path:
     return resolved
 
 
-def _load_yaml_paths(
+def _load_config_mapping(
     config_override: Path | None,
     search_root: Path,
-) -> tuple[Path | None, dict[str, str]]:
-    """Load the YAML config's ``paths`` mapping.
+) -> tuple[Path | None, dict[str, Any]]:
+    """Find and parse the YAML config's top-level mapping.
 
     When ``config_override`` is set the file must exist; an absent
-    file raises ``GraderConfigError``. When no override is set,
-    the resolver tries ``<search-root>/grader.yaml`` and tolerates
-    its absence (returns an empty mapping with no config path).
+    file raises ``GraderConfigError``. When no override is set, the
+    resolver tries ``<search-root>/grader.yaml`` and tolerates its
+    absence (an empty mapping, no config path). The file is read once
+    here; ``_paths_section`` and ``_partial_floor_setting`` derive the
+    individual settings from the returned mapping.
 
     Args:
         config_override: Explicit config path supplied by the
@@ -153,14 +180,15 @@ def _load_yaml_paths(
             uses when ``config_override`` is ``None``.
 
     Returns:
-        ``(config_path, paths_mapping)`` where ``config_path`` is the
-        resolved YAML path (``None`` when no default file was found)
-        and ``paths_mapping`` is the parsed ``paths`` section.
+        ``(config_path, mapping)`` where ``config_path`` is the
+        resolved YAML path (``None`` when no file was found) and
+        ``mapping`` is the parsed top-level mapping (empty when no
+        file or an empty file).
 
     Raises:
         GraderConfigError: When ``config_override`` is set but the
             file does not exist, or when the parsed YAML is not a
-            mapping or its ``paths`` section is not a mapping.
+            mapping at the top level.
     """
     if config_override is not None:
         candidate = config_override
@@ -170,17 +198,54 @@ def _load_yaml_paths(
         candidate = search_root / DEFAULT_CONFIG_FILENAME
         if not candidate.exists():
             return None, {}
-    payload = _read_yaml(candidate)
-    if payload is None:
+    parsed = _read_yaml(candidate)
+    if parsed is None:
         return candidate.resolve(), {}
-    if not isinstance(payload, dict):
+    if not isinstance(parsed, dict):
         raise GraderConfigError(
             f"config file at {candidate} must be a YAML mapping at the top level"
         )
-    paths_section = payload.get(KEY_PATHS, {})
-    if not isinstance(paths_section, dict):
-        raise GraderConfigError(f"config file at {candidate}: '{KEY_PATHS}' must be a mapping")
-    return candidate.resolve(), {str(key): str(value) for key, value in paths_section.items()}
+    return candidate.resolve(), parsed
+
+
+def _paths_section(mapping: dict[str, Any], config_path: Path | None) -> dict[str, str]:
+    """Return the ``paths`` section as a string mapping (empty when absent).
+
+    Args:
+        mapping: The parsed top-level config mapping.
+        config_path: The resolved config path, for error messages.
+
+    Raises:
+        GraderConfigError: When ``paths`` is present but not a mapping.
+    """
+    paths = mapping.get(KEY_PATHS, {})
+    if not isinstance(paths, dict):
+        raise GraderConfigError(f"config file at {config_path}: '{KEY_PATHS}' must be a mapping")
+    return {str(key): str(value) for key, value in paths.items()}
+
+
+def _partial_floor_setting(mapping: dict[str, Any], config_path: Path | None) -> float | None:
+    """Return the ``partial.floor`` value, or ``None`` when absent.
+
+    Args:
+        mapping: The parsed top-level config mapping.
+        config_path: The resolved config path, for error messages.
+
+    Raises:
+        GraderConfigError: When ``partial`` is not a mapping or its
+            ``floor`` is not a number.
+    """
+    partial = mapping.get(KEY_PARTIAL, {})
+    if not isinstance(partial, dict):
+        raise GraderConfigError(f"config file at {config_path}: '{KEY_PARTIAL}' must be a mapping")
+    floor = partial.get(KEY_FLOOR)
+    if floor is None:
+        return None
+    if isinstance(floor, bool) or not isinstance(floor, (int, float)):
+        raise GraderConfigError(
+            f"config file at {config_path}: '{KEY_PARTIAL}.{KEY_FLOOR}' must be a number"
+        )
+    return float(floor)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -212,3 +277,15 @@ def _resolve_path(
     if yaml_value is not None:
         return Path(yaml_value)
     return None
+
+
+def _resolve_partial_floor(
+    flag_value: float | None,
+    yaml_value: float | None,
+) -> float:
+    """Return the floor: CLI flag over ``grader.yaml`` over the module default."""
+    if flag_value is not None:
+        return flag_value
+    if yaml_value is not None:
+        return yaml_value
+    return DEFAULT_PARTIAL_FLOOR
