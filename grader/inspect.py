@@ -4,7 +4,7 @@
 """Render an emitted grader results artefact in a human-readable form.
 
 The grader writes a results JSON document for each graded patch:
-per-test pass-or-fail status, points awarded against the rubric, and
+each row's verdict, points awarded against the rubric, and
 diagnostic messages. This module reads such an artefact and prints a
 one-shot view selected by flags: the score summary (the default), a
 single test's detail, a filtered list, the available categories, or one
@@ -80,14 +80,32 @@ def truncate(text: str, limit: int = MESSAGE_TRUNCATE_LIMIT) -> str:
     return text[: limit - 3] + "..."
 
 
-def format_status(passed: bool) -> str:
-    """Return ``"PASS"`` when ``passed`` is true, ``"FAIL"`` otherwise."""
-    return "PASS" if passed else "FAIL"
+def format_status(verdict: str) -> str:
+    """Return the short status label for a row's ``verdict``.
+
+    Args:
+        verdict: The per-row verdict (``"passed"``, ``"partial"``, or
+            ``"failed"``).
+
+    Returns:
+        ``"PASS"`` for a pass, ``"PART"`` for a partial, ``"FAIL"``
+        otherwise.
+    """
+    if verdict == "passed":
+        return "PASS"
+    if verdict == "partial":
+        return "PART"
+    return "FAIL"
 
 
-def format_points(earned: int, total: int) -> str:
-    """Return points as an ``"earned/total"`` string."""
-    return f"{earned}/{total}"
+def format_number(value: float) -> str:
+    """Return ``value`` as an integer string when whole, else two decimals."""
+    return str(int(value)) if float(value).is_integer() else f"{value:.2f}"
+
+
+def format_points(earned: float, total: float) -> str:
+    """Return points as an ``"earned/total"`` string, decimals only when fractional."""
+    return f"{format_number(earned)}/{format_number(total)}"
 
 
 def get_categories(tests: dict[str, dict[str, Any]]) -> list[str]:
@@ -106,8 +124,37 @@ def get_categories(tests: dict[str, dict[str, Any]]) -> list[str]:
     return sorted(categories)
 
 
+def node_points(node: dict[str, Any]) -> str:
+    """Return a score node's credited total over its maximum as ``"total/max"``."""
+    return format_points(node.get("total", 0), node.get("max", 0))
+
+
+def category_breakdown(tests: dict[str, dict[str, Any]]) -> dict[str, dict[str, list[float]]]:
+    """Recompute the per-target, per-category score view from the test rows.
+
+    The grader no longer persists a ``category_breakdown`` block, so
+    this rebuilds it from ``tests``: each row is assigned to the Python
+    or C target by its identifier prefix (``"P"`` or ``"C"``), and its
+    credited and maximum points accumulate under its category.
+
+    Args:
+        tests: Mapping of test identifier to test result data.
+
+    Returns:
+        ``{"python": {category: [earned, max]}, "c": {...}}``.
+    """
+    breakdown: dict[str, dict[str, list[float]]] = {"python": {}, "c": {}}
+    for test_id, row in tests.items():
+        target = "python" if test_id.upper().startswith("P") else "c"
+        category = row.get("category", "unknown")
+        entry = breakdown[target].setdefault(category, [0, 0])
+        entry[0] += row.get("points_earned", 0)
+        entry[1] += row.get("points", 0)
+    return breakdown
+
+
 def print_summary(data: dict[str, Any]) -> None:
-    """Print the score summary including the category breakdown.
+    """Print the score summary including the recomputed category breakdown.
 
     Args:
         data: Complete results data dictionary as written by the
@@ -115,7 +162,7 @@ def print_summary(data: dict[str, Any]) -> None:
     """
     meta = data.get("metadata", {})
     scores = data.get("scores", {})
-    breakdown = data.get("category_breakdown", {})
+    tests = data.get("tests", {})
 
     print_header(f"RESULTS: {meta.get('patch_name', 'Unknown')}")
     log.info(f"Timestamp: {meta.get('timestamp', 'N/A')}")
@@ -125,35 +172,27 @@ def print_summary(data: dict[str, Any]) -> None:
     py = scores.get("python", {})
     py_base = py.get("baseline", {})
     py_feat = py.get("feature", {})
-    py_total = py.get("total", {})
-    c_total = scores.get("c", {}).get("total", {})
-    grand = scores.get("grand_total", {})
+    c = scores.get("c", {})
 
-    log.info(f"Python Baseline:  {py_base.get('score', 0):2d}/{py_base.get('max', 0):2d}")
-    log.info(f"Python Feature:   {py_feat.get('score', 0):2d}/{py_feat.get('max', 0):2d}")
-    log.info(f"Python Total:     {py_total.get('score', 0):2d}/{py_total.get('max', 0):2d}")
-    log.info(f"C Replica:        {c_total.get('score', 0):2d}/{c_total.get('max', 0):2d}")
+    log.info(f"Python Baseline:  {node_points(py_base)}")
+    log.info(f"Python Feature:   {node_points(py_feat)}")
+    log.info(f"Python Total:     {node_points(py)}")
+    log.info(f"C Replica:        {node_points(c)}")
     log.line()
-    log.info(f"GRAND TOTAL:      {grand.get('score', 0):2d}/{grand.get('max', 0):2d}")
+    log.info(f"GRAND TOTAL:      {node_points(scores)}")
+    strict = scores.get("total_strict", 0)
+    partial = scores.get("total_partial", 0)
+    log.info(f"  strict {format_number(strict)}, partial {format_number(partial)}")
 
-    if breakdown:
-        print_header("CATEGORY BREAKDOWN")
-        for target in ("python", "c"):
-            cats = breakdown.get(target, {})
-            if not cats:
-                continue
-            log.info(f"{target.upper()}:")
-            for cat, cat_scores in sorted(cats.items()):
-                # The category scores round-trip from JSON as a
-                # [score, max] list; the dict branch also accepts a
-                # {"score": ..., "max": ...} mapping written by a
-                # results file in that alternative shape.
-                if isinstance(cat_scores, list) and len(cat_scores) == 2:
-                    log.info(f"  {cat:15s} {cat_scores[0]:2d}/{cat_scores[1]:2d}")
-                elif isinstance(cat_scores, dict):
-                    score = cat_scores.get("score", 0)
-                    max_score = cat_scores.get("max", 0)
-                    log.info(f"  {cat:15s} {score:2d}/{max_score:2d}")
+    print_header("CATEGORY BREAKDOWN")
+    breakdown = category_breakdown(tests)
+    for target in ("python", "c"):
+        cats = breakdown.get(target, {})
+        if not cats:
+            continue
+        log.info(f"{target.upper()}:")
+        for cat, (earned, cat_max) in sorted(cats.items()):
+            log.info(f"  {cat:15s} {format_points(earned, cat_max)}")
 
 
 def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False) -> None:
@@ -167,14 +206,14 @@ def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False)
             field with line wrapping; otherwise prints only the short
             message and metadata.
     """
-    passed = test_data.get("passed", False)
+    verdict = test_data.get("verdict", "failed")
     points_earned = test_data.get("points_earned", 0)
     points_total = test_data.get("points", 0)
     category = test_data.get("category", "unknown")
     description = test_data.get("description", "No description")
     message = test_data.get("message", "")
 
-    status = format_status(passed)
+    status = format_status(verdict)
     points = format_points(points_earned, points_total)
 
     log.blank()
@@ -203,13 +242,14 @@ def print_tests_list(
 
     Args:
         tests: Mapping of test identifier to test result data.
-        filter_passed: When set, only emit tests whose pass/fail
-            status matches.
+        filter_passed: When set, only emit tests whose passed/not-passed
+            status matches; a partial row counts as not passed.
         filter_category: When set, only emit tests in this category.
             Comparison is case-insensitive.
     """
     for test_id, test_data in tests.items():
-        if filter_passed is not None and test_data.get("passed") != filter_passed:
+        is_passed = test_data.get("verdict") == "passed"
+        if filter_passed is not None and is_passed != filter_passed:
             continue
         if (
             filter_category is not None
@@ -217,7 +257,7 @@ def print_tests_list(
         ):
             continue
 
-        status = format_status(test_data.get("passed", False))
+        status = format_status(test_data.get("verdict", "failed"))
         points = format_points(
             test_data.get("points_earned", 0),
             test_data.get("points", 0),

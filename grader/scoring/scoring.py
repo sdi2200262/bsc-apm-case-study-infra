@@ -9,20 +9,27 @@ budget at import via ``_assert_rubric_balance`` (the rubric is 90 rows
 summing to 100: 30 Python, 70 C; see SCORING.md for the full table),
 and turns recorded results into the report payload.
 
-The JSON shape returned by ``Scorer.to_dict`` is consumed by
-``pipeline.grade``, ``pipeline.combine``, and the ``inspect``
-results browser; preserve the top-level keys
-``scores.python.baseline``, ``scores.python.feature``,
-``scores.python.total``, ``scores.c.total``, and
-``scores.grand_total`` when editing. A per-test record may carry an
-optional unscored ``diagnostic`` string: the ``matching`` mode the
-row was accepted under (``byte-exact`` or ``whitespace-normalized``)
-on every string-matched row, ``None`` elsewhere.
+The JSON shape returned by ``Scorer.to_dict`` is consumed by the
+``inspect`` results browser and the pipeline's grade and combine
+stages. Every score node carries the same four fields inline,
+``{total, total_strict, total_partial, max}``, and nests its child
+nodes as extra keys: ``scores`` is the whole-submission node and
+nests ``python`` and ``c``; ``python`` nests ``baseline`` and
+``feature``. ``total`` sums every row's ``points_earned``;
+``total_strict`` sums ``points`` over the rows whose ``verdict`` is
+``"passed"``; ``total_partial`` is their difference (zero until a
+later partial-credit metric lands). Each per-test record reports a
+three-state ``verdict`` (``"passed"`` or ``"failed"`` under the
+current pass/fail rubric) and may carry an optional unscored
+``diagnostic`` string: the ``matching`` mode the row was accepted
+under (``byte-exact`` or ``whitespace-normalized``) on every
+string-matched row, ``None`` elsewhere.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from .rubric import (
     ALL_TESTS,
@@ -166,14 +173,6 @@ class Scorer:
             diagnostic=diagnostic,
         )
 
-    def python_baseline_score(self) -> tuple[int, int]:
-        """Return ``(score, max)`` for the Python baseline bucket."""
-        return self._sum_for(PYTHON_BASELINE_TESTS)
-
-    def python_feature_score(self) -> tuple[int, int]:
-        """Return ``(score, max)`` for the Python feature bucket."""
-        return self._sum_for(PYTHON_FEATURE_TESTS)
-
     def python_total_score(self) -> tuple[int, int]:
         """Return ``(score, max)`` for the Python implementation."""
         return self._sum_for(PYTHON_TESTS)
@@ -186,52 +185,61 @@ class Scorer:
         """Return ``(score, max)`` for the rubric grand total."""
         return self._sum_for(ALL_TESTS)
 
-    def category_breakdown(self, target: str) -> dict[str, tuple[int, int]]:
-        """Return per-category scores for a target implementation.
-
-        Args:
-            target: ``"python"`` or ``"c"``.
-
-        Returns:
-            Mapping from category label to ``(score, max)``.
-        """
-        tests = PYTHON_TESTS if target == "python" else C_TESTS
-        by_category: dict[str, list[int]] = {}
-        for test in tests:
-            entry = by_category.setdefault(test.category, [0, 0])
-            entry[1] += test.points
-            if self._passed(test.id):
-                entry[0] += test.points
-        return {category: (scores[0], scores[1]) for category, scores in by_category.items()}
-
     def to_dict(self) -> dict:
-        """Return the JSON shape consumed by the pipeline and the inspect tool."""
+        """Return the JSON shape consumed by the inspect tool and the pipeline.
+
+        Every score node carries ``{total, total_strict, total_partial,
+        max}`` inline and nests its children as extra keys: ``scores``
+        is the whole-submission node nesting ``python`` and ``c``, and
+        ``python`` nests ``baseline`` and ``feature``. The by-category
+        view is no longer persisted; ``inspect`` recomputes it from the
+        per-row ``category`` under ``tests``.
+        """
         defs = all_tests()
-        py_baseline = self.python_baseline_score()
-        py_feature = self.python_feature_score()
-        py_total = self.python_total_score()
-        c_total = self.c_score()
-        grand = self.total_score()
+        scores = self._node(ALL_TESTS)
+        python = self._node(PYTHON_TESTS)
+        python["baseline"] = self._node(PYTHON_BASELINE_TESTS)
+        python["feature"] = self._node(PYTHON_FEATURE_TESTS)
+        scores["python"] = python
+        scores["c"] = self._node(C_TESTS)
         return {
-            "scores": {
-                "python": {
-                    "baseline": {"score": py_baseline[0], "max": py_baseline[1]},
-                    "feature": {"score": py_feature[0], "max": py_feature[1]},
-                    "total": {"score": py_total[0], "max": py_total[1]},
-                },
-                "c": {
-                    "total": {"score": c_total[0], "max": c_total[1]},
-                },
-                "grand_total": {"score": grand[0], "max": grand[1]},
-            },
+            "scores": scores,
             "tests": {
                 test_id: _test_entry(defs, test_id, result)
                 for test_id, result in self.results.items()
             },
-            "category_breakdown": {
-                "python": self.category_breakdown("python"),
-                "c": self.category_breakdown("c"),
-            },
+        }
+
+    def _node(self, tests: tuple[TestDefinition, ...]) -> dict[str, Any]:
+        """Return one score node's ``{total, total_strict, total_partial, max}``.
+
+        ``total`` sums each row's credited points (``points`` on a pass,
+        zero on a fail; a later metric adds a fractional partial value),
+        ``total_strict`` sums ``points`` over the passed rows only, and
+        ``total_partial`` is their difference. ``max`` is the node's
+        rubric maximum. With no partial rows present ``total`` equals
+        ``total_strict`` and ``total_partial`` is zero.
+
+        Args:
+            tests: The rubric rows the node aggregates over.
+
+        Returns:
+            The four-field score node for ``tests``.
+        """
+        total: float = 0
+        total_strict = 0
+        max_score = 0
+        for test in tests:
+            max_score += test.points
+            passed = self._passed(test.id)
+            total += _earned(test.points, passed)
+            if passed:
+                total_strict += test.points
+        return {
+            "total": total,
+            "total_strict": total_strict,
+            "total_partial": total - total_strict,
+            "max": max_score,
         }
 
     def _sum_for(self, tests: tuple[TestDefinition, ...]) -> tuple[int, int]:
@@ -250,6 +258,24 @@ class Scorer:
         return result is not None and result.passed
 
 
+def _earned(points: int, passed: bool) -> float:
+    """Return the points credited for one row.
+
+    Full ``points`` on a pass, zero on a fail. A later partial-credit
+    metric reports a fractional value between zero and ``points``;
+    under the current pass/fail rubric the result is either ``points``
+    or ``0``.
+
+    Args:
+        points: The row's rubric maximum.
+        passed: Whether the row passed.
+
+    Returns:
+        The credited points for the row.
+    """
+    return points if passed else 0
+
+
 def _test_entry(
     defs: dict[str, TestDefinition],
     test_id: str,
@@ -259,13 +285,17 @@ def _test_entry(
     definition = defs.get(test_id)
     points = definition.points if definition else 0
     entry = {
-        "passed": result.passed,
+        # ``verdict`` is three-state by design (``"passed"`` | ``"partial"`` |
+        # ``"failed"``); under the current pass/fail rubric only ``"passed"``
+        # and ``"failed"`` occur, wired straight from the recorded boolean. A
+        # later partial-credit metric introduces ``"partial"`` and a companion
+        # ``similarity`` field, which never appear here.
+        "verdict": "passed" if result.passed else "failed",
         # ``points_earned`` is kept distinct from ``points`` (the row maximum)
-        # so a future partial-credit metric can report a value between zero and
-        # the maximum; under the current pass/fail rubric it is either zero or
-        # the full ``points``.
+        # so the partial-credit metric can report a value between zero and the
+        # maximum; under the current rubric it is either zero or full ``points``.
         "points": points,
-        "points_earned": points if (definition and result.passed) else 0,
+        "points_earned": _earned(points, result.passed) if definition else 0,
         "category": definition.category if definition else "unknown",
         "description": definition.description if definition else "",
         "message": result.message,
