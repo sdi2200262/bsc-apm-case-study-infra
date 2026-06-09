@@ -88,17 +88,40 @@ lenient form.
 The `initialize` frame at C.2.1 matches `protocolVersion` and
 `serverInfo` byte-exact before the two-form capabilities check above.
 
+## Partial credit
+
+A string-matched row the matcher rejects is scored for nearness to its
+expected output, so a row's `verdict` is `passed` (an accepted form
+matched, full `points`), `partial` (none matched but the response is
+near one, earning `points` times its similarity and flagged for
+review), or `failed` (zero). Nearness is a Levenshtein edit-distance
+ratio in `[0, 1]` on the whitespace-normalized forms, against the
+closest accepted form ([protocol/similarity.py](protocol/similarity.py);
+see [Levenshtein distance]). A row scores `partial` at or above a floor,
+default `0.45` ([config.py](config.py)), overridable under
+`partial.floor` in `grader.yaml` or with `--partial-floor` (CLI over
+`grader.yaml` over the default).
+
+Partial credit never moves a strict grade: only a row that matched no
+accepted form is eligible, and the structural and leak-only rows (the
+`initialize` frame, `tools/list`, the memory rows) carry no similarity.
+Each score node reports `total_strict` (full points over `passed` rows),
+`total_partial` (fractional credit from `partial` rows), `total` (their
+sum), and `max`.
+
 ## Review and warning flags
 
 [scoring/notices.py](scoring/notices.py) prints human-review flags
 after the scores, in two categories:
 
-- `REVIEW`: a row passed but via a lenient form. The five are
-  `announcements-unordered`, `get-courses-documented`,
-  `missing-creds-documented`, `capabilities-documented`, and
-  `description-presence-only`. The acceptance is qualitatively
-  ambiguous, so a reviewer inspects the response and records any
-  manual deduction in `results_notes.yaml`.
+- `REVIEW`: a row passed via a lenient form, or earned partial credit.
+  The five lenient forms are `announcements-unordered`,
+  `get-courses-documented`, `missing-creds-documented`,
+  `capabilities-documented`, and `description-presence-only`; a
+  `partial` row is a near-miss credited fractionally. The acceptance or
+  the fractional award is qualitatively ambiguous, so a reviewer
+  inspects the response and records any manual adjustment in
+  `results_notes.yaml`.
 - `WARNING`: a handshake row failed, one of P.1.1, C.2.1, or C.2.2.
   These compare against SDK-emitted serialisation, so a failure may
   be a participant defect, an SDK change since the expected values
@@ -336,3 +359,4 @@ correctness against leak hygiene evenly on the same execution.
 [PRD §3]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#3-native-c-replica-implementation
 [PRD §4]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#4-cross-cutting-requirements
 [PRD §5]: https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/participant/task/PRD.md#5-acceptance-criteria
+[Levenshtein distance]: https://en.wikipedia.org/wiki/Levenshtein_distance

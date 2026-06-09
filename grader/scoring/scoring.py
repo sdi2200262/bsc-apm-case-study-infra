@@ -16,14 +16,16 @@ stages. Every score node carries the same four fields inline,
 nodes as extra keys: ``scores`` is the whole-submission node and
 nests ``python`` and ``c``; ``python`` nests ``baseline`` and
 ``feature``. ``total`` sums every row's ``points_earned``;
-``total_strict`` sums ``points`` over the rows whose ``verdict`` is
-``"passed"``; ``total_partial`` is their difference (zero until a
-later partial-credit metric lands). Each per-test record reports a
-three-state ``verdict`` (``"passed"`` or ``"failed"`` under the
-current pass/fail rubric) and may carry an optional unscored
-``diagnostic`` string: the ``matching`` mode the row was accepted
-under (``byte-exact`` or ``whitespace-normalized``) on every
-string-matched row, ``None`` elsewhere.
+``total_strict`` sums ``points`` over the ``"passed"`` rows;
+``total_partial`` is their difference (the fractional credit from
+partial rows, zero when none are present). Each per-test record reports
+a three-state ``verdict``: ``"passed"`` (full points), ``"partial"`` (a
+near-miss credited ``points * similarity``, with its ratio recorded), or
+``"failed"`` (zero). The verdict is resolved at ``record`` time against
+the ``Scorer``'s floor; a matcher pass is always ``"passed"``, so strict
+grades are untouched. A record may also carry an optional unscored
+``diagnostic`` string: the ``matching`` mode the row was accepted under
+(``byte-exact`` or ``whitespace-normalized``), ``None`` elsewhere.
 """
 
 from __future__ import annotations
@@ -123,27 +125,54 @@ class TestResult:
 
     Attributes:
         test_id: The rubric identifier the result is keyed under.
-        passed: Whether the test passed.
+        verdict: ``"passed"`` (full strict pass), ``"partial"``
+            (a near-miss credited fractionally), or ``"failed"``
+            (zero).
         message: Short human-readable summary for console output.
         full_output: Complete output captured for the JSON report.
         diagnostic: Optional unscored annotation carried on the
             per-test record: the ``matching`` mode the row was
             accepted under; ``None`` when the test records none.
+        similarity: The edit-distance similarity ratio in ``[0, 1]``
+            recorded only on a ``"partial"`` verdict; ``None``
+            otherwise.
     """
 
     test_id: str
-    passed: bool
+    verdict: str
     message: str
     full_output: str
     diagnostic: str | None = None
+    similarity: float | None = None
+
+    @property
+    def passed(self) -> bool:
+        """Whether the row is a full strict pass (``verdict == "passed"``)."""
+        return self.verdict == "passed"
 
 
 class Scorer:
-    """Accumulates per-test results and computes rubric scores."""
+    """Accumulates per-test results and computes rubric scores.
 
-    def __init__(self) -> None:
-        """Start with an empty result map."""
+    Attributes:
+        results: Per-row results keyed by rubric identifier, in
+            recording order.
+        partial_floor: The similarity floor at or above which a
+            non-passing string row is credited as ``"partial"``
+            rather than ``"failed"``.
+    """
+
+    def __init__(self, partial_floor: float) -> None:
+        """Start with an empty result map and the partial-credit floor.
+
+        Args:
+            partial_floor: Similarity ratio at or above which a
+                non-passing row is credited as ``"partial"``. The
+                resolved value (CLI over ``grader.yaml`` over the
+                module default) is supplied by the caller.
+        """
         self.results: dict[str, TestResult] = {}
+        self.partial_floor = partial_floor
 
     def record(
         self,
@@ -152,25 +181,41 @@ class Scorer:
         message: str,
         full_output: str = "",
         diagnostic: str | None = None,
+        similarity: float | None = None,
     ) -> None:
-        """Record one test result.
+        """Record one test result, resolving its three-state verdict.
+
+        A pass is ``"passed"`` at full points. A non-pass is
+        ``"partial"`` (keeping its similarity) when ``similarity`` is at
+        or above ``partial_floor``, else ``"failed"``. A pass is never
+        anything but ``"passed"``, so strict grades are untouched.
 
         Args:
             test_id: Rubric identifier (``"P.1.1"``, ``"C.3.7"``,
                 ``"C.2.3.mem"``, etc.).
-            passed: Whether the test passed.
+            passed: Whether the matcher accepted the row.
             message: Short summary for the console output.
             full_output: Complete output for the JSON report;
                 falls back to ``message`` when empty.
             diagnostic: Optional unscored annotation (the
                 ``matching`` mode the row was accepted under).
+            similarity: Edit-distance similarity ratio for a
+                non-passing string row, or ``None`` when the row
+                passed or has no string contract.
         """
+        if passed:
+            verdict, kept_similarity = "passed", None
+        elif similarity is not None and similarity >= self.partial_floor:
+            verdict, kept_similarity = "partial", round(similarity, 6)
+        else:
+            verdict, kept_similarity = "failed", None
         self.results[test_id] = TestResult(
             test_id=test_id,
-            passed=passed,
+            verdict=verdict,
             message=message,
             full_output=full_output or message,
             diagnostic=diagnostic,
+            similarity=kept_similarity,
         )
 
     def python_total_score(self) -> tuple[int, int]:
@@ -213,12 +258,11 @@ class Scorer:
     def _node(self, tests: tuple[TestDefinition, ...]) -> dict[str, Any]:
         """Return one score node's ``{total, total_strict, total_partial, max}``.
 
-        ``total`` sums each row's credited points (``points`` on a pass,
-        zero on a fail; a later metric adds a fractional partial value),
-        ``total_strict`` sums ``points`` over the passed rows only, and
-        ``total_partial`` is their difference. ``max`` is the node's
-        rubric maximum. With no partial rows present ``total`` equals
-        ``total_strict`` and ``total_partial`` is zero.
+        ``total`` sums credited points (``points`` on a pass,
+        ``points * similarity`` on a partial, zero on a fail),
+        ``total_strict`` sums ``points`` over the ``"passed"`` rows
+        only, ``total_partial`` is their difference, and ``max`` is the
+        node's rubric maximum.
 
         Args:
             tests: The rubric rows the node aggregates over.
@@ -226,19 +270,22 @@ class Scorer:
         Returns:
             The four-field score node for ``tests``.
         """
-        total: float = 0
+        total = 0.0
         total_strict = 0
         max_score = 0
         for test in tests:
             max_score += test.points
-            passed = self._passed(test.id)
-            total += _earned(test.points, passed)
-            if passed:
+            result = self.results.get(test.id)
+            if result is None:
+                continue
+            total += _earned(result, test.points)
+            if result.verdict == "passed":
                 total_strict += test.points
+        total = round(total, 6)
         return {
-            "total": total,
+            "total": _whole(total),
             "total_strict": total_strict,
-            "total_partial": total - total_strict,
+            "total_partial": _whole(round(total - total_strict, 6)),
             "max": max_score,
         }
 
@@ -258,22 +305,35 @@ class Scorer:
         return result is not None and result.passed
 
 
-def _earned(points: int, passed: bool) -> float:
-    """Return the points credited for one row.
+def _earned(result: TestResult, points: int) -> float:
+    """Return the points credited for one row from its verdict.
 
-    Full ``points`` on a pass, zero on a fail. A later partial-credit
-    metric reports a fractional value between zero and ``points``;
-    under the current pass/fail rubric the result is either ``points``
-    or ``0``.
+    Full ``points`` on a ``"passed"`` row, ``points * similarity`` on a
+    ``"partial"`` row (a value strictly between zero and ``points``),
+    and zero on a ``"failed"`` row.
 
     Args:
+        result: The recorded result carrying the verdict and, on a
+            partial, the similarity ratio.
         points: The row's rubric maximum.
-        passed: Whether the row passed.
 
     Returns:
         The credited points for the row.
     """
-    return points if passed else 0
+    if result.verdict == "passed":
+        return points
+    if result.verdict == "partial":
+        return round(points * (result.similarity or 0.0), 6)
+    return 0
+
+
+def _whole(value: float) -> float | int:
+    """Return ``value`` as an ``int`` when it is whole, else unchanged.
+
+    Keeps a node total that carries no fractional partial credit (every
+    clean submission) serialized as ``100`` rather than ``100.0``.
+    """
+    return int(value) if float(value).is_integer() else value
 
 
 def _test_entry(
@@ -284,23 +344,28 @@ def _test_entry(
     """Build the per-test JSON payload preserving the documented field set."""
     definition = defs.get(test_id)
     points = definition.points if definition else 0
-    entry = {
-        # ``verdict`` is three-state by design (``"passed"`` | ``"partial"`` |
-        # ``"failed"``); under the current pass/fail rubric only ``"passed"``
-        # and ``"failed"`` occur, wired straight from the recorded boolean. A
-        # later partial-credit metric introduces ``"partial"`` and a companion
-        # ``similarity`` field, which never appear here.
-        "verdict": "passed" if result.passed else "failed",
+    entry: dict[str, Any] = {
+        # ``verdict`` is three-state: ``"passed"`` (full points), ``"partial"``
+        # (a near-miss credited fractionally), or ``"failed"`` (zero).
         # ``points_earned`` is kept distinct from ``points`` (the row maximum)
-        # so the partial-credit metric can report a value between zero and the
-        # maximum; under the current rubric it is either zero or full ``points``.
+        # so a partial row can report a value strictly between zero and it.
+        "verdict": result.verdict,
         "points": points,
-        "points_earned": _earned(points, result.passed) if definition else 0,
-        "category": definition.category if definition else "unknown",
-        "description": definition.description if definition else "",
-        "message": result.message,
-        "full_output": result.full_output,
+        "points_earned": _earned(result, points) if definition else 0,
     }
+    # ``similarity`` appears only on a partial row, between ``points_earned``
+    # and the descriptive fields, so the JSON states why the fractional award
+    # was made.
+    if result.verdict == "partial" and result.similarity is not None:
+        entry["similarity"] = result.similarity
+    entry.update(
+        {
+            "category": definition.category if definition else "unknown",
+            "description": definition.description if definition else "",
+            "message": result.message,
+            "full_output": result.full_output,
+        }
+    )
     if result.diagnostic is not None:
         entry["diagnostic"] = result.diagnostic
     return entry

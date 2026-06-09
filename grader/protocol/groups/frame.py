@@ -6,9 +6,11 @@ Owns the two rows that assert a raw protocol frame rather than a tool
 response: the ``tools/list`` advertisement and the C-replica
 hand-written ``initialize`` frame. Both run against a freshly-spawned
 MCP server as the ``student_courses`` principal and return the same
-5-tuple as the other baseline rows
-(``(ok, msg, detail, leak_tuple|None, mode|None)``; see
-``grader.protocol.groups.baseline`` for the tuple contract). The
+six-tuple as the other baseline rows
+(``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)``;
+see ``grader.protocol.groups.baseline`` for the tuple contract). These
+two rows assert a structured frame, not a single response string, so
+they carry no similarity and never earn partial credit. The
 form-acceptance policy lives in ``..matching``; this module owns only
 the frame exchange and the result wiring.
 """
@@ -32,7 +34,7 @@ from ._support import (
     HANDSHAKE_FAIL,
     SERVER_START_FAIL,
     TOOL_FAIL,
-    Result5,
+    RowResult,
     leak_after,
 )
 
@@ -46,7 +48,7 @@ def check_tools_list(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.1 / C.2.2: tools/list matches the constructed expected tool list.
 
     The contract split lives in
@@ -89,7 +91,7 @@ def check_tools_list(
                         msg = "tools/list: invalid or missing tools array"
                     else:
                         ok, msg, mode = match_tools_list(tools)
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+    return ok, msg, detail, leak_after(srv, memcheck), mode, None
 
 
 def check_initialize_frame(
@@ -98,7 +100,7 @@ def check_initialize_frame(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """C.2.1 only: the hand-written initialize frame against the expected response.
 
     Asserts the C replica's ``protocolVersion`` and ``serverInfo``
@@ -112,7 +114,7 @@ def check_initialize_frame(
     """
     if impl != "c":
         reason = "C.2.1 applies to the C replica only"
-        return False, reason, reason, None, None
+        return False, reason, reason, None, None, None
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
@@ -159,7 +161,7 @@ def check_initialize_frame(
                             f"capability form: got {result!r}"
                         )
                     )
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+    return ok, msg, detail, leak_after(srv, memcheck), mode, None
 
 
 def _creds() -> dict[str, str]:

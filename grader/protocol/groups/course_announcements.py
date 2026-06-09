@@ -3,10 +3,13 @@
 """Course-announcements protocol assertions (P.2.x / C.3.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server.
-Principal: ``student_courses``. Return shape is always a 5-tuple
-``(ok, msg, detail, leak_tuple|None, mode|None)``; ``leak_tuple`` is
+Principal: ``student_courses``. Return shape is always a 6-tuple
+``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)``; ``leak_tuple`` is
 ``None`` when ``memcheck=False`` and ``mode`` is the ``matching``
 mode the row was accepted under (``None`` for a failed match).
+A non-passing announcement row carries the edit-distance similarity against
+its expected ordered form in the ``similarity`` slot (``None`` when no
+expected form applies or the row passes).
 
 Leak-verdict pattern: functional result is saved inside the ``with``
 block; ``leak_after`` is called after the block exits so
@@ -37,12 +40,13 @@ from ..runner import (
     spawn_server,
 )
 from ..seed import SEED, course_announcements_in_window, user
+from ..similarity import similarity_ratio
 from ._support import (
     HANDSHAKE_FAIL,
     LOGIN_FAIL,
     SERVER_START_FAIL,
     TOOL_FAIL,
-    Result5,
+    RowResult,
     leak_after,
 )
 
@@ -57,11 +61,12 @@ def check_course_not_logged_in(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.1 / C.3.1: tool without login returns the not-logged-in error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(impl, eclass_dir, mock_root, debug, memcheck=memcheck) as server:
         srv = server
         if server is not None:
@@ -81,7 +86,8 @@ def check_course_not_logged_in(
                         else (f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}")
                     )
                     detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                    similarity = similarity_ratio(text, [ERR_NOT_LOGGED_IN])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_bad_url(
@@ -91,11 +97,12 @@ def check_course_bad_url(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.2 / C.3.2: unparseable course_url returns the extract-code error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -126,7 +133,8 @@ def check_course_bad_url(
                             else (f"expected {ERR_BAD_COURSE_URL!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [ERR_BAD_COURSE_URL])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_negative_days(
@@ -136,11 +144,12 @@ def check_course_negative_days(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.3 / C.3.3: days_back=-1 returns the non-negative-integer error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -178,7 +187,8 @@ def check_course_negative_days(
                             else (f"expected {ERR_NEGATIVE_DAYS_BACK!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [ERR_NEGATIVE_DAYS_BACK])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_empty_window(
@@ -188,7 +198,7 @@ def check_course_empty_window(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.4 / C.3.4: MATH201 at default window returns the empty-window string.
 
     MATH201's only announcement is at 45 days; the default 30-day
@@ -198,6 +208,7 @@ def check_course_empty_window(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -228,7 +239,8 @@ def check_course_empty_window(
                             else (f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [NO_ANNOUNCEMENTS])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_days_zero(
@@ -238,7 +250,7 @@ def check_course_days_zero(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.5 / C.3.5: CS101 with days_back=0 returns the single relative-date item."""
     assert instant is not None, "instant is required for this row"
     anns = course_announcements_in_window(SEED, "CS101", 0)
@@ -247,6 +259,7 @@ def check_course_days_zero(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -286,7 +299,8 @@ def check_course_days_zero(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_zero_absolute(
@@ -296,7 +310,7 @@ def check_course_zero_absolute(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.6 / C.3.6: PHYS150 with days_back=0 returns the empty-window string.
 
     Distinguishes ``days_back=0`` honoured as a true zero window from
@@ -306,6 +320,7 @@ def check_course_zero_absolute(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -343,7 +358,8 @@ def check_course_zero_absolute(
                             else (f"expected {NO_ANNOUNCEMENTS!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [NO_ANNOUNCEMENTS])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_default(
@@ -353,7 +369,7 @@ def check_course_default(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.7 / C.3.7: PHYS150 with days_back omitted returns the default-window response.
 
     Default window = 30; PHYS150 has items at 2, 8, 30 (in), 31 (out).
@@ -366,6 +382,7 @@ def check_course_default(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -398,7 +415,8 @@ def check_course_default(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_days_10(
@@ -408,7 +426,7 @@ def check_course_days_10(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.8 / C.3.8: PHYS150 with days_back=10 returns 2 in-scope items."""
     assert instant is not None, "instant is required for this row"
     anns = course_announcements_in_window(SEED, "PHYS150", 10)
@@ -417,6 +435,7 @@ def check_course_days_10(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -456,7 +475,8 @@ def check_course_days_10(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_course_days_40(
@@ -466,7 +486,7 @@ def check_course_days_40(
     debug: bool,
     instant: datetime.datetime | None = None,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.2.9 / C.3.9: PHYS150 with days_back=40 returns all 4 items.
 
     Verifies that ``days_back`` above 30 is accepted and widens the
@@ -479,6 +499,7 @@ def check_course_days_40(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -518,7 +539,8 @@ def check_course_days_40(
                             else (f"expected constructed response, got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [expected])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def _creds() -> dict[str, str]:

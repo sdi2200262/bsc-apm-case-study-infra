@@ -7,6 +7,8 @@ grading run. Two tags are in use:
 
 - ``REVIEW``: rows whose acceptance was qualitatively ambiguous and
   requires human judgment before the result enters the cohort record.
+  This covers rows accepted only via a lenient form and near-miss rows
+  credited fractionally by partial credit (``verdict == "partial"``).
 - ``WARNING``: objectively abnormal conditions that need no judgment
   to classify but that the analyst must be aware of.
 
@@ -98,7 +100,20 @@ def collect_notices(scorer: Scorer) -> tuple[Notice, ...]:
     warning: list[Notice] = []
 
     for test_id, result in scorer.results.items():
-        if result.diagnostic in LENIENT_MODES:
+        if result.verdict == "partial":
+            similarity = result.similarity if result.similarity is not None else 0.0
+            review.append(
+                Notice(
+                    tag=TAG_REVIEW,
+                    label=test_id,
+                    summary=(
+                        f"partial credit at similarity {similarity:.3f}; "
+                        "the metric proposes, the analyst ratifies or deducts"
+                    ),
+                    detail="cue: review for manual deduction",
+                )
+            )
+        elif result.diagnostic in LENIENT_MODES:
             diagnostic = result.diagnostic or ""
             phrase = _LENIENT_FORM_PHRASE.get(
                 diagnostic,

@@ -3,12 +3,14 @@
 """Baseline protocol assertions (P.1.x / C.2.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server.
-Principal: ``student_courses``. All return a 5-tuple
-``(ok, msg, detail, leak_tuple|None, mode|None)`` where
+Principal: ``student_courses``. All return a 6-tuple
+``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)`` where
 ``leak_tuple`` is ``(clean, detail)`` from
 ``ServerProcess.leak_verdict``, or ``None`` when ``memcheck=False``,
 and ``mode`` is the ``matching`` mode the row was accepted under
 (``None`` for a failed match or a non-string-matched row).
+A non-passing string row carries the edit-distance similarity ratio
+against its expected form(s); a passing row carries ``None``.
 
 Leak-verdict pattern: functional result is saved inside the ``with``
 block; ``leak_after()`` is called after the block exits so
@@ -20,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...environment.provision import blank_dotenv_credentials, write_dotenv
-from ..expected import ERR_NOT_LOGGED_IN, login_success
+from ..expected import ERR_NOT_LOGGED_IN, get_courses_forms, login_success
 from ..matching import (
     match_exact,
     match_get_courses,
@@ -34,12 +36,13 @@ from ..runner import (
     spawn_server,
 )
 from ..seed import SEED, enrolled_courses, user
+from ..similarity import similarity_ratio
 from ._support import (
     HANDSHAKE_FAIL,
     LOGIN_FAIL,
     SERVER_START_FAIL,
     TOOL_FAIL,
-    Result5,
+    RowResult,
     leak_after,
 )
 
@@ -66,11 +69,12 @@ def check_authstatus_pre_login(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.2 / C.2.3: authstatus before any login returns the not-logged-in string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -97,7 +101,8 @@ def check_authstatus_pre_login(
                         else (f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}")
                     )
                     detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                    similarity = similarity_ratio(text, [AUTHSTATUS_NOT_LOGGED_IN])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_login_success(
@@ -106,11 +111,12 @@ def check_login_success(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.3 / C.2.4: login with valid credentials returns the success string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -137,7 +143,8 @@ def check_login_success(
                         else (f"expected {LOGIN_SUCCESS!r}, got {text!r}")
                     )
                     detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                    similarity = similarity_ratio(text, [LOGIN_SUCCESS])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_authstatus_post_login(
@@ -146,11 +153,12 @@ def check_authstatus_post_login(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.4 / C.2.5: authstatus after login returns the logged-in string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -181,7 +189,8 @@ def check_authstatus_post_login(
                             else (f"expected {AUTHSTATUS_LOGGED_IN!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [AUTHSTATUS_LOGGED_IN])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_login_already(
@@ -190,11 +199,12 @@ def check_login_already(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.5 / C.2.6: second login while authenticated returns the already string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -225,7 +235,8 @@ def check_login_already(
                             else (f"expected {LOGIN_ALREADY!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [LOGIN_ALREADY])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_missing_credentials(
@@ -234,7 +245,7 @@ def check_missing_credentials(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.6 / C.2.7: login with both credential surfaces deprived.
 
     Blanks both the env-var surface (empty ``ECLASS_USERNAME`` /
@@ -260,6 +271,7 @@ def check_missing_credentials(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     try:
         with spawn_server(
             impl,
@@ -292,9 +304,12 @@ def check_missing_credentials(
                             else (f"expected missing-credentials error, got {text!r}")
                         )
                         detail = text
+                        similarity = similarity_ratio(
+                            text, [LOGIN_MISSING_CREDS, LOGIN_MISSING_CREDS_DOCUMENTED]
+                        )
     finally:
         write_dotenv(eclass_dir, mock_root)
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_get_courses_logged_in(
@@ -303,7 +318,7 @@ def check_get_courses_logged_in(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.7 / C.2.8: get_courses while logged in returns an accepted form.
 
     The Python reference must emit the openeclass-formatted course list;
@@ -314,6 +329,7 @@ def check_get_courses_logged_in(
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -348,7 +364,17 @@ def check_get_courses_logged_in(
                             else (f"get_courses did not match an accepted form; got {text[:200]!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        # Gate the similarity candidates to the row's accepted
+                        # forms, mirroring the matcher's
+                        # allow_documented_clean=(impl == "c") above: the C
+                        # replica accepts both forms, the Python reference only
+                        # the faithful one, so a failing Python row must not draw
+                        # similarity from the documented-clean form it cannot pass.
+                        accepted_forms = get_courses_forms(_COURSES)
+                        if impl != "c":
+                            accepted_forms = accepted_forms[:1]
+                        similarity = similarity_ratio(text, accepted_forms)
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_logout_success(
@@ -357,11 +383,12 @@ def check_logout_success(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.8 / C.2.9: logout while authenticated returns the success string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -392,7 +419,8 @@ def check_logout_success(
                             else (f"expected {LOGOUT_SUCCESS!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [LOGOUT_SUCCESS])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_authstatus_post_logout(
@@ -401,11 +429,12 @@ def check_authstatus_post_logout(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.9 / C.2.10: authstatus after logout returns the not-logged-in string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -437,7 +466,8 @@ def check_authstatus_post_logout(
                             else (f"expected {AUTHSTATUS_NOT_LOGGED_IN!r}, got {text!r}")
                         )
                         detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                        similarity = similarity_ratio(text, [AUTHSTATUS_NOT_LOGGED_IN])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_get_courses_not_logged_in(
@@ -446,11 +476,12 @@ def check_get_courses_not_logged_in(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.10 / C.2.11: get_courses without login returns the not-logged-in error."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -477,7 +508,8 @@ def check_get_courses_not_logged_in(
                         else (f"expected {ERR_NOT_LOGGED_IN!r}, got {text!r}")
                     )
                     detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                    similarity = similarity_ratio(text, [ERR_NOT_LOGGED_IN])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def check_logout_no_op(
@@ -486,11 +518,12 @@ def check_logout_no_op(
     mock_root: Path,
     debug: bool,
     memcheck: bool = False,
-) -> Result5:
+) -> RowResult:
     """P.1.11 / C.2.12: logout without a prior login returns the no-op string."""
     srv: ServerProcess | None = None
     ok, msg, detail = SERVER_START_FAIL
     mode: str | None = None
+    similarity: float | None = None
     with spawn_server(
         impl,
         eclass_dir,
@@ -517,7 +550,8 @@ def check_logout_no_op(
                         else (f"expected {LOGOUT_NO_OP!r}, got {text!r}")
                     )
                     detail = text
-    return ok, msg, detail, leak_after(srv, memcheck), mode
+                    similarity = similarity_ratio(text, [LOGOUT_NO_OP])
+    return ok, msg, detail, leak_after(srv, memcheck), mode, similarity
 
 
 def _creds() -> dict[str, str]:

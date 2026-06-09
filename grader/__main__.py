@@ -41,7 +41,9 @@ from .errors import GraderError
 from .protocol import groups, set_compact_emission
 from .scoring import reporting, scoring
 
-GroupRunner = Callable[[Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]]
+GroupRunner = Callable[
+    [Path, Path, bool], dict[str, tuple[bool, str, str, str | None, float | None]]
+]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -120,6 +122,7 @@ def _run(args: argparse.Namespace) -> int:
     config = resolve_config(
         mock_root_flag=args.mock_root,
         eclass_root_flag=args.eclass_dir,
+        partial_floor_flag=args.partial_floor,
     )
     mock_root = require_path(config.mock_root, "mock root", "grader")
     eclass_root = require_path(config.eclass_root, "eclass root", "grader")
@@ -144,7 +147,7 @@ def _run(args: argparse.Namespace) -> int:
             return 1
         patch_name = patch_path.stem
 
-    scorer = scoring.Scorer()
+    scorer = scoring.Scorer(partial_floor=config.partial_floor)
     paths = reporting.report_paths(eclass_root.parent, patch_name, compact=args.compact_json)
 
     if patch_path is not None:
@@ -256,7 +259,9 @@ def _run_c_groups(
 
     log.info("c baseline group")
     for test_id, result in groups.run_c_baseline(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2], diagnostic=result[3])
+        scorer.record(
+            test_id, result[0], result[1], result[2], diagnostic=result[3], similarity=result[4]
+        )
 
     _record_group(
         scorer, "c course", groups.run_c_course_announcements, eclass_root, mock_root, debug
@@ -268,7 +273,9 @@ def _run_c_groups(
     log.info("c memory group")
     passed_tests = frozenset(test_id for test_id, result in scorer.results.items() if result.passed)
     for test_id, result in groups.run_c_memory(eclass_root, mock_root, debug, passed_tests).items():
-        scorer.record(test_id, result[0], result[1], result[2], diagnostic=result[3])
+        scorer.record(
+            test_id, result[0], result[1], result[2], diagnostic=result[3], similarity=result[4]
+        )
 
 
 def _record_group(
@@ -281,14 +288,18 @@ def _record_group(
 ) -> None:
     """Drive one group aggregator and record its results into the scorer.
 
-    Every aggregator yields ``(passed, message, full_output, mode)``;
-    ``mode`` is the ``matching`` mode the row was accepted under and
-    is recorded as the unscored per-test diagnostic (``None`` for a
-    failed or non-string-matched row).
+    Every aggregator yields ``(passed, message, full_output, mode,
+    similarity)``; ``mode`` is the ``matching`` mode the row was
+    accepted under, recorded as the unscored per-test diagnostic
+    (``None`` for a failed or non-string-matched row), and
+    ``similarity`` is the edit-distance ratio for a non-passing string
+    row (``None`` otherwise), which resolves the partial-credit verdict.
     """
     log.info(f"{label} group")
     for test_id, result in run_func(eclass_root, mock_root, debug).items():
-        scorer.record(test_id, result[0], result[1], result[2], diagnostic=result[3])
+        scorer.record(
+            test_id, result[0], result[1], result[2], diagnostic=result[3], similarity=result[4]
+        )
 
 
 def _skip_remaining(
@@ -366,6 +377,15 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="path to the grading environment install (overrides grader.yaml)",
+    )
+    parser.add_argument(
+        "--partial-floor",
+        type=float,
+        default=None,
+        help=(
+            "similarity floor at or above which a near-miss string row earns "
+            "partial credit (overrides grader.yaml; default 0.45)"
+        ),
     )
     return parser
 
