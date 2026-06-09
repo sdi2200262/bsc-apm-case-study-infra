@@ -23,6 +23,13 @@ Submodules:
   surface checks) and their shared result scaffolding; see its own
   inventory. The entry points return the per-test-id result mapping
   the grader CLI driver consumes.
+- ``_jsonrpc_io``: line-level JSON-RPC stdio reads and the shared
+  outgoing-frame serializer; exposes ``set_compact_emission`` so the
+  CLI driver can select compact emission once for the whole run.
 """
 
 from __future__ import annotations
+
+from ._jsonrpc_io import set_compact_emission
+
+__all__ = ["set_compact_emission"]

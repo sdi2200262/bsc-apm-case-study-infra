@@ -141,6 +141,30 @@ loader-assigned addresses, so two environments seeded on different
 days score identically but produce divergent transcripts. Compare
 results JSON on the verdicts, not by byte diff.
 
+## Compact serialization mode
+
+The grader emits outgoing JSON-RPC through `json.dumps` (a space after
+each `,` and `:`); the reference Python server, on the MCP SDK stdio
+transport, emits compact. Per
+[RFC 8259 section 2](https://www.rfc-editor.org/rfc/rfc8259#section-2)
+that whitespace is insignificant, and
+[JSON-RPC 2.0](https://www.jsonrpc.org/specification) with the
+[MCP stdio transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports)
+constrain structure and newline framing, not token spacing, so a
+conformant parser accepts both forms.
+
+`--compact-json` emits every frame compact and writes the result to
+`results_compact_serialization.json` beside the canonical `results.json`,
+recording how a sound-but-compact-only replica would score. Only
+emission changes; the read side is whitespace-insensitive.
+
+```bash
+python -m grader /path/to/solution.patch \
+    --eclass-dir /path/to/eclass-mcp-server \
+    --mock-root ~/.bsc-apm \
+    --compact-json
+```
+
 ## Pinned references
 
 | Component | Pinned at |
@@ -174,7 +198,7 @@ grader/
 ├── protocol/                          # MCP engine, oracle, and the rubric-group suites
 │   ├── __init__.py
 │   ├── runner.py                      # server spawn, JSON-RPC framing, fixtures
-│   ├── _jsonrpc_io.py                 # line-level JSON-RPC stdio reads
+│   ├── _jsonrpc_io.py                 # JSON-RPC stdio reads + shared outgoing-frame serializer
 │   ├── _schema_validation.py          # tools/call argument validation against inputSchema
 │   ├── _memcheck.py                   # valgrind stderr parsing helpers
 │   ├── server_env.py                  # spawned-server environment block (from <mock-root>/.env)

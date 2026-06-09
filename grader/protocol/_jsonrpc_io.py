@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Line-level JSON-RPC stdio reads for the protocol runner.
+"""Line-level JSON-RPC stdio reads and outgoing-frame serialization.
 
-A ``select``-bounded readline and the id-correlating read loop that
-skips lines which do not parse or do not answer the outstanding
-request. Split from ``runner`` to keep it within the module-size
-budget.
+A ``select``-bounded readline and the id-correlating read loop, plus the
+shared outgoing-frame serializer. The read side parses with ``json.loads``
+(whitespace-insensitive), so the process-wide ``--compact-json`` policy,
+set once via ``set_compact_emission`` and read by ``dump_message`` at
+every emit site, changes only how frames are emitted; its default
+reproduces ``json.dumps`` defaults, leaving an unflagged grade unchanged.
 """
 
 from __future__ import annotations
@@ -18,7 +20,47 @@ from typing import IO
 
 from .. import log
 
-__all__ = ["read_line_with_timeout", "read_correlated_response"]  # noqa: RUF022 (read-flow order)
+__all__ = [  # noqa: RUF022 (grouped by role: serialization, then read flow)
+    "set_compact_emission",
+    "dump_message",
+    "read_line_with_timeout",
+    "read_correlated_response",
+]
+
+# Process-wide outgoing-serialization policy: ``False`` is the
+# ``json.dumps`` default (spaced), ``True`` is compact.
+_compact_emission = False
+
+
+def set_compact_emission(enabled: bool) -> None:
+    """Select compact (``True``) or default-spaced (``False``) outgoing frames.
+
+    Set once from the ``--compact-json`` flag before any server spawns.
+
+    Args:
+        enabled: ``True`` to emit compact frames, ``False`` for the
+            ``json.dumps`` default spacing.
+    """
+    global _compact_emission
+    _compact_emission = enabled
+
+
+def dump_message(message: dict) -> str:
+    """Serialize one outgoing JSON-RPC frame to a single line, no newline.
+
+    Shared by every emit site so the ``--compact-json`` policy applies
+    uniformly.
+
+    Args:
+        message: The JSON-RPC frame to serialize.
+
+    Returns:
+        One JSON line: compact when compact emission is set, else the
+        ``json.dumps`` default spacing.
+    """
+    if _compact_emission:
+        return json.dumps(message, separators=(",", ":"))
+    return json.dumps(message)
 
 
 def read_line_with_timeout(stream: IO[str], timeout: float, debug: bool) -> str:

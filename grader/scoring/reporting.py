@@ -39,6 +39,10 @@ from .scoring import Scorer
 
 VERBOSE_MESSAGE_LIMIT = 60
 
+# Fixed filename for the secondary report a compact run writes beside
+# the canonical results file. Constant, not patch-derived.
+COMPACT_REPORT_NAME = "results_compact_serialization.json"
+
 GROUP_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
     ("PYTHON BASELINE", PYTHON_BASELINE_TESTS),
     ("PYTHON COURSE", PYTHON_COURSE_TESTS),
@@ -60,7 +64,9 @@ class ReportPaths:
             into. The grader uses the parent of the eclass-mcp-server
             checkout so the reports sit beside the patched tree.
         patch_name: Stem the report filenames are derived from.
-        json_path: Full path to ``results_<patch>.json``.
+        json_path: Full path to the JSON report written for the run:
+            the canonical ``results_<patch>.json``, or the fixed
+            ``results_compact_serialization.json`` for a compact run.
     """
 
     workspace_root: Path
@@ -68,13 +74,25 @@ class ReportPaths:
     json_path: Path
 
 
-def report_paths(workspace_root: Path, patch_name: str) -> ReportPaths:
-    """Resolve the JSON report path for a grading run."""
+def report_paths(workspace_root: Path, patch_name: str, compact: bool = False) -> ReportPaths:
+    """Resolve the JSON report path for a grading run.
+
+    Args:
+        workspace_root: Directory the report is written into.
+        patch_name: Stem the canonical report filename derives from.
+        compact: When ``True``, target the secondary
+            ``results_compact_serialization.json`` instead of the
+            canonical report.
+
+    Returns:
+        The resolved report paths for the run.
+    """
     workspace_root = Path(workspace_root).resolve()
+    filename = COMPACT_REPORT_NAME if compact else f"results_{patch_name}.json"
     return ReportPaths(
         workspace_root=workspace_root,
         patch_name=patch_name,
-        json_path=workspace_root / f"results_{patch_name}.json",
+        json_path=workspace_root / filename,
     )
 
 

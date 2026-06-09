@@ -22,13 +22,13 @@ error path, not the path the rubric awards points for.
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .._jsonrpc_io import dump_message
 from .._memcheck import (
     VALGRIND_STDERR_TAIL_LINES,
     classify_leak_verdict,
@@ -266,7 +266,7 @@ def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
     ``random_string`` parameter.
     """
     frames: list[str] = [
-        json.dumps(
+        dump_message(
             {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -278,7 +278,7 @@ def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
                 },
             }
         ),
-        json.dumps(
+        dump_message(
             {
                 "jsonrpc": "2.0",
                 "method": "notifications/initialized",
@@ -288,7 +288,7 @@ def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
     for index, (tool, args) in enumerate(calls, start=2):
         if tool == TOOLS_LIST_METHOD:
             frames.append(
-                json.dumps(
+                dump_message(
                     {
                         "jsonrpc": "2.0",
                         "id": index,
@@ -302,7 +302,7 @@ def _build_sequence(calls: tuple[ToolCall, ...]) -> str:
         if tool in BASELINE_TOOL_NAMES and "random_string" not in merged:
             merged["random_string"] = "test"
         frames.append(
-            json.dumps(
+            dump_message(
                 {
                     "jsonrpc": "2.0",
                     "id": index,

@@ -37,7 +37,6 @@ environment block in ``server_env``.
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import tempfile
@@ -50,7 +49,7 @@ from typing import IO
 
 from .. import log
 from ..environment import provision
-from ._jsonrpc_io import read_correlated_response
+from ._jsonrpc_io import dump_message, read_correlated_response
 from ._memcheck import (
     VALGRIND_STDERR_TAIL_LINES,
     classify_leak_verdict,
@@ -312,7 +311,7 @@ class ServerProcess:
         if self._server_unresponsive:
             return None
         try:
-            line = json.dumps(request) + "\n"
+            line = dump_message(request) + "\n"
             if self.ctx.debug:
                 log.debug(f"send: {line.strip()}")
             self.proc.stdin.write(line)
@@ -361,7 +360,7 @@ class ServerProcess:
             },
         }
         try:
-            line = json.dumps(request) + "\n"
+            line = dump_message(request) + "\n"
             if self.ctx.debug:
                 log.debug(f"handshake send: {line.strip()}")
             self.proc.stdin.write(line)
@@ -402,7 +401,7 @@ class ServerProcess:
         if self.proc is None or self.proc.stdin is None:
             return
         try:
-            self.proc.stdin.write(json.dumps(notification) + "\n")
+            self.proc.stdin.write(dump_message(notification) + "\n")
             self.proc.stdin.flush()
             time.sleep(NOTIFICATION_FLUSH_WAIT_SECONDS)
         except OSError:

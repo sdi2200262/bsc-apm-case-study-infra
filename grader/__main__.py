@@ -38,7 +38,7 @@ from .environment import (
     reset,
 )
 from .errors import GraderError
-from .protocol import groups
+from .protocol import groups, set_compact_emission
 from .scoring import reporting, scoring
 
 GroupRunner = Callable[[Path, Path, bool], dict[str, tuple[bool, str, str, str | None]]]
@@ -64,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.debug:
         log.enable_debug()
+
+    # Select the wire-serialization policy once, before any server spawns.
+    set_compact_emission(args.compact_json)
 
     try:
         return _run(args)
@@ -142,7 +145,7 @@ def _run(args: argparse.Namespace) -> int:
         patch_name = patch_path.stem
 
     scorer = scoring.Scorer()
-    paths = reporting.report_paths(eclass_root.parent, patch_name)
+    paths = reporting.report_paths(eclass_root.parent, patch_name, compact=args.compact_json)
 
     if patch_path is not None:
         log.info(f"patch: applying {patch_path.name}")
@@ -342,6 +345,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--debug",
         action="store_true",
         help="print MCP-server stdio for each test",
+    )
+    parser.add_argument(
+        "--compact-json",
+        action="store_true",
+        help=(
+            "serialize every outgoing JSON-RPC frame compact (no inter-token "
+            "whitespace) and write the secondary results_compact_serialization.json; "
+            "leaves the canonical spaced run untouched"
+        ),
     )
     parser.add_argument(
         "--eclass-dir",
