@@ -134,8 +134,8 @@ class TestResult:
             per-test record: the ``matching`` mode the row was
             accepted under; ``None`` when the test records none.
         similarity: The edit-distance similarity ratio in ``[0, 1]``
-            recorded only on a ``"partial"`` verdict; ``None``
-            otherwise.
+            recorded on any string row that ran the partial check
+            (``"partial"`` or ``"failed"``); ``None`` otherwise.
     """
 
     test_id: str
@@ -186,8 +186,9 @@ class Scorer:
         """Record one test result, resolving its three-state verdict.
 
         A pass is ``"passed"`` at full points. A non-pass is
-        ``"partial"`` (keeping its similarity) when ``similarity`` is at
-        or above ``partial_floor``, else ``"failed"``. A pass is never
+        ``"partial"`` when ``similarity`` is at or above ``partial_floor``,
+        else ``"failed"``; both keep their similarity ratio (recorded for
+        the distribution, scored only on ``"partial"``). A pass is never
         anything but ``"passed"``, so strict grades are untouched.
 
         Args:
@@ -208,7 +209,8 @@ class Scorer:
         elif similarity is not None and similarity >= self.partial_floor:
             verdict, kept_similarity = "partial", round(similarity, 6)
         else:
-            verdict, kept_similarity = "failed", None
+            verdict = "failed"
+            kept_similarity = round(similarity, 6) if similarity is not None else None
         self.results[test_id] = TestResult(
             test_id=test_id,
             verdict=verdict,
@@ -353,10 +355,11 @@ def _test_entry(
         "points": points,
         "points_earned": _earned(result, points) if definition else 0,
     }
-    # ``similarity`` appears only on a partial row, between ``points_earned``
-    # and the descriptive fields, so the JSON states why the fractional award
-    # was made.
-    if result.verdict == "partial" and result.similarity is not None:
+    # ``similarity`` is recorded on any string row that ran the partial
+    # check (``"partial"`` or ``"failed"``), between ``points_earned`` and the
+    # descriptive fields, so the JSON carries the full ratio distribution, not
+    # only the awarded partials.
+    if result.similarity is not None:
         entry["similarity"] = result.similarity
     entry.update(
         {
