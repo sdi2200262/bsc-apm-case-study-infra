@@ -17,9 +17,14 @@ jobs:
       fail-fast: false
       matrix:
         # One entry per package brought under the standard. Each package
-        # carries its own ruff.toml + pyrightconfig.json; add a package
-        # here once it has both.
-        package: [grader]
+        # carries its own ruff.toml + pyrightconfig.json and names the
+        # third-party packages pyright must resolve its imports against;
+        # add a package here once it has both config files.
+        include:
+          - package: grader
+            pyright_deps: requests urllib3 pyyaml python-dateutil jsonschema
+          - package: parser
+            pyright_deps: pyyaml python-dotenv
     defaults:
       run:
         working-directory: ${{ matrix.package }}
@@ -39,5 +44,5 @@ jobs:
       - name: pyright
         run: |
           uv venv
-          uv pip install requests urllib3 pyyaml python-dateutil jsonschema
+          uv pip install ${{ matrix.pyright_deps }}
           uvx pyright@1.1.409 --pythonpath .venv/bin/python

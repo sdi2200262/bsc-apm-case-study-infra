@@ -1,0 +1,16 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "N", "D", "SIM", "RUF"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+"__init__.py" = ["D104"]
+# notes.py's module docstring carries a literal YAML example whose
+# ``notes:`` key pydocstyle misreads as a docstring section. The codes
+# cannot be suppressed inline without editing (and corrupting) the
+# documented sidecar shape, so they are ignored for the file instead.
+"notes.py" = ["D214", "D405"]
