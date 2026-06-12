@@ -33,6 +33,7 @@ from ..data.schema import (
     user_prompt_text,
 )
 from ..data.session import Session, session_health_signals
+from ..data.session_cap import cap_overrun_detail, cap_overrun_summary
 
 TAG_REVIEW = "REVIEW"
 TAG_WARNING = "WARNING"
@@ -126,6 +127,17 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
                     "cue: per-turn analyses cannot uniquely identify "
                     f"{'these turns' if missing_uuid_count != 1 else 'this turn'}"
                 ),
+            )
+        )
+
+    # REVIEW: activity past the session cap
+    if session.cap_filter.dropped:
+        review_notices.append(
+            Notice(
+                tag=TAG_REVIEW,
+                label="activity past session cap",
+                summary=cap_overrun_summary(session),
+                detail=cap_overrun_detail(session),
             )
         )
 

@@ -65,7 +65,7 @@ from .data.commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
 from .data.conversation import discover_sanitisable_jsonl_files
 from .data.jsonl import is_sanitised_payload, read_json, write_file_text, write_json
 from .data.schema import SchemaError
-from .data.session import load_session
+from .data.session import DEFAULT_CAP_HOURS, load_session
 from .metrics.cost import compute_cost_for_records
 from .rates import (
     RateTableError,
@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.metrics and args.output is None:
         parser.error("--metrics requires -o <output directory> for the data and metrics artifacts")
     try:
-        session = load_session(args.path, args.framework)
+        session = load_session(args.path, args.framework, args.cap_hours)
     except SchemaError as error:
         log.error(str(error))
         return 1
@@ -393,6 +393,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "Upper bound (exclusive) on text length for the 'short' "
             "input bucket, in characters. Affects the user-input "
             "dimension's bucket distributions and magnitudes."
+        ),
+    )
+    parser.add_argument(
+        "--cap-hours",
+        type=float,
+        default=DEFAULT_CAP_HOURS,
+        help=(
+            "Session-duration cap in hours. Records timestamped strictly "
+            "beyond the session's first user prompt plus this span are "
+            "dropped and every downstream aggregate is recomputed against "
+            "the survivors. A non-positive value disables the cap."
         ),
     )
     parser.add_argument(

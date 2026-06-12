@@ -2,38 +2,31 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Load Claude Code JSONL conversation files from disk.
 
-A submission can be a single JSONL file (development and inspection
-convenience) or a directory containing one or more ``<sessionId>.jsonl``
-files copied straight from ``~/.claude/projects/<dashed-cwd>/``. When a
-directory is given, only top-level ``*.jsonl`` files are loaded as
-main conversations; sibling ``<sessionId>/subagents/`` directories
-adjacent to each main file are read separately to populate the
-per-conversation ``SubagentModelIndex`` (so delegated dispatches are
-priced against the actual subagent's model rather than the parent's),
-while ``<sessionId>/tool-results/`` directories are ignored.
-Filenames are not modified by participants and stay as the UUIDs
-Claude Code wrote them with; the parser orders conversations by the
-earliest record timestamp in each file rather than by filename.
+A submission can be a single JSONL file or a directory of one or more
+``<sessionId>.jsonl`` files copied straight from
+``~/.claude/projects/<dashed-cwd>/``. For a directory, only top-level
+``*.jsonl`` files load as main conversations; the sibling
+``<sessionId>/subagents/`` directory adjacent to each main file is read
+separately to populate the per-conversation ``SubagentModelIndex`` (so
+delegated dispatches price against the subagent's model, not the
+parent's), and ``<sessionId>/tool-results/`` directories are ignored.
+Conversations are ordered by earliest record timestamp, not filename.
 
-The loader is responsible for three orthogonal jobs that share the same
-single-pass walk over a file's records:
+The loader does three orthogonal jobs over a single-pass walk of a file's
+records:
 
-1. Parse every JSONL line into a typed ``Record`` (delegated to
+1. Parse every JSONL line into a typed ``Record`` (via
    ``schema.parse_record``).
-2. Build the per-conversation ``RequestUsageIndex`` that deduplicates
-   ``message.usage`` values by ``requestId``. Claude Code emits one
-   record per content block of a streaming API response and every such
-   record carries the same ``usage`` object; summing per record would
-   multiply each call's tokens by the block count. The dedup index is
-   the canonical source of per-call usage for token-sum metrics.
-3. Replay the queue lifecycle to classify each ``queue-operation``
-   record as a ``delivered`` steer, an ``abandoned`` steer, or
-   (for system-generated enqueues) filtered out. The replay maintains
-   an ordered list of open user-authored enqueues; ``dequeue`` consumes
-   the oldest open enqueue, ``remove`` cancels the most recent open
-   enqueue, ``popAll`` clears every open enqueue at once. Imbalances
-   are recorded as warnings rather than errors so the rest of the
-   parser can continue and surface the issue in diagnostics.
+2. Build the ``RequestUsageIndex`` deduplicating ``message.usage`` by
+   ``requestId``. Claude Code emits one record per content block of a
+   streaming response, each carrying the same ``usage``; summing per
+   record would multiply each call's tokens by the block count. The
+   dedup index is the canonical per-call usage for token-sum metrics.
+3. Replay the queue lifecycle to classify each ``queue-operation`` record
+   as a ``delivered`` steer, an ``abandoned`` steer, or (for
+   system-generated enqueues) filtered out. Imbalances are recorded as
+   warnings, not errors, so the parser continues and surfaces them in
+   diagnostics.
 """
 
 from __future__ import annotations
@@ -111,10 +104,9 @@ class RequestUsageIndex:
             well-formed Claude Code data; surfaced for diagnostics.
         errored_calls_excluded: Count of assistant records whose
             ``isApiErrorMessage`` flag was ``True`` and which were
-            therefore excluded from the index. Anthropic's API does
-            not bill failed requests, so the exclusion keeps the
-            cost figure honest; the count is surfaced so a session
-            with a high error volume is visible in diagnostics.
+            therefore excluded. Anthropic's API does not bill failed
+            requests, so the exclusion keeps the cost figure honest; the
+            count surfaces a high-error session in diagnostics.
     """
 
     usage_by_request_id: dict[str, dict[str, Any]]
@@ -190,13 +182,11 @@ def discover_conversation_files(path: Path) -> list[Path]:
             one or more top-level ``*.jsonl`` files.
 
     Returns:
-        A list of absolute paths in filesystem order. Top-level only
-        when ``path`` is a directory; nested subdirectories are not
-        descended into. The per-conversation
-        ``SubagentModelIndex`` is built separately from the sibling
-        ``<sessionId>/subagents/`` directory by ``load_conversation``;
-        callers that want every JSONL the submission ships (main
-        plus subagent) for a non-metric pass like sanitisation use
+        A list of absolute paths in filesystem order. Top-level only when
+        ``path`` is a directory; nested subdirectories are not descended.
+        The ``SubagentModelIndex`` is built separately by
+        ``load_conversation``; a non-metric pass wanting every JSONL the
+        submission ships (main plus subagent) uses
         ``discover_sanitisable_jsonl_files`` instead.
 
     Raises:
@@ -240,23 +230,46 @@ def discover_sanitisable_jsonl_files(path: Path) -> list[Path]:
     return sanitisable
 
 
-def load_conversation(path: Path) -> Conversation:
-    """Load and process one JSONL conversation file.
+def parse_conversation_records(path: Path) -> tuple[Record, ...]:
+    """Parse a conversation file into its records, in document order.
+
+    This is the read step the session cap runs before any record-derived index
+    is built, so the cap can drop the over-cap tail and ``build_conversation``
+    indexes only the survivors.
 
     Args:
         path: Absolute path to a single JSONL file.
 
     Returns:
+        The parsed records in document order.
+
+    Raises:
+        SchemaError: On any unrecoverable parse failure.
+        OSError: When the file cannot be read.
+    """
+    return tuple(_parse_lines(Path(path).resolve()))
+
+
+def build_conversation(path: Path, records: tuple[Record, ...]) -> Conversation:
+    """Build a ``Conversation`` and its record-derived indices from ``records``.
+
+    The usage dedup, steer lifecycle, queue-lifecycle warnings, and compaction
+    events are derived from ``records``; ``session_id`` from the records' modal
+    sessionId; the subagent-model index from the sibling ``subagents/``
+    directory. Building from a cap-filtered record set therefore indexes only
+    the survivors, with no value carried over from a wider set.
+
+    Args:
+        path: Absolute path of the source file.
+        records: The records to index, in document order.
+
+    Returns:
         A populated ``Conversation``.
 
     Raises:
-        SchemaError: On any unrecoverable parse failure. Recoverable
-            anomalies (mismatched queue operations) are recorded as
-            warnings inside the returned ``Conversation``.
-        OSError: When the file cannot be read.
+        SchemaError: When a record is structurally invalid for indexing.
     """
     resolved = Path(path).resolve()
-    records = tuple(_parse_lines(resolved))
     session_id = _resolve_session_id(records)
     usage_index = _build_usage_index(records, str(resolved))
     subagent_model_index = build_subagent_model_index(resolved)
@@ -272,6 +285,25 @@ def load_conversation(path: Path) -> Conversation:
         compaction_events=compaction_events,
         queue_lifecycle_warnings=queue_warnings,
     )
+
+
+def load_conversation(path: Path) -> Conversation:
+    """Parse and build one conversation file in a single step (the uncapped path).
+
+    Args:
+        path: Absolute path to a single JSONL file.
+
+    Returns:
+        A populated ``Conversation`` over every record in the file.
+
+    Raises:
+        SchemaError: On any unrecoverable parse failure. Recoverable anomalies
+            (mismatched queue operations) are recorded as warnings inside the
+            returned ``Conversation``.
+        OSError: When the file cannot be read.
+    """
+    resolved = Path(path).resolve()
+    return build_conversation(resolved, parse_conversation_records(resolved))
 
 
 def _parse_lines(path: Path) -> Iterable[Record]:
@@ -305,20 +337,13 @@ def _build_usage_index(
 ) -> RequestUsageIndex:
     """Build the ``RequestUsageIndex`` for a conversation file.
 
-    The first non-synthetic assistant record encountered for a given
-    ``requestId`` contributes its ``message.usage`` to the index.
-    Subsequent records sharing the id are not re-summed; they are
-    skipped because Claude Code emits identical usage on every record
-    of a streaming response. The skip is silent in normal operation;
-    callers needing to verify that the duplicate carries the same usage
-    can inspect the records directly.
-
-    Records whose ``isApiErrorMessage`` flag is ``True`` are excluded
-    entirely. Anthropic's API does not bill failed requests, so an
-    errored record's notional ``usage`` (when one is present at all)
-    is not part of the cost the caller paid. The exclusion is
-    counted in ``errored_calls_excluded`` and surfaced in
-    diagnostics.
+    The first non-synthetic assistant record for a given ``requestId``
+    contributes its ``message.usage``; later records sharing the id are
+    skipped, because Claude Code emits identical usage on every record of a
+    streaming response. Records whose ``isApiErrorMessage`` is ``True`` are
+    excluded entirely: Anthropic's API does not bill failed requests, so an
+    errored record's notional usage is not part of the cost paid. The
+    exclusion is counted in ``errored_calls_excluded``.
     """
     usage_by_request_id: dict[str, dict[str, Any]] = {}
     synthetic_count = 0
@@ -359,26 +384,18 @@ def _replay_queue_lifecycle(
 ) -> tuple[tuple[SteerEvent, ...], tuple[str, ...]]:
     """Replay the queue lifecycle and emit one ``SteerEvent`` per resolved user enqueue.
 
-    Claude Code's queue holds both user-authored enqueues (the
-    participant typing a steer mid-turn) and system-generated enqueues
-    (task notifications and similar internal envelopes wrapped in
-    ``<task-notification>...``). The two populations share one
-    ordered queue: ``dequeue`` pops the oldest open enqueue regardless
-    of source, ``remove`` pops the most recent. The replay therefore
-    tracks every enqueue by source (user-authored or system-generated)
-    and only emits a ``SteerEvent`` when the resolved enqueue is
-    user-authored. System enqueues are matched silently so the
-    ordering invariant is preserved.
-
-    ``popAll`` clears every open enqueue at once. An abandoned
-    ``SteerEvent`` is emitted for each user-authored enqueue cleared;
-    system enqueues are dropped silently.
+    Claude Code's queue holds both user-authored enqueues (a participant
+    steer typed mid-turn) and system-generated enqueues (task
+    notifications wrapped in ``<task-notification>...``). The two share one
+    ordered queue: ``dequeue`` pops the oldest open enqueue regardless of
+    source, ``remove`` pops the most recent, ``popAll`` clears every open
+    enqueue at once. The replay tracks every enqueue by source and emits a
+    ``SteerEvent`` only when the resolved enqueue is user-authored; system
+    enqueues are matched silently so the ordering invariant holds.
 
     Imbalances (a ``dequeue`` or ``remove`` with no open enqueue, or
     user-authored enqueues still open at end of file) are recorded as
-    warnings; the ``SteerEvent`` list still captures everything that
-    can be resolved. The diagnostics block surfaces the warnings to
-    the report.
+    warnings; the ``SteerEvent`` list still captures everything resolvable.
     """
     open_enqueues: list[tuple[Record, bool]] = []
     events: list[SteerEvent] = []
