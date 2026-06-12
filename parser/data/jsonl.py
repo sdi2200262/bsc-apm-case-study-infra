@@ -16,6 +16,8 @@ a raw JSONL file at a glance.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -48,9 +50,23 @@ def write_file_text(path: Path, text: str) -> None:
 
 
 def write_json(payload: Any, path: Path) -> None:
-    """Write a JSON-serialisable payload to a file, indented for readability."""
-    with path.open("w", encoding="utf-8") as sink:
-        json.dump(payload, sink, indent=2, ensure_ascii=False)
+    """Write a JSON-serialisable payload to a file via an atomic replace.
+
+    Serialises with two-space indentation and ``ensure_ascii=False`` so
+    non-ASCII transcript content stays human-readable, writes the bytes to
+    a temporary file in the destination directory, then atomically swaps it
+    into place with ``os.replace`` so a reader never observes a partially
+    written file.
+
+    Args:
+        payload: Any JSON-serialisable object.
+        path: Destination file path. Its parent directory must exist.
+    """
+    serialised = json.dumps(payload, indent=2, ensure_ascii=False)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as sink:
+        sink.write(serialised)
+        temp_path = Path(sink.name)
+    os.replace(temp_path, path)
 
 
 def read_json(path: Path) -> Any:

@@ -11,10 +11,9 @@ that are objectively abnormal and require no judgment to classify.
 
 ``collect_notices`` inspects a loaded ``Session`` and returns the
 full tuple of applicable notices, REVIEW notices first, then WARNING
-notices, in deterministic iteration order within each group.
-``print_notice_block`` renders that tuple to stdout using the shared
-grammar expected by both the ``--process`` and ``--economic`` CLI
-modes.
+notices, in deterministic iteration order within each group. Rendering
+is not done here: a caller hands the collected notices to the terminal
+logging module's ``notice_block`` to emit them.
 """
 
 from __future__ import annotations
@@ -229,34 +228,3 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
         )
 
     return tuple(review_notices + warning_notices)
-
-
-def print_notice_block(notices: tuple[Notice, ...]) -> None:
-    """Render ``notices`` to stdout using the shared notice-block grammar.
-
-    When ``notices`` is empty, returns immediately without printing
-    anything, so the preceding output bytes are unchanged.
-
-    Each notice is rendered as a tag line, then a label line, a
-    summary line, and one or more detail lines, with the body lines
-    indented by two spaces. No separator is placed between
-    consecutive notices of the same tag, and no trailing blank line
-    follows the final notice.
-
-    Args:
-        notices: The ordered tuple of notices to render, as returned
-            by ``collect_notices``. REVIEW notices must precede
-            WARNING notices; the renderer does not re-sort.
-
-    Returns:
-        None.
-    """
-    if not notices:
-        return
-    print()
-    for notice in notices:
-        print(f"[{notice.tag}]")
-        print(f"  label: {notice.label}")
-        print(f"  {notice.summary}")
-        for line in notice.detail.split("\n"):
-            print(f"  {line}")

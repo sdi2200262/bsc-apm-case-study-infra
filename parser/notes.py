@@ -59,6 +59,7 @@ from typing import Any
 
 import yaml
 
+from . import log
 from .errors import ParserError
 
 NOTES_FILENAME = "metrics_notes.yaml"
@@ -280,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return handler(args)
     except NotesError as error:
-        print(f"error: {error}", file=sys.stderr)
+        log.error(str(error))
         return 1
 
 
@@ -345,7 +346,7 @@ def _cmd_add(args: argparse.Namespace) -> int:
     directory = args.metrics_dir
     note_text = args.note.strip()
     if not note_text:
-        print("error: note text cannot be empty", file=sys.stderr)
+        log.error("note text cannot be empty")
         return 1
 
     metrics = _read_metrics(directory)
@@ -354,7 +355,7 @@ def _cmd_add(args: argparse.Namespace) -> int:
     notes = load_notes(directory)
     notes.append({"path": args.path, "note": note_text})
     save_notes(directory, notes)
-    print(f"added note at {args.path} (now {len(notes)} note(s))")
+    log.info(f"added note at {args.path} (now {len(notes)} note(s))")
     return 0
 
 
@@ -363,7 +364,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
     directory = args.metrics_dir
     notes = load_notes(directory)
     if not notes:
-        print(f"no notes in {directory / NOTES_FILENAME}")
+        log.info(f"no notes in {directory / NOTES_FILENAME}")
         return 0
     metrics = _read_metrics(directory)
     for index, entry in enumerate(notes):
@@ -373,9 +374,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
             status = "ok"
         except NotesError as error:
             status = f"stale ({error})"
-        print(f"[{index}] path={entry['path']}  status={status}")
+        log.info(f"[{index}] path={entry['path']}  status={status}")
         for line in entry["note"].rstrip().splitlines():
-            print(f"      {line}")
+            log.info(f"      {line}")
     return 0
 
 
@@ -389,7 +390,7 @@ def _cmd_remove(args: argparse.Namespace) -> int:
         raise NotesError(f"index {args.index} out of range; sidecar has {len(notes)} entries")
     removed = notes.pop(args.index)
     save_notes(directory, notes)
-    print(f"removed note at {removed['path']} (now {len(notes)} note(s))")
+    log.info(f"removed note at {removed['path']} (now {len(notes)} note(s))")
     return 0
 
 
