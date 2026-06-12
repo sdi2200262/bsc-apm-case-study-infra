@@ -1,31 +1,32 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Leaf-block rendering for the canonical metrics artifact.
 
 Every measurement in the artifact is wrapped in a ``{value, label,
-constructed}`` triple so the analysis layer can iterate over Primary
-metrics to assemble its hypothesis-test family and flag every Constructed
-metric for the literature-grounding cross-check without consulting an
-external index.
+constructed}`` triple so the analysis layer can iterate over ``Primary``
+metrics to assemble its hypothesis-test family and flag every
+``constructed`` metric for the literature-grounding cross-check without
+consulting an external index.
 
-Label takes one of three values, naming the metric's tier in the rubric:
+Label takes one of three values, naming the metric's role in the
+analysis:
 
 - ``Primary``: drives a research-question claim and is hypothesis-tested.
-- ``Secondary``: supports or decomposes a Primary within the same
+- ``Secondary``: supports or decomposes a ``Primary`` within the same
   dimension.
 - ``Supplementary``: descriptive only, no hypothesis test.
 
-Constructed is a Boolean. ``true`` means the metric was defined for this
+``constructed`` is a Boolean. ``true`` means the metric was defined for this
 study and rests on face validity until the literature-grounding pass
 attaches a published construct; ``false`` means the metric maps directly
 onto a JSONL, API, or grader field with aggregation as the only
 study-author degree of freedom.
 
 This module owns the per-dimension renderers that translate the data and
-metric blocks into leaf-triple dicts. Label and constructed flags are
-hard-coded against the metric definitions; changing one means editing one
-renderer here, not threading constants through the computation modules.
+metric blocks into leaf-triple dicts. The ``label`` and ``constructed``
+flags are hard-coded against the metric definitions; changing one means
+editing one renderer here, not threading constants through the computation
+modules.
 """
 
 from __future__ import annotations
@@ -126,10 +127,10 @@ def economic_block(
 def requests_block(counts: RequestCounts) -> dict[str, Any]:
     """Render a process-dimension request-count block with leaf triples.
 
-    ``request_count`` is the Primary measurement: it counts model API
+    ``request_count`` is the ``Primary`` measurement: it counts model API
     calls in scope and is the natural denominator for per-request process
     rates. ``delegated_request_count`` and ``requests_with_tool_use_count``
-    are Secondary decompositions of the same population: the first picks
+    are ``Secondary`` decompositions of the same population: the first picks
     out dispatches the main agent routed through a subagent; the second
     picks out requests whose response carried any tool-use action.
     """
@@ -147,11 +148,11 @@ def requests_block(counts: RequestCounts) -> dict[str, Any]:
 def time_block(metrics: TimeMetrics, turn_count: int, scope_kind: str) -> dict[str, Any]:
     """Render a session-or-phase time block with leaf triples.
 
-    The ``duration`` leaf carries the constructed flag at phase scope
+    The ``duration`` leaf carries the ``constructed`` flag at phase scope
     because the phase boundary is itself derived from the per-prompt phase
     labels rather than read directly from a JSONL field; at session scope
     ``duration`` is the wall-clock extent between the earliest and latest
-    non-synthetic record and the flag is false. ``turn_count`` is data and
+    non-synthetic record and the flag is ``false``. ``turn_count`` is data and
     is supplied by the caller from ``data/aggregate/counts``.
     """
     duration_constructed = scope_kind == "phase"
@@ -226,7 +227,7 @@ def supplementary_block(
 ) -> dict[str, Any]:
     """Render a supplementary block with leaf triples.
 
-    ``tool_success_rate`` lives here alongside the other Supplementary
+    ``tool_success_rate`` lives here alongside the other ``Supplementary``
     measurements. Its supporting counts ``tool_result_count`` and
     ``tool_error_count`` stay in the diagnostics block so iteration over
     measurement metrics does not pick them up as hypothesis-test
