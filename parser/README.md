@@ -12,7 +12,8 @@ metrics artifacts used by the analysis pipeline.
   `~/.claude/projects/<dashed-cwd>/`, computes per-scope values
   (session, phase, role for APM submissions), and writes two
   artifacts: `parser_data.json` (the data: token sums, counts, the
-  per-call and per-turn series, diagnostics) and `parser_metrics.json`
+  session identity facts, and the per-call and per-turn series) and
+  `parser_metrics.json`
   (the metrics: cost, time statistics, bucket distributions, the
   success rate). A one-time `--schema` mode writes `parser_schema.json`,
   the field contract describing each leaf's kind, label, and formula.
