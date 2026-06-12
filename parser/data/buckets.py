@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Classify a user input into one of three behavioural buckets.
@@ -7,7 +6,7 @@ Every turn-starting user prompt and every delivered steer is
 classified into exactly one of:
 
 * ``protocol``: the input invokes a recognised framework slash
-  command (an APM ``apm-*`` or a Spec-kit ``speckit.*`` command)
+  command (an APM ``apm-*`` or a Spec-kit ``speckit-*`` command)
   inside a ``<command-name>`` marker. Local Claude Code commands
   such as ``/clear`` or ``/exit`` are not framework participation
   and do not put an input in the protocol bucket.
@@ -17,9 +16,7 @@ classified into exactly one of:
   or exceeds the configured threshold.
 
 The default threshold is 50 characters; an alternate value can be
-supplied via the ``--short-threshold`` flag at parse time. The
-candidate values for a threshold sweep are available as
-``SHORT_THRESHOLD_SWEEP``.
+supplied via the ``--short-threshold`` flag at parse time.
 """
 
 from __future__ import annotations
@@ -33,7 +30,6 @@ BUCKET_STANDARD = "standard"
 BUCKETS: tuple[str, ...] = (BUCKET_PROTOCOL, BUCKET_SHORT, BUCKET_STANDARD)
 
 DEFAULT_SHORT_THRESHOLD = 50
-SHORT_THRESHOLD_SWEEP: tuple[int, ...] = (30, 50, 70, 100)
 
 
 def classify_bucket(text: str, short_threshold: int) -> str:

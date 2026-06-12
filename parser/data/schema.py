@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Typed view over the Claude Code CLI JSONL rollout format.
@@ -328,7 +327,7 @@ def queue_record_content(record: Record) -> str | None:
 
 
 def is_user_authored_enqueue(record: Record) -> bool:
-    """Return True for enqueue records whose content is a user-typed steer.
+    """Return ``True`` for enqueue records whose content is a user-typed steer.
 
     A steer is a user prompt queued mid-turn that reaches the model.
     Two enqueue populations are excluded:

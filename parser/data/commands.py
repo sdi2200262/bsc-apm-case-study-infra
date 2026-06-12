@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Slash-command vocabulary for the two frameworks the case study compares.
@@ -61,7 +60,7 @@ issues a model request:
   ``/simplify``, ``/init``, ``/security-review``).
 
 ``CLAUDE_CODE_BUILTINS`` is the derived union of the two sets: it is the
-recognition surface for :func:`is_known_command`, unchanged by the split.
+recognition surface for ``is_known_command``, unchanged by the split.
 The split exists because steer detection in the schema layer excludes a
 queued local-only command (a queued ``/ide`` controls the CLI and never
 reaches the model, so it is not a steer) while a queued model-calling
@@ -266,7 +265,7 @@ MODEL_CALLING_BUILTINS: frozenset[str] = frozenset(
     }
 )
 
-# The recognition surface for :func:`is_known_command` is the union of
+# The recognition surface for ``is_known_command`` is the union of
 # both sets, unchanged by the split.
 CLAUDE_CODE_BUILTINS: frozenset[str] = LOCAL_ONLY_BUILTINS | MODEL_CALLING_BUILTINS
 
@@ -398,7 +397,7 @@ def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
     Returns:
         The speckit command name (e.g. ``speckit-implement``) when the
         block is a ``Skill`` tool_use whose declared skill resolves
-        through :data:`SPECKIT_PHASE_BY_COMMAND`. ``None`` for every
+        through ``SPECKIT_PHASE_BY_COMMAND``. ``None`` for every
         other block, for skills outside that table, and for malformed
         blocks.
     """
@@ -411,7 +410,7 @@ def is_speckit_skill_tool_use(block: dict[str, Any]) -> str | None:
 def is_apm_role_skill_tool_use(block: dict[str, Any]) -> str | None:
     """Return the APM role command an assistant Skill tool_use names, or ``None``.
 
-    The role-table counterpart to :func:`is_speckit_skill_tool_use`:
+    The role-table counterpart to ``is_speckit_skill_tool_use``:
     it recognises the model self-invoking a role skill (``apm-1/2/3``)
     through the ``Skill`` tool, which is how a role initiates when the
     typed command did not expand.
@@ -442,17 +441,18 @@ def is_known_command(name: str) -> bool:
 
 
 def is_local_only_command(name: str) -> bool:
-    """Return True when the command name is a local-only built-in.
+    """Return ``True`` when the command name is a local-only built-in.
 
     Local-only built-ins control the CLI or session and issue no model
     request, so a queued one is not a steer. Model-calling built-ins
-    and every framework command return False.
+    and every framework command return ``False``.
 
     Args:
         name: A command name with the leading slash already stripped.
 
     Returns:
-        True when name is in LOCAL_ONLY_BUILTINS, False otherwise.
+        ``True`` when ``name`` is in ``LOCAL_ONLY_BUILTINS``, ``False``
+        otherwise.
     """
     return name in LOCAL_ONLY_BUILTINS
 

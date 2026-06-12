@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Subagent-model attribution: indexed lookup plus the documented fallback resolver.
@@ -9,9 +8,9 @@ session JSONL. Each such file's first non-synthetic assistant record
 carries the actual ``message.model`` the subagent ran on; the parent's
 ``toolUseResult.usage`` rolls up the subagent's token totals but does
 not name the model. ``build_subagent_model_index`` reads the sibling
-files and returns a ``agentId -> canonical model id`` map, and
-``metrics/cost_attribution`` prices each delegated dispatch against the
-matched model's rates rather than the parent's. This is the canonical
+files and returns a ``agentId -> canonical model id`` map, and the cost
+layer prices each delegated dispatch against the matched model's rates
+rather than the parent's. This is the canonical
 path and produces a deterministic single cost.
 
 Some case-study submissions arrived without those sibling files. For
