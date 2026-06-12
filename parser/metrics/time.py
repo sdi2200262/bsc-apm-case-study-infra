@@ -21,6 +21,14 @@ the duration spent at active-count == 1; concurrent time is the duration
 spent at active-count >= 2. The two sum to the union of every interval
 (turn-time).
 
+A phase scope's inter-turn time is not its own span minus its turn time:
+a phase's turns interleave with other phases across the session, so its
+share of the session's idle gaps is partitioned by assigning each gap to
+the phase of the turn that precedes it. This module owns that partition;
+``compute_time_metrics`` applies it when given the session and a phase
+label, keeping the per-phase inter-turn times disjoint and summing to the
+session total.
+
 Per-turn duration distribution metrics (mean, p50, p95, stdev) are
 computed over the per-turn durations directly, with no union-dedup. A turn
 whose interval overlaps another's still counts its full length toward the
@@ -36,6 +44,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from statistics import median, pstdev
 
+from ..data.aggregate.turn_series import phase_of_turn
+from ..data.session import (
+    Session,
+    latest_real_timestamp,
+    session_start_timestamp,
+)
 from ..data.turns import Turn
 
 
@@ -76,7 +90,9 @@ def compute_time_metrics(
     turns: Iterable[Turn],
     scope_start: datetime | None = None,
     scope_end: datetime | None = None,
-    inter_turn_time_override: float | None = None,
+    *,
+    session: Session | None = None,
+    phase_label: str | None = None,
 ) -> TimeMetrics:
     """Compute time metrics over a set of turns.
 
@@ -85,6 +101,13 @@ def compute_time_metrics(
     the scope to extend beyond the outermost turn boundaries supply
     explicit ``scope_start`` and ``scope_end``.
 
+    For a phase scope the inter-turn time is partitioned rather than taken
+    as the scope's own span minus its turn time. Passing ``session``
+    together with ``phase_label`` computes the phase's share of the
+    session's idle gaps (see ``_calculate_partitioned_inter_turn_time``);
+    ``duration`` then becomes the sum of the scope's turn time and that
+    partitioned inter-turn time.
+
     Args:
         turns: The turns to aggregate over. Order does not matter; empty
             input produces a zero metric block.
@@ -92,10 +115,12 @@ def compute_time_metrics(
             interval. Falls back to the earliest turn start when ``None``.
         scope_end: Optional explicit end. Falls back to the latest turn
             end when ``None``.
-        inter_turn_time_override: Optional explicit inter-turn time. When
-            provided, ``duration`` is calculated as the sum of turn time
-            and this override. Used to partition session-wide gaps across
-            interleaved phases.
+        session: The full session, supplied for a phase scope so the
+            partitioned inter-turn time can be computed. ``None`` for
+            session and role scopes.
+        phase_label: The phase whose gaps to partition, supplied with
+            ``session`` for a phase scope. ``None`` for session and role
+            scopes.
 
     Returns:
         A populated ``TimeMetrics``.
@@ -106,8 +131,17 @@ def compute_time_metrics(
     intervals = [(turn.start_timestamp, turn.end_timestamp) for turn in turn_list]
     turn_time, turn_time_solo, turn_time_concurrent = _decompose_intervals(intervals)
 
-    if inter_turn_time_override is not None:
-        inter_turn_time = inter_turn_time_override
+    inter_turn_override = None
+    if session is not None and phase_label is not None:
+        session_start = session_start_timestamp(session)
+        session_end = latest_real_timestamp(session)
+        if session_start is not None and session_end is not None:
+            inter_turn_override = _calculate_partitioned_inter_turn_time(
+                session, phase_label, session_start, session_end
+            )
+
+    if inter_turn_override is not None:
+        inter_turn_time = inter_turn_override
         duration_seconds = turn_time + inter_turn_time
     else:
         effective_start = (
@@ -129,6 +163,46 @@ def compute_time_metrics(
         turn_duration_p95=_percentile(durations, 0.95),
         turn_duration_stdev=float(pstdev(durations)) if len(durations) > 1 else 0.0,
     )
+
+
+def _calculate_partitioned_inter_turn_time(
+    session: Session,
+    phase_label: str,
+    scope_start: datetime,
+    scope_end: datetime,
+) -> float:
+    """Return the total inter-turn time attributed to a specific phase.
+
+    Partitions the session's wall-clock gaps by assigning each gap to the
+    phase of the turn that preceded it. This ensures that phase durations
+    are disjoint and their sum matches the total session duration.
+    """
+    total_inter_turn = 0.0
+    all_turns = session.turns
+    if not all_turns:
+        return 0.0
+
+    # Gap before first turn: assigned to first turn's phase
+    if (
+        phase_of_turn(session, all_turns[0]) == phase_label
+        and all_turns[0].start_timestamp > scope_start
+    ):
+        total_inter_turn += (all_turns[0].start_timestamp - scope_start).total_seconds()
+
+    # Gaps between turns
+    for i in range(len(all_turns) - 1):
+        if phase_of_turn(session, all_turns[i]) == phase_label:
+            gap = (all_turns[i + 1].start_timestamp - all_turns[i].end_timestamp).total_seconds()
+            total_inter_turn += max(0.0, gap)
+
+    # Gap after last turn
+    if (
+        phase_of_turn(session, all_turns[-1]) == phase_label
+        and scope_end > all_turns[-1].end_timestamp
+    ):
+        total_inter_turn += (scope_end - all_turns[-1].end_timestamp).total_seconds()
+
+    return total_inter_turn
 
 
 def _decompose_intervals(

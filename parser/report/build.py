@@ -47,7 +47,6 @@ from ..data.aggregate.tokens import (
 )
 from ..data.aggregate.turn_series import (
     build_turn_records,
-    phase_of_turn,
     turns_in_phase,
     turns_in_role,
 )
@@ -206,20 +205,11 @@ def _build_scope_block(
     the union of intervals, reflecting that a role is one conversation file
     whose own turns do not overlap.
     """
-    inter_turn_override = None
-    if scope_kind == "phase" and phase_label is not None:
-        session_start = session_start_timestamp(session)
-        session_end = latest_real_timestamp(session)
-        if session_start is not None and session_end is not None:
-            inter_turn_override = _calculate_partitioned_inter_turn_time(
-                session, phase_label, session_start, session_end
-            )
-
     steer_events = _steer_events_in_scope(session, scope_kind, role_view, turns)
     scope_turn_count = turn_count(turns)
     token_data, cost = _compute_economic_for_scope(session, turns, rate_table, subagent_models)
     time_metrics = compute_time_metrics(
-        turns, scope_start, scope_end, inter_turn_time_override=inter_turn_override
+        turns, scope_start, scope_end, session=session, phase_label=phase_label
     )
     user_input_counts = compute_user_input_counts(turns, steer_events, short_threshold)
     user_input_shares = compute_user_input_shares(user_input_counts)
@@ -241,46 +231,6 @@ def _build_scope_block(
         },
         "supplementary": supplementary_block(subagent_counts, tool_success_rate(tool_counts)),
     }
-
-
-def _calculate_partitioned_inter_turn_time(
-    session: Session,
-    phase_label: str,
-    scope_start: datetime,
-    scope_end: datetime,
-) -> float:
-    """Return the total inter-turn time attributed to a specific phase.
-
-    Partitions the session's wall-clock gaps by assigning each gap to the
-    phase of the turn that preceded it. This ensures that phase durations
-    are disjoint and their sum matches the total session duration.
-    """
-    total_inter_turn = 0.0
-    all_turns = session.turns
-    if not all_turns:
-        return 0.0
-
-    # Gap before first turn: assigned to first turn's phase
-    if (
-        phase_of_turn(session, all_turns[0]) == phase_label
-        and all_turns[0].start_timestamp > scope_start
-    ):
-        total_inter_turn += (all_turns[0].start_timestamp - scope_start).total_seconds()
-
-    # Gaps between turns
-    for i in range(len(all_turns) - 1):
-        if phase_of_turn(session, all_turns[i]) == phase_label:
-            gap = (all_turns[i + 1].start_timestamp - all_turns[i].end_timestamp).total_seconds()
-            total_inter_turn += max(0.0, gap)
-
-    # Gap after last turn
-    if (
-        phase_of_turn(session, all_turns[-1]) == phase_label
-        and scope_end > all_turns[-1].end_timestamp
-    ):
-        total_inter_turn += (scope_end - all_turns[-1].end_timestamp).total_seconds()
-
-    return total_inter_turn
 
 
 def _records_in_scope(
