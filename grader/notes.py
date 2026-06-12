@@ -2,7 +2,7 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Hand-written annotations attached to grader results.
 
-The grader produces a per-submission ``results.json`` that scores
+The grader produces a per-submission ``grader_results.json`` that scores
 every rubric row and carries the per-test message the assertion
 emitted. Sometimes a row's outcome needs a free-prose note that
 records the cause behind the score in a way the structured
@@ -14,7 +14,7 @@ contract, an infrastructure row that fails for a reason
 upstream of the participant's work.
 
 Notes live in a YAML sidecar named ``results_notes.yaml`` in
-the same directory as ``results.json``. The grader never reads
+the same directory as ``grader_results.json``. The grader never reads
 or writes the sidecar; re-running the grader does not perturb
 it. The pipeline's ``combine`` stage embeds the sidecar's
 contents in ``combined.json`` under the ``results_notes`` key
@@ -38,21 +38,21 @@ Sidecar shape::
 The ``test_ids`` field is optional and, when present, lists one
 or more rubric rows that share a single root cause. The ``add``
 subcommand validates every listed ID against the ``tests`` block
-in the current ``results.json``. When absent, the note is a
+in the current ``grader_results.json``. When absent, the note is a
 submission-level observation about the submission as a whole.
 
 The CLI is invoked as
 ``python -m grader.notes <subcommand> <results_dir> [...]``
-where ``results_dir`` is the directory holding ``results.json``.
+where ``results_dir`` is the directory holding ``grader_results.json``.
 Subcommands:
 
 * ``add --note "<prose>" [--test-id <id> ...]``: append one
   entry. ``--test-id`` may be repeated; every ID must address an
-  entry in the current ``results.json``'s ``tests`` block, and
+  entry in the current ``grader_results.json``'s ``tests`` block, and
   the listed rows all share the one root cause the note states.
 * ``list``: print every note with its index plus a freshness
   indicator (a ``test_ids`` entry naming a row that has
-  disappeared from ``results.json`` after a re-run is flagged
+  disappeared from ``grader_results.json`` after a re-run is flagged
   ``stale``).
 * ``remove --index <N>``: delete the entry at the given index.
 """
@@ -70,7 +70,7 @@ import yaml
 from . import log
 
 NOTES_FILENAME = "results_notes.yaml"
-RESULTS_FILENAME = "results.json"
+RESULTS_FILENAME = "grader_results.json"
 
 
 class NotesError(Exception):
@@ -81,7 +81,7 @@ def load_notes(directory: Path) -> list[dict[str, Any]]:
     """Read the notes sidecar in ``directory``, returning the entry list.
 
     Args:
-        directory: Directory holding ``results.json`` and
+        directory: Directory holding ``grader_results.json`` and
             (optionally) ``results_notes.yaml``.
 
     Returns:
@@ -144,7 +144,7 @@ def save_notes(directory: Path, notes: list[dict[str, Any]]) -> None:
     plain editor.
 
     Args:
-        directory: Directory holding ``results.json``.
+        directory: Directory holding ``grader_results.json``.
         notes: The entry list to persist.
     """
     path = directory / NOTES_FILENAME
@@ -224,7 +224,7 @@ _LiteralBlockDumper.add_representer(str, _represent_str_literal_when_multiline)
 
 
 def _read_results(directory: Path) -> dict[str, Any]:
-    """Load ``results.json`` from ``directory`` for test-ID validation."""
+    """Load ``grader_results.json`` from ``directory`` for test-ID validation."""
     path = directory / RESULTS_FILENAME
     if not path.is_file():
         raise NotesError(f"{RESULTS_FILENAME} not found in {directory}; run the grader first")
@@ -255,8 +255,8 @@ def _cmd_add(args: argparse.Namespace) -> int:
 
     Raises:
         NotesError: When the note text is empty after stripping, a
-            listed test ID is absent from ``results.json``, or
-            ``results.json`` is missing or malformed.
+            listed test ID is absent from ``grader_results.json``, or
+            ``grader_results.json`` is missing or malformed.
     """
     directory = args.results_dir
     note_text = args.note.rstrip()
@@ -291,7 +291,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
     Raises:
         NotesError: When the sidecar is malformed or
-            ``results.json`` is missing or malformed.
+            ``grader_results.json`` is missing or malformed.
     """
     directory = args.results_dir
     notes = load_notes(directory)
@@ -348,7 +348,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m grader.notes",
         description=(
             "Manage hand-written annotations on grader results. "
-            "Notes live in results_notes.yaml beside results.json."
+            "Notes live in results_notes.yaml beside grader_results.json."
         ),
     )
     sub = parser.add_subparsers(dest="subcommand")
@@ -359,7 +359,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument(
         "results_dir",
         type=Path,
-        help="directory holding results.json",
+        help="directory holding grader_results.json",
     )
     add_parser.add_argument(
         "--note",
@@ -375,7 +375,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "rubric ID this note attaches to (e.g. C.5.2); repeatable "
             "to bind several rows that share one root cause; every ID "
-            "is validated against results.json. Omit for a "
+            "is validated against grader_results.json. Omit for a "
             "submission-level note"
         ),
     )
@@ -386,7 +386,7 @@ def _build_parser() -> argparse.ArgumentParser:
     list_parser.add_argument(
         "results_dir",
         type=Path,
-        help="directory holding results.json",
+        help="directory holding grader_results.json",
     )
     remove_parser = sub.add_parser(
         "remove",
@@ -395,7 +395,7 @@ def _build_parser() -> argparse.ArgumentParser:
     remove_parser.add_argument(
         "results_dir",
         type=Path,
-        help="directory holding results.json",
+        help="directory holding grader_results.json",
     )
     remove_parser.add_argument(
         "--index",

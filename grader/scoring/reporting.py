@@ -2,7 +2,7 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Grading-report writers: JSON and console summary.
 
-The JSON report at ``<workspace>/results_<patch>.json`` is the
+The JSON report at ``<workspace>/grader_results.json`` is the
 machine-readable artefact the pipeline's grade stage promotes; its
 shape is ``Scorer.to_dict`` verbatim (the per-row ``verdict`` and the
 four-field score nodes), which the inspect browser and the pipeline
@@ -41,7 +41,7 @@ VERBOSE_MESSAGE_LIMIT = 60
 
 # Fixed filename for the secondary report a compact run writes beside
 # the canonical results file. Constant, not patch-derived.
-COMPACT_REPORT_NAME = "results_compact_serialization.json"
+COMPACT_REPORT_NAME = "grader_results_compact_serialization.json"
 
 GROUP_LAYOUT: tuple[tuple[str, tuple[TestDefinition, ...]], ...] = (
     ("PYTHON BASELINE", PYTHON_BASELINE_TESTS),
@@ -63,10 +63,12 @@ class ReportPaths:
         workspace_root: Resolved directory the reports are written
             into. The grader uses the parent of the eclass-mcp-server
             checkout so the reports sit beside the patched tree.
-        patch_name: Stem the report filenames are derived from.
+        patch_name: The patch's stem, carried into the report's
+            ``metadata`` block; the filename is fixed and no longer
+            derived from it.
         json_path: Full path to the JSON report written for the run:
-            the canonical ``results_<patch>.json``, or the fixed
-            ``results_compact_serialization.json`` for a compact run.
+            the fixed canonical ``grader_results.json``, or the fixed
+            ``grader_results_compact_serialization.json`` for a compact run.
     """
 
     workspace_root: Path
@@ -79,16 +81,17 @@ def report_paths(workspace_root: Path, patch_name: str, compact: bool = False) -
 
     Args:
         workspace_root: Directory the report is written into.
-        patch_name: Stem the canonical report filename derives from.
+        patch_name: The patch's stem, recorded in the report
+            ``metadata``; it no longer shapes the filename.
         compact: When ``True``, target the secondary
-            ``results_compact_serialization.json`` instead of the
+            ``grader_results_compact_serialization.json`` instead of the
             canonical report.
 
     Returns:
         The resolved report paths for the run.
     """
     workspace_root = Path(workspace_root).resolve()
-    filename = COMPACT_REPORT_NAME if compact else f"results_{patch_name}.json"
+    filename = COMPACT_REPORT_NAME if compact else "grader_results.json"
     return ReportPaths(
         workspace_root=workspace_root,
         patch_name=patch_name,
