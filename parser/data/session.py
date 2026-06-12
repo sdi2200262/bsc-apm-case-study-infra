@@ -312,25 +312,27 @@ def _collect_turns(views: tuple[ConversationView, ...]) -> tuple[Turn, ...]:
     return tuple(all_turns)
 
 
-def build_session_metadata(session: Session) -> dict[str, Any]:
-    """Assemble the session-metadata block.
+def build_identity(session: Session) -> dict[str, Any]:
+    """Assemble the session identity block.
 
-    The block carries the per-session descriptive identity fields the
-    analysis layer reads before any metric: the modal Claude Code
-    version, model, authentication-mode indicator, entrypoint, and
-    service tier, the session start and end timestamps, and the
-    per-conversation array. Session start is the earliest user-authored
-    prompt across the session; session end is the latest non-synthetic
-    record.
+    Identity is the stable who-and-what of a session, read before any
+    metric and shared verbatim by both per-session artifacts: the modal
+    Claude Code version, the pinned model, the session start and end
+    timestamps, and the per-conversation array. Session start is the
+    earliest user-authored prompt across the session; session end is the
+    latest non-synthetic record. The validity and health signals (model
+    drift, authentication mode, entrypoint, service tier) are not identity;
+    they are surfaced through ``session_health_signals`` and land in the
+    diagnostics block.
+
+    Args:
+        session: The assembled session.
+
+    Returns:
+        The identity block.
     """
-    cc_versions = _modal_string_field(session, "version")
-    auth_modes = _modal_string_field(session, "userType")
-    entrypoints = _modal_string_field(session, "entrypoint")
-    service_tiers = _modal_assistant_usage_field(session, "service_tier")
     models = _models_observed(session)
     pinned_model = max(models.items(), key=lambda item: item[1])[0] if models else ""
-    start = iso_or_none(session_start_timestamp(session))
-    end = _latest_real_timestamp_iso(session)
     conversations = [
         {
             "role_key": view.role,
@@ -342,15 +344,34 @@ def build_session_metadata(session: Session) -> dict[str, Any]:
         for view in session.views
     ]
     return {
-        "cc_version": cc_versions,
         "model": pinned_model,
-        "model_drift": len(models) > 1,
-        "auth_mode_indicator": auth_modes,
-        "entrypoint": entrypoints,
-        "service_tier": service_tiers,
-        "session_start_timestamp": start,
-        "session_end_timestamp": end,
+        "cc_version": _modal_string_field(session, "version"),
+        "session_start": iso_or_none(session_start_timestamp(session)),
+        "session_end": _latest_real_timestamp_iso(session),
         "conversations": conversations,
+    }
+
+
+def session_health_signals(session: Session) -> dict[str, Any]:
+    """Assemble the session validity and health signals for diagnostics.
+
+    Health signals tell an analyst whether a session is the expected shape
+    before its metrics enter the cohort. Unlike identity, they live in the
+    diagnostics block.
+
+    Args:
+        session: The assembled session.
+
+    Returns:
+        The raw health signals: ``model_drift``, ``auth_mode_indicator``,
+        ``entrypoint``, and ``service_tier``.
+    """
+    models = _models_observed(session)
+    return {
+        "model_drift": len(models) > 1,
+        "auth_mode_indicator": _modal_string_field(session, "userType"),
+        "entrypoint": _modal_string_field(session, "entrypoint"),
+        "service_tier": _modal_assistant_usage_field(session, "service_tier"),
     }
 
 

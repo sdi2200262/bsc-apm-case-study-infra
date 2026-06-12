@@ -1,243 +1,246 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Leaf-block rendering for the canonical metrics artifact.
+"""Bare-value leaf rendering for the data and metrics artifacts.
 
-Every measurement in the artifact is wrapped in a ``{value, label,
-constructed}`` triple so the analysis layer can iterate over ``Primary``
-metrics to assemble its hypothesis-test family and flag every
-``constructed`` metric for the literature-grounding cross-check without
-consulting an external index.
+Each measurement in the two per-session artifacts is a bare ``name: value``
+leaf. The kind (data versus metric), the analysis label, and the metric
+formula are not repeated per leaf: they live once in ``parser.contract``
+and are emitted to ``parser_schema.json`` by ``--schema``. This module owns
+only the per-dimension renderers that turn the computed data and metric
+blocks into flat ``name: value`` dicts.
 
-Label takes one of three values, naming the metric's role in the
-analysis:
-
-- ``Primary``: drives a research-question claim and is hypothesis-tested.
-- ``Secondary``: supports or decomposes a ``Primary`` within the same
-  dimension.
-- ``Supplementary``: descriptive only, no hypothesis test.
-
-``constructed`` is a Boolean. ``True`` means the metric was defined for this
-study and rests on face validity until the literature-grounding pass
-attaches a published construct; ``False`` means the metric maps directly
-onto a JSONL, API, or grader field with aggregation as the only
-study-author degree of freedom.
-
-This module owns the per-dimension renderers that translate the data and
-metric blocks into leaf-triple dicts. The ``label`` and ``constructed``
-flags are hard-coded against the metric definitions; changing one means
-editing one renderer here, not threading constants through the computation
-modules.
+The renderers are grouped by artifact: data renderers (token sums, counts)
+feed ``parser_data.json``; metric renderers (cost, time statistics, bucket
+shares, the success rate) feed ``parser_metrics.json``. An empty scope
+renders zero values so the shape is uniform; consumers filter empty scopes
+by ``turn_count == 0`` rather than by missing keys.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from ..data.aggregate.counts import RequestCounts, SubagentCounts, UserInputCounts
+from ..data.aggregate.counts import RequestCounts, SubagentCounts, ToolCounts, UserInputCounts
 from ..data.aggregate.tokens import TokenData
 from ..metrics.cost import CostMetrics
 from ..metrics.time import TimeMetrics
 from ..metrics.user_input import UserInputShares
 
-LABEL_PRIMARY = "Primary"
-LABEL_SECONDARY = "Secondary"
-LABEL_SUPPLEMENTARY = "Supplementary"
+_TOKEN_CATEGORIES: tuple[str, ...] = ("input", "output", "cache_read", "cache_5m", "cache_1h")
 
 
-def metric_leaf(value: Any, label: str, constructed: bool) -> dict[str, Any]:
-    """Wrap a measurement value in the canonical leaf triple."""
-    return {"value": value, "label": label, "constructed": constructed}
+def token_leaves(tokens: TokenData | None) -> dict[str, int]:
+    """Render the per-scope token-sum data leaves.
 
+    An empty scope (``tokens is None``) renders every token leaf at zero so
+    the data artifact's per-scope shape is uniform.
 
-def economic_block(
-    tokens: TokenData | None,
-    cost: CostMetrics | None,
-    requests: RequestCounts,
-) -> dict[str, Any]:
-    """Render an economic block with leaf triples.
+    Args:
+        tokens: The scope's token data, or ``None`` for an empty scope.
 
-    The empty-scope branch emits zero-valued leaves so the artifact's
-    shape is uniform across sessions; analysis consumers should filter
-    empty scopes by ``turn_count == 0`` rather than by missing keys.
-
-    The cost shape is conditional. A scope whose every delegated dispatch
-    was priced deterministically emits a single ``cost_usd`` leaf. A scope
-    with at least one bracketed dispatch instead emits
-    ``cost_usd_lower_bound`` and ``cost_usd_upper_bound`` leaves and omits
-    ``cost_usd`` entirely; consumers that read cost must check for both
-    shapes.
-
-    ``request_count`` and ``delegated_request_count`` are mirrored from
-    the process-dimension ``requests`` block: the same numeric value
-    appears in both locations because a request is a cost denominator
-    under the economic dimension and the model-action count under the
-    process dimension. Cross-referencing the value would force every
-    leaf-iterating consumer to dereference; the duplication keeps the
-    leaf-iteration contract intact.
+    Returns:
+        The sixteen token-sum leaves: the five categories for each of the
+        main, delegated, and total populations, plus ``total_prompt_tokens``.
     """
     if tokens is None:
-        zero_token = metric_leaf(0, LABEL_SECONDARY, False)
-        zero_cost = metric_leaf(0.0, LABEL_PRIMARY, True)
-        zero_request = metric_leaf(0, LABEL_SECONDARY, False)
-        token_keys = (
-            f"{population}_{cat}_tokens"
+        keys = [
+            f"{population}_{category}_tokens"
             for population in ("main", "delegated", "total")
-            for cat in ("input", "output", "cache_read", "cache_5m", "cache_1h")
-        )
-        return {key: zero_token for key in token_keys} | {
-            "total_prompt_tokens": zero_token,
-            "cost_usd": zero_cost,
-            "request_count": zero_request,
-            "delegated_request_count": zero_request,
-        }
-    block: dict[str, Any] = {
-        "main_input_tokens": metric_leaf(tokens.main.input, LABEL_SECONDARY, False),
-        "main_output_tokens": metric_leaf(tokens.main.output, LABEL_SECONDARY, False),
-        "main_cache_read_tokens": metric_leaf(tokens.main.cache_read, LABEL_SECONDARY, False),
-        "main_cache_5m_tokens": metric_leaf(tokens.main.cache_5m, LABEL_SECONDARY, False),
-        "main_cache_1h_tokens": metric_leaf(tokens.main.cache_1h, LABEL_SECONDARY, False),
-        "delegated_input_tokens": metric_leaf(tokens.delegated.input, LABEL_SECONDARY, False),
-        "delegated_output_tokens": metric_leaf(tokens.delegated.output, LABEL_SECONDARY, False),
-        "delegated_cache_read_tokens": metric_leaf(
-            tokens.delegated.cache_read, LABEL_SECONDARY, False
-        ),
-        "delegated_cache_5m_tokens": metric_leaf(tokens.delegated.cache_5m, LABEL_SECONDARY, False),
-        "delegated_cache_1h_tokens": metric_leaf(tokens.delegated.cache_1h, LABEL_SECONDARY, False),
-        "total_input_tokens": metric_leaf(tokens.total.input, LABEL_SECONDARY, False),
-        "total_output_tokens": metric_leaf(tokens.total.output, LABEL_SECONDARY, False),
-        "total_cache_read_tokens": metric_leaf(tokens.total.cache_read, LABEL_SECONDARY, False),
-        "total_cache_5m_tokens": metric_leaf(tokens.total.cache_5m, LABEL_SECONDARY, False),
-        "total_cache_1h_tokens": metric_leaf(tokens.total.cache_1h, LABEL_SECONDARY, False),
-        "total_prompt_tokens": metric_leaf(tokens.total_prompt_tokens, LABEL_SECONDARY, False),
-    }
-    if cost is not None and cost.cost_usd is not None:
-        block["cost_usd"] = metric_leaf(round(cost.cost_usd, 4), LABEL_PRIMARY, True)
-    else:
-        lower = cost.cost_usd_lower_bound if cost is not None else None
-        upper = cost.cost_usd_upper_bound if cost is not None else None
-        block["cost_usd_lower_bound"] = metric_leaf(round(lower or 0.0, 4), LABEL_PRIMARY, True)
-        block["cost_usd_upper_bound"] = metric_leaf(round(upper or 0.0, 4), LABEL_PRIMARY, True)
-    block["request_count"] = metric_leaf(requests.request_count, LABEL_SECONDARY, False)
-    block["delegated_request_count"] = metric_leaf(
-        requests.delegated_request_count, LABEL_SECONDARY, False
-    )
-    return block
-
-
-def requests_block(counts: RequestCounts) -> dict[str, Any]:
-    """Render a process-dimension request-count block with leaf triples.
-
-    ``request_count`` is the ``Primary`` measurement: it counts model API
-    calls in scope and is the natural denominator for per-request process
-    rates. ``delegated_request_count`` and ``requests_with_tool_use_count``
-    are ``Secondary`` decompositions of the same population: the first picks
-    out dispatches the main agent routed through a subagent; the second
-    picks out requests whose response carried any tool-use action.
-    """
+            for category in _TOKEN_CATEGORIES
+        ]
+        return {key: 0 for key in keys} | {"total_prompt_tokens": 0}
     return {
-        "request_count": metric_leaf(counts.request_count, LABEL_PRIMARY, False),
-        "delegated_request_count": metric_leaf(
-            counts.delegated_request_count, LABEL_SECONDARY, False
-        ),
-        "requests_with_tool_use_count": metric_leaf(
-            counts.requests_with_tool_use_count, LABEL_SECONDARY, False
-        ),
+        "main_input_tokens": tokens.main.input,
+        "main_output_tokens": tokens.main.output,
+        "main_cache_read_tokens": tokens.main.cache_read,
+        "main_cache_5m_tokens": tokens.main.cache_5m,
+        "main_cache_1h_tokens": tokens.main.cache_1h,
+        "delegated_input_tokens": tokens.delegated.input,
+        "delegated_output_tokens": tokens.delegated.output,
+        "delegated_cache_read_tokens": tokens.delegated.cache_read,
+        "delegated_cache_5m_tokens": tokens.delegated.cache_5m,
+        "delegated_cache_1h_tokens": tokens.delegated.cache_1h,
+        "total_input_tokens": tokens.total.input,
+        "total_output_tokens": tokens.total.output,
+        "total_cache_read_tokens": tokens.total.cache_read,
+        "total_cache_5m_tokens": tokens.total.cache_5m,
+        "total_cache_1h_tokens": tokens.total.cache_1h,
+        "total_prompt_tokens": tokens.total_prompt_tokens,
     }
 
 
-def time_block(metrics: TimeMetrics, turn_count: int, scope_kind: str) -> dict[str, Any]:
-    """Render a session-or-phase time block with leaf triples.
+def model_token_distribution_leaves(tokens: TokenData | None) -> dict[str, dict[str, int]]:
+    """Render the per-scope model-token-distribution data leaf.
 
-    The ``duration`` leaf carries the ``constructed`` flag at phase scope
-    because the phase boundary is itself derived from the per-prompt phase
-    labels rather than read directly from a JSONL field; at session scope
-    ``duration`` is the wall-clock extent between the earliest and latest
-    non-synthetic record and the flag is ``False``. ``turn_count`` is data and
-    is supplied by the caller from ``data/aggregate/counts``.
+    An empty scope (``tokens is None``) renders an empty distribution.
+
+    Args:
+        tokens: The scope's token data, or ``None`` for an empty scope.
+
+    Returns:
+        The ``model_token_distribution`` leaf.
     """
-    duration_constructed = scope_kind == "phase"
+    return {"model_token_distribution": {} if tokens is None else tokens.model_token_distribution}
+
+
+def request_count_leaves(counts: RequestCounts) -> dict[str, int]:
+    """Render the per-scope request-count data leaves.
+
+    Request counts are emitted once, in the data artifact: a request is the
+    same population whether used as a cost denominator or a model-action
+    count.
+
+    Args:
+        counts: The scope's request counts.
+
+    Returns:
+        The ``request_count``, ``delegated_request_count``, and
+        ``requests_with_tool_use_count`` leaves.
+    """
     return {
-        "duration": metric_leaf(metrics.duration, LABEL_SECONDARY, duration_constructed),
-        "turn_time": metric_leaf(metrics.turn_time, LABEL_SECONDARY, True),
-        "turn_time_solo": metric_leaf(metrics.turn_time_solo, LABEL_SECONDARY, True),
-        "turn_time_concurrent": metric_leaf(metrics.turn_time_concurrent, LABEL_SECONDARY, True),
-        "inter_turn_time": metric_leaf(metrics.inter_turn_time, LABEL_PRIMARY, True),
-        "turn_count": metric_leaf(turn_count, LABEL_PRIMARY, True),
-        "mean_turn_duration": metric_leaf(metrics.mean_turn_duration, LABEL_PRIMARY, True),
-        "turn_duration_p50": metric_leaf(metrics.turn_duration_p50, LABEL_SECONDARY, True),
-        "turn_duration_p95": metric_leaf(metrics.turn_duration_p95, LABEL_SECONDARY, True),
-        "turn_duration_stdev": metric_leaf(metrics.turn_duration_stdev, LABEL_SECONDARY, True),
+        "request_count": counts.request_count,
+        "delegated_request_count": counts.delegated_request_count,
+        "requests_with_tool_use_count": counts.requests_with_tool_use_count,
     }
 
 
-def time_block_role(metrics: TimeMetrics, turn_count: int) -> dict[str, Any]:
-    """Render a role-scope time block with its six measurement fields.
+def user_input_count_leaves(counts: UserInputCounts) -> dict[str, int]:
+    """Render the per-scope user-input count data leaves.
 
-    A role's ``turn_time`` is the sum of per-turn durations rather than
-    the union of intervals. Within a single conversation file the two
-    coincide, because the participant cannot drive two overlapping prompts
-    in one chat; the deliberate use of the sum form surfaces if a future
-    role rollup ever folds in turns from multiple files. ``turn_count`` is
-    data and is supplied by the caller.
+    Args:
+        counts: The scope's user-input counts.
+
+    Returns:
+        The four turn-prompt and steer counts.
     """
-    sum_of_turn_durations = metrics.mean_turn_duration * turn_count
     return {
-        "turn_count": metric_leaf(turn_count, LABEL_SECONDARY, True),
-        "turn_time": metric_leaf(sum_of_turn_durations, LABEL_SECONDARY, True),
-        "mean_turn_duration": metric_leaf(metrics.mean_turn_duration, LABEL_SECONDARY, True),
-        "turn_duration_p50": metric_leaf(metrics.turn_duration_p50, LABEL_SECONDARY, True),
-        "turn_duration_p95": metric_leaf(metrics.turn_duration_p95, LABEL_SECONDARY, True),
-        "turn_duration_stdev": metric_leaf(metrics.turn_duration_stdev, LABEL_SECONDARY, True),
+        "turn_prompt_count": counts.turn_prompt_count,
+        "steer_delivered_count": counts.steer_delivered_count,
+        "steer_abandoned_count": counts.steer_abandoned_count,
+        "steer_attempted_count": counts.steer_attempted_count,
     }
 
 
-def user_input_block(counts: UserInputCounts, shares: UserInputShares) -> dict[str, Any]:
-    """Render a user-input block with leaf triples.
+def supplementary_data_leaves(counts: SubagentCounts) -> dict[str, int]:
+    """Render the per-scope subagent-activity count data leaves.
 
-    The four counts are data and come from ``data/aggregate/counts``; the
-    bucket shares and magnitudes are metrics folded over the per-input
-    series.
+    Args:
+        counts: The scope's subagent counts.
+
+    Returns:
+        The ``subagent_count``, ``subagent_tool_count``, and
+        ``model_invoked_skill_count`` leaves.
     """
     return {
-        "turn_prompt_count": metric_leaf(counts.turn_prompt_count, LABEL_PRIMARY, True),
-        "steer_delivered_count": metric_leaf(counts.steer_delivered_count, LABEL_PRIMARY, True),
-        "steer_abandoned_count": metric_leaf(counts.steer_abandoned_count, LABEL_SECONDARY, True),
-        "steer_attempted_count": metric_leaf(counts.steer_attempted_count, LABEL_PRIMARY, True),
-        "turn_prompts_bucket_shares": metric_leaf(
-            shares.turn_prompts_bucket_shares, LABEL_SECONDARY, True
-        ),
-        "steer_delivered_bucket_shares": metric_leaf(
-            shares.steer_delivered_bucket_shares, LABEL_SECONDARY, True
-        ),
-        "all_inputs_bucket_shares": metric_leaf(
-            shares.all_inputs_bucket_shares, LABEL_PRIMARY, True
-        ),
-        "turn_prompts_magnitude_by_bucket": metric_leaf(
-            shares.turn_prompts_magnitude_by_bucket, LABEL_SECONDARY, True
-        ),
-        "steer_delivered_magnitude_by_bucket": metric_leaf(
-            shares.steer_delivered_magnitude_by_bucket, LABEL_SECONDARY, True
-        ),
+        "subagent_count": counts.subagent_count,
+        "subagent_tool_count": counts.subagent_tool_count,
+        "model_invoked_skill_count": counts.model_invoked_skill_count,
     }
 
 
-def supplementary_block(
-    counts: SubagentCounts,
-    tool_success_rate: float,
-) -> dict[str, Any]:
-    """Render a supplementary block with leaf triples.
+def tool_count_leaves(counts: ToolCounts) -> dict[str, int]:
+    """Render the per-scope tool-result count data leaves.
 
-    ``tool_success_rate`` lives here alongside the other ``Supplementary``
-    measurements. Its supporting counts ``tool_result_count`` and
-    ``tool_error_count`` stay in the diagnostics block so iteration over
-    measurement metrics does not pick them up as hypothesis-test
-    candidates.
+    Args:
+        counts: The scope's tool counts.
+
+    Returns:
+        The ``tool_result_count`` and ``tool_error_count`` leaves.
     """
     return {
-        "tool_success_rate": metric_leaf(tool_success_rate, LABEL_SUPPLEMENTARY, False),
-        "subagent_count": metric_leaf(counts.subagent_count, LABEL_SUPPLEMENTARY, False),
-        "subagent_tool_count": metric_leaf(counts.subagent_tool_count, LABEL_SUPPLEMENTARY, False),
-        "model_invoked_skill_count": metric_leaf(
-            counts.model_invoked_skill_count, LABEL_SUPPLEMENTARY, False
-        ),
+        "tool_result_count": counts.tool_result_count,
+        "tool_error_count": counts.tool_error_count,
+    }
+
+
+def cost_leaves(cost: CostMetrics | None) -> dict[str, float]:
+    """Render the per-scope cost metric leaves.
+
+    The shape is conditional. An empty scope or a scope whose every
+    dispatch priced deterministically renders a single ``cost_usd``; a
+    scope with at least one bracketed dispatch renders
+    ``cost_usd_lower_bound`` and ``cost_usd_upper_bound`` and omits
+    ``cost_usd``. Values are rounded to four decimal places.
+
+    Args:
+        cost: The scope's cost metric, or ``None`` for an empty scope.
+
+    Returns:
+        Either ``{"cost_usd": ...}`` or the bounded pair.
+    """
+    if cost is None:
+        return {"cost_usd": 0.0}
+    if cost.cost_usd is not None:
+        return {"cost_usd": round(cost.cost_usd, 4)}
+    return {
+        "cost_usd_lower_bound": round(cost.cost_usd_lower_bound or 0.0, 4),
+        "cost_usd_upper_bound": round(cost.cost_usd_upper_bound or 0.0, 4),
+    }
+
+
+def time_leaves(metrics: TimeMetrics) -> dict[str, float]:
+    """Render a session-or-phase time metric block.
+
+    ``turn_count`` is data and is emitted by the data artifact, not here.
+
+    Args:
+        metrics: The scope's time metrics.
+
+    Returns:
+        The nine time-statistic metric leaves.
+    """
+    return {
+        "duration": metrics.duration,
+        "turn_time": metrics.turn_time,
+        "turn_time_solo": metrics.turn_time_solo,
+        "turn_time_concurrent": metrics.turn_time_concurrent,
+        "inter_turn_time": metrics.inter_turn_time,
+        "mean_turn_duration": metrics.mean_turn_duration,
+        "turn_duration_p50": metrics.turn_duration_p50,
+        "turn_duration_p95": metrics.turn_duration_p95,
+        "turn_duration_stdev": metrics.turn_duration_stdev,
+    }
+
+
+def time_leaves_role(metrics: TimeMetrics, turn_count: int) -> dict[str, float]:
+    """Render a role-scope time metric block.
+
+    A role's ``turn_time`` is the sum of per-turn durations rather than the
+    union of intervals: within a single conversation file the participant
+    cannot drive two overlapping prompts, so the two coincide, and the sum
+    form surfaces if a future role rollup ever folds in turns from multiple
+    files. ``turn_count`` is data and is emitted by the data artifact.
+
+    Args:
+        metrics: The role's time metrics.
+        turn_count: The role's turn count, used to form the summed
+            ``turn_time``.
+
+    Returns:
+        The five role-scope time-statistic metric leaves.
+    """
+    return {
+        "turn_time": metrics.mean_turn_duration * turn_count,
+        "mean_turn_duration": metrics.mean_turn_duration,
+        "turn_duration_p50": metrics.turn_duration_p50,
+        "turn_duration_p95": metrics.turn_duration_p95,
+        "turn_duration_stdev": metrics.turn_duration_stdev,
+    }
+
+
+def user_input_share_leaves(shares: UserInputShares) -> dict[str, Any]:
+    """Render the per-scope user-input bucket-distribution metric leaves.
+
+    Args:
+        shares: The scope's user-input shares and magnitudes.
+
+    Returns:
+        The five bucket-share and magnitude metric leaves.
+    """
+    return {
+        "turn_prompts_bucket_shares": shares.turn_prompts_bucket_shares,
+        "steer_delivered_bucket_shares": shares.steer_delivered_bucket_shares,
+        "all_inputs_bucket_shares": shares.all_inputs_bucket_shares,
+        "turn_prompts_magnitude_by_bucket": shares.turn_prompts_magnitude_by_bucket,
+        "steer_delivered_magnitude_by_bucket": shares.steer_delivered_magnitude_by_bucket,
     }

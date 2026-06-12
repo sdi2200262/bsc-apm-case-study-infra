@@ -64,7 +64,7 @@ from .rates import (
     load_rate_table,
     rates_for_model,
 )
-from .report.build import build_report
+from .report.build import build_artifacts
 from .sanitize import sanitise_jsonl_file, unsanitise_to_text
 
 __all__ = [
@@ -97,7 +97,7 @@ __all__ = [
     "Session",
     "SteerEvent",
     "Turn",
-    "build_report",
+    "build_artifacts",
     "classify_bucket",
     "cost_in_usd",
     "derive_turns",

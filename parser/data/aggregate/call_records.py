@@ -20,6 +20,10 @@ resolution here keeps a single implementation for every consumer:
 - ``is_main_request_record`` / ``iter_main_request_records`` are consumed
   by ``tokens``, ``counts``, and ``turn_series`` (data) and by
   ``metrics/cost`` (metric) for the main-call population.
+- ``iter_main_call_entries`` yields each main call's canonical record
+  (request id, model, timestamp, token bag) before membership is attached;
+  ``turn_series`` wraps these with turn, phase, and role to build the
+  per-call canonical series the data artifact emits.
 - ``iter_resolved_main_calls`` yields each main call's canonical model and
   token bag; the token-volume distribution and the cost fold consume it.
 - ``iter_resolved_dispatches`` yields each Agent dispatch's resolved model,
@@ -30,6 +34,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from ...rates import (
@@ -90,6 +95,34 @@ class ResolvedDispatch:
     resolved_without_index: bool
 
 
+@dataclass(frozen=True)
+class MainCallEntry:
+    """One main call resolved to its identity, time, and token bag.
+
+    This is the per-call canonical record before turn, phase, and role
+    membership is attached; attribution lives in ``turn_series``.
+
+    Attributes:
+        request_id: The call's ``message.requestId``; the join key the
+            cost metric and any downstream analysis use to pair a call's
+            tokens (in the data artifact) with its cost (in the metrics
+            artifact).
+        canonical_model: The canonicalised ``message.model`` of the call's
+            first record, or the empty string when the field was not a
+            usable string.
+        timestamp: The timestamp of the call's first record, or ``None``
+            when that record carried none.
+        token_bag: The five-category token bag keyed by the
+            ``rates.CATEGORY_*`` constants; all zero for a call whose first
+            record lacked a usable ``message.usage`` block.
+    """
+
+    request_id: str
+    canonical_model: str
+    timestamp: datetime | None
+    token_bag: dict[str, int]
+
+
 def is_main_request_record(record: Record) -> bool:
     """Return ``True`` for a record in the main-call selection population.
 
@@ -146,6 +179,47 @@ def iter_main_request_records(records: Iterable[Record]) -> Iterator[Record]:
             continue
         seen.add(request_id)
         yield record
+
+
+def iter_main_call_entries(records: Iterable[Record]) -> Iterator[MainCallEntry]:
+    """Yield the canonical per-call record for each main call in ``records``.
+
+    Drives off ``iter_main_request_records`` so the per-call series covers
+    exactly the same population as ``request_count`` and the per-turn
+    ``request_count``: one entry per distinct main-call ``requestId``,
+    including calls whose first record carried no usable ``message.usage``
+    block (their token bag is all zero).
+
+    Args:
+        records: Conversation records in document order. The local dedup
+            covers only this iterable, so callers pass a single iterable
+            per scope (here, one turn's records).
+
+    Yields:
+        One ``MainCallEntry`` per distinct main-call ``requestId``, in
+        record order.
+    """
+    for record in iter_main_request_records(records):
+        message = record.payload["message"]
+        model = message.get("model")
+        usage = message.get("usage")
+        token_bag = (
+            token_sums_dict_from_usage(usage)
+            if isinstance(usage, dict)
+            else {
+                CATEGORY_INPUT: 0,
+                CATEGORY_OUTPUT: 0,
+                CATEGORY_CACHE_READ: 0,
+                CATEGORY_CACHE_5M: 0,
+                CATEGORY_CACHE_1H: 0,
+            }
+        )
+        yield MainCallEntry(
+            request_id=record.payload["requestId"],
+            canonical_model=canonical_model_id(model) if isinstance(model, str) else "",
+            timestamp=record.timestamp,
+            token_bag=token_bag,
+        )
 
 
 def iter_resolved_main_calls(records: Iterable[Record]) -> Iterator[ResolvedMainCall]:

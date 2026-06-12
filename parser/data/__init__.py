@@ -5,7 +5,7 @@
 This layer reads and parses the transcript, assembles the typed
 ``Session``, derives turns, assigns roles and phases, and aggregates
 per-scope data (token sums, counts, the per-call and per-turn series,
-identity facts, and diagnostics). It is imported by ``metrics`` and
+and identity facts). It is imported by ``metrics`` and
 ``report`` and imports only sibling data modules and the root leaves;
 nothing in this layer imports from ``metrics`` or ``report``.
 
@@ -21,6 +21,5 @@ Submodules:
 - ``apm_roles`` / ``speckit_phases``: framework role and phase assignment.
 - ``turns``: turn derivation.
 - ``session``: ``Session`` assembly and the session identity facts.
-- ``diagnostics``: provenance and health counts and flags.
 - ``aggregate``: per-scope data aggregation and the granular series.
 """

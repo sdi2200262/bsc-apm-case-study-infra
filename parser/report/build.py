@@ -1,31 +1,33 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Assemble the canonical scope-nested metrics artifact.
+"""Assemble the data and metrics artifacts from a session.
 
-The artifact has six always-present top-level sections
-(``session_metadata``, ``parameters``, ``session``, ``phases``,
-``turns``, ``diagnostics``) plus an optional ``roles`` section emitted
-only for APM sessions. Each measurement leaf is a ``{value,
-label, constructed}`` triple so the analysis layer can iterate over
-``Primary`` metrics to assemble its hypothesis-test family and flag every
-``constructed`` metric for the literature-grounding cross-check without
-consulting an external index.
+The parser emits two per-session artifacts with bare ``name: value``
+leaves. ``parser_data.json`` carries the data: the identity block, the
+per-scope token sums, counts, tool-result counts, and per-model token
+distribution, the per-call canonical series, and the per-turn series.
+``parser_metrics.json`` carries
+the metrics: per-scope cost, time statistics, user-input bucket
+distributions, and the tool success rate. A third artifact,
+``parser_schema.json``, is the field contract and is emitted once by the
+``--schema`` mode, not per session.
 
 This module owns the overall artifact assembly and the per-scope turn and
-record selection. It computes nothing transcript-derived itself: each
-value is sourced from the data layer (token sums, counts, the per-turn
-series, identity, diagnostics) or the metrics layer (cost, time
-statistics, bucket shares, the success rate), and the leaf-block rendering
-for each dimension lives in ``leaves``.
+record selection. It computes nothing transcript-derived itself: each value
+is sourced from the data layer (token sums, counts, the per-call and
+per-turn series, identity) or the metrics layer (cost, time
+statistics, bucket shares, the success rate), and each leaf's kind and label
+live in ``parser.contract``, not in the artifacts.
 
 Naming convention. Every artifact key is snake_case. Per-conversation
-metadata (role key, session id, first slash command, first record
-timestamp, record count) is collected into a single ``conversations``
-array of objects under ``session_metadata``, so downstream consumers
-iterate one array regardless of framework. The ``other`` phase is rendered
-with zeroed values when the session has no unmarked-phase prompts so the
-artifact's shape is uniform across sessions; analysis consumers should
-filter empty phases by ``turn_count == 0`` rather than by missing keys.
+identity (role key, session id, first slash command, first record
+timestamp, record count) is collected into a single ``conversations`` array
+under ``identity``, so downstream consumers iterate one array regardless of
+framework. The ``other`` phase is rendered with zeroed values when the
+session has no unmarked-phase prompts so the per-scope shape is uniform
+across sessions; analysis consumers filter empty scopes by
+``turn_count == 0`` rather than by missing keys. The two artifacts join
+downstream on ``request_id``.
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ from ..data.aggregate.tokens import (
     merge_subagent_indices,
 )
 from ..data.aggregate.turn_series import (
+    build_call_series,
     build_turn_records,
     turns_in_phase,
     turns_in_role,
@@ -58,12 +61,11 @@ from ..data.commands import (
     PHASE_PLANNING,
 )
 from ..data.conversation import SteerEvent
-from ..data.diagnostics import build_diagnostics
 from ..data.schema import Record
 from ..data.session import (
     ConversationView,
     Session,
-    build_session_metadata,
+    build_identity,
     latest_real_timestamp,
     session_start_timestamp,
 )
@@ -74,12 +76,16 @@ from ..metrics.time import compute_time_metrics
 from ..metrics.user_input import compute_user_input_shares
 from ..rates import RateTable
 from .leaves import (
-    economic_block,
-    requests_block,
-    supplementary_block,
-    time_block,
-    time_block_role,
-    user_input_block,
+    cost_leaves,
+    model_token_distribution_leaves,
+    request_count_leaves,
+    supplementary_data_leaves,
+    time_leaves,
+    time_leaves_role,
+    token_leaves,
+    tool_count_leaves,
+    user_input_count_leaves,
+    user_input_share_leaves,
 )
 
 PHASE_KEYS: tuple[str, ...] = (PHASE_PLANNING, PHASE_IMPLEMENTATION, PHASE_OTHER)
@@ -87,12 +93,12 @@ PHASE_KEYS: tuple[str, ...] = (PHASE_PLANNING, PHASE_IMPLEMENTATION, PHASE_OTHER
 REAL_ROLE_PREFIXES: tuple[str, ...] = ("planner-", "manager-", "worker-")
 
 
-def build_report(
+def build_artifacts(
     session: Session,
     rate_table: RateTable,
     short_threshold: int = DEFAULT_SHORT_THRESHOLD,
-) -> dict[str, Any]:
-    """Build the canonical scope-nested metrics artifact for a session.
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the data and metrics artifacts for a session.
 
     Args:
         session: An assembled session.
@@ -101,14 +107,16 @@ def build_report(
             dimension.
 
     Returns:
-        The artifact as a JSON-serialisable dict.
+        The ``(data_artifact, metrics_artifact)`` pair, each a
+        JSON-serialisable dict with bare leaves.
     """
-    metadata = build_session_metadata(session)
-    parameters = _build_parameters(session, rate_table, short_threshold)
+    identity = build_identity(session)
+    metadata = _build_metadata(session, rate_table, short_threshold)
     subagent_models = merge_subagent_indices(session)
     session_start_dt = session_start_timestamp(session)
     session_end_dt = latest_real_timestamp(session)
-    session_block = _build_scope_block(
+
+    data_session, metric_session = _build_scope_blocks(
         session,
         session.turns,
         rate_table,
@@ -118,8 +126,10 @@ def build_report(
         scope_start=session_start_dt,
         scope_end=session_end_dt,
     )
-    phases_block = {
-        phase: _build_scope_block(
+    data_phases: dict[str, Any] = {}
+    metric_phases: dict[str, Any] = {}
+    for phase in PHASE_KEYS:
+        data_block, metric_block = _build_scope_blocks(
             session,
             tuple(turns_in_phase(session, phase)),
             rate_table,
@@ -128,18 +138,19 @@ def build_report(
             scope_kind="phase",
             phase_label=phase,
         )
-        for phase in PHASE_KEYS
-    }
-    artifact: dict[str, Any] = {
-        "session_metadata": metadata,
-        "parameters": parameters,
-        "session": session_block,
-        "phases": phases_block,
-        "turns": build_turn_records(session),
-    }
+        data_phases[phase] = data_block
+        metric_phases[phase] = metric_block
+
+    data_scopes: dict[str, Any] = {"session": data_session, "phases": data_phases}
+    metric_scopes: dict[str, Any] = {"session": metric_session, "phases": metric_phases}
+
     if session.framework == FRAMEWORK_APM:
-        artifact["roles"] = {
-            view.role: _build_scope_block(
+        data_roles: dict[str, Any] = {}
+        metric_roles: dict[str, Any] = {}
+        for view in session.views:
+            if not _is_real_apm_role(view.role):
+                continue
+            data_block, metric_block = _build_scope_blocks(
                 session,
                 tuple(turns_in_role(session, view.role)),
                 rate_table,
@@ -148,11 +159,24 @@ def build_report(
                 scope_kind="role",
                 role_view=view,
             )
-            for view in session.views
-            if _is_real_apm_role(view.role)
-        }
-    artifact["diagnostics"] = build_diagnostics(session, artifact, _is_real_apm_role)
-    return artifact
+            data_roles[view.role] = data_block
+            metric_roles[view.role] = metric_block
+        data_scopes["roles"] = data_roles
+        metric_scopes["roles"] = metric_roles
+
+    data_artifact: dict[str, Any] = {
+        "identity": identity,
+        "metadata": metadata,
+        "scopes": data_scopes,
+        "calls": build_call_series(session),
+        "turns": build_turn_records(session),
+    }
+    metrics_artifact: dict[str, Any] = {
+        "identity": identity,
+        "metadata": metadata,
+        "scopes": metric_scopes,
+    }
+    return data_artifact, metrics_artifact
 
 
 def _is_real_apm_role(role_key: str) -> bool:
@@ -160,29 +184,33 @@ def _is_real_apm_role(role_key: str) -> bool:
 
     The session assembler also produces ``unassigned-N`` entries for APM
     conversations whose first slash command is not a role initiator. Those
-    conversations stay listed in ``session_metadata.conversations`` for
+    conversations stay listed in ``identity.conversations`` for
     traceability but are not role-bearing under the APM model, so they do
-    not belong in the ``roles`` block of the artifact.
+    not belong in the ``roles`` block of either artifact.
     """
     return role_key.startswith(REAL_ROLE_PREFIXES)
 
 
-def _build_parameters(
+def _build_metadata(
     session: Session,
     rate_table: RateTable,
     short_threshold: int,
 ) -> dict[str, Any]:
-    """Assemble the parameters block."""
+    """Assemble the minimal run-input metadata block.
+
+    The block holds only the run inputs that change the numbers: the
+    framework, the short-prompt bucket threshold, and the rate-table
+    snapshot date. The machine-specific rate-table path and the pricing
+    source URLs are not run inputs and are not emitted.
+    """
     return {
         "framework": session.framework,
         "short_threshold": short_threshold,
         "rate_table_snapshot_date": rate_table.snapshot_date,
-        "rate_table_source_path": rate_table.source_path,
-        "pricing_source_urls": list(rate_table.sources),
     }
 
 
-def _build_scope_block(
+def _build_scope_blocks(
     session: Session,
     turns: tuple[Turn, ...],
     rate_table: RateTable,
@@ -193,17 +221,20 @@ def _build_scope_block(
     role_view: ConversationView | None = None,
     scope_start: datetime | None = None,
     scope_end: datetime | None = None,
-) -> dict[str, Any]:
-    """Assemble one scope's economic, process, and supplementary blocks.
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Assemble one scope's data and metric leaf blocks.
 
     ``scope_kind`` is one of ``"session"``, ``"phase"``, or ``"role"``.
     The kind controls two things: which records the count aggregations
     iterate (full conversation walk for session and role, per-turn record
-    concatenation for phase), and whether the time block emits the full
-    set of fields (session and phase) or the role-scope subset (role). A
-    role scope's ``turn_time`` is the sum of per-turn durations rather than
-    the union of intervals, reflecting that a role is one conversation file
-    whose own turns do not overlap.
+    concatenation for phase), and whether the metric block emits the full
+    set of time fields (session and phase) or the role-scope subset (role).
+    A role scope's ``turn_time`` is the sum of per-turn durations rather
+    than the union of intervals, reflecting that a role is one conversation
+    file whose own turns do not overlap.
+
+    Returns:
+        The ``(data_block, metric_block)`` pair for the scope.
     """
     steer_events = _steer_events_in_scope(session, scope_kind, role_view, turns)
     scope_turn_count = turn_count(turns)
@@ -217,20 +248,28 @@ def _build_scope_block(
     tool_counts = compute_tool_counts(scope_records)
     subagent_counts = compute_subagent_counts(scope_records)
     request_counts = compute_request_counts(scope_records)
-    if scope_kind == "role":
-        rendered_time = time_block_role(time_metrics, scope_turn_count)
-    else:
-        rendered_time = time_block(time_metrics, scope_turn_count, scope_kind)
 
-    return {
-        "economic": economic_block(token_data, cost, request_counts),
-        "process": {
-            "time": rendered_time,
-            "user_input": user_input_block(user_input_counts, user_input_shares),
-            "requests": requests_block(request_counts),
-        },
-        "supplementary": supplementary_block(subagent_counts, tool_success_rate(tool_counts)),
+    data_block: dict[str, Any] = {
+        **token_leaves(token_data),
+        **model_token_distribution_leaves(token_data),
+        "turn_count": scope_turn_count,
+        **request_count_leaves(request_counts),
+        **user_input_count_leaves(user_input_counts),
+        **supplementary_data_leaves(subagent_counts),
+        **tool_count_leaves(tool_counts),
     }
+
+    if scope_kind == "role":
+        time_block = time_leaves_role(time_metrics, scope_turn_count)
+    else:
+        time_block = time_leaves(time_metrics)
+    metric_block: dict[str, Any] = {
+        **cost_leaves(cost),
+        **time_block,
+        **user_input_share_leaves(user_input_shares),
+        "tool_success_rate": tool_success_rate(tool_counts),
+    }
+    return data_block, metric_block
 
 
 def _records_in_scope(

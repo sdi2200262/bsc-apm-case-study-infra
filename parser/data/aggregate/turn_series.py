@@ -13,11 +13,18 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from ...rates import (
+    CATEGORY_CACHE_1H,
+    CATEGORY_CACHE_5M,
+    CATEGORY_CACHE_READ,
+    CATEGORY_INPUT,
+    CATEGORY_OUTPUT,
+)
 from ..commands import PHASE_OTHER
 from ..schema import assistant_request_id
 from ..session import Session, iso_or_none
 from ..turns import Turn
-from .call_records import iter_main_request_records
+from .call_records import iter_main_call_entries, iter_main_request_records
 
 PHASE_KEYS: tuple[str, ...] = ("planning", "implementation", "other")
 
@@ -61,6 +68,54 @@ def build_turn_records(session: Session) -> list[dict[str, Any]]:
             }
         )
     return records
+
+
+def build_call_series(session: Session) -> list[dict[str, Any]]:
+    """Render the per-call canonical series for the data artifact.
+
+    Walks the session's turns in order and, for each turn, emits one entry
+    per main call in the turn (the same population the turn's
+    ``request_count`` counts, via ``call_records.iter_main_call_entries``).
+    Each entry carries the call's join key (``request_id``), resolved
+    model, ISO timestamp, the five-category token bag spread to flat keys,
+    and its turn, phase, and role membership. A call's phase is the phase
+    recorded for its ``requestId`` in the per-conversation phase index; its
+    role is the role of the turn it belongs to.
+
+    A main call that precedes the first turn-starting prompt belongs to no
+    turn and is therefore not in the series; the series' per-turn count
+    equals each turn's ``request_count`` by construction.
+
+    Args:
+        session: The session whose calls are being rendered.
+
+    Returns:
+        One dict per main call, in turn order then record order within a
+        turn.
+    """
+    request_phase_by_conversation = _build_request_phase_index(session)
+    series: list[dict[str, Any]] = []
+    for turn in session.turns:
+        request_phase_index = request_phase_by_conversation.get(turn.conversation_path, {})
+        role_key = role_of_turn(session, turn)
+        turn_id = turn.starting_prompt.uuid
+        for entry in iter_main_call_entries(turn.records):
+            series.append(
+                {
+                    "request_id": entry.request_id,
+                    "model": entry.canonical_model,
+                    "timestamp": iso_or_none(entry.timestamp),
+                    "input": entry.token_bag[CATEGORY_INPUT],
+                    "output": entry.token_bag[CATEGORY_OUTPUT],
+                    "cache_read": entry.token_bag[CATEGORY_CACHE_READ],
+                    "cache_5m": entry.token_bag[CATEGORY_CACHE_5M],
+                    "cache_1h": entry.token_bag[CATEGORY_CACHE_1H],
+                    "turn": turn_id,
+                    "phase": request_phase_index.get(entry.request_id, PHASE_OTHER),
+                    "role": role_key,
+                }
+            )
+    return series
 
 
 def turns_in_phase(session: Session, phase: str) -> Iterable[Turn]:

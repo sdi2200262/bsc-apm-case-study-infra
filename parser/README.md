@@ -1,18 +1,23 @@
 # Parser
 
 Transcript parser for the case study. Reads Claude Code CLI rollout
-JSONL files produced by participant sessions and emits the canonical
-scope-nested metrics artifact used by the analysis pipeline.
+JSONL files produced by participant sessions and emits the data and
+metrics artifacts used by the analysis pipeline.
 
 ## Package
 
 - **[parser/](parser/)**: Python package implementing
   the metric set defined for the case study. Reads one or more
   `<sessionId>.jsonl` files copied from
-  `~/.claude/projects/<dashed-cwd>/`, computes per-scope metrics
-  (session, phase, role for APM submissions), and writes the artifact
-  as a single JSON document. A separate sub-command renders an
-  emitted artifact in a human-readable form for inspection.
+  `~/.claude/projects/<dashed-cwd>/`, computes per-scope values
+  (session, phase, role for APM submissions), and writes two
+  artifacts: `parser_data.json` (the data: token sums, counts, the
+  per-call and per-turn series, diagnostics) and `parser_metrics.json`
+  (the metrics: cost, time statistics, bucket distributions, the
+  success rate). A one-time `--schema` mode writes `parser_schema.json`,
+  the field contract describing each leaf's kind, label, and formula.
+  A separate sub-command renders emitted artifacts in a human-readable
+  form for inspection.
 
 ## Quick start
 
@@ -23,11 +28,14 @@ path:
 ```bash
 cd bsc-apm-case-study-infra/parser
 
-# Build the canonical scope-nested metrics artifact
-python -m parser <submission-path> --framework {apm,speckit} --metrics -o metrics.json
+# Build the data and metrics artifacts into an output directory
+python -m parser <submission-path> --framework {apm,speckit} --metrics -o out_dir
 
-# Inspect a built artifact
-python -m parser.inspect metrics.json
+# Write the field-contract schema (needs no session)
+python -m parser --schema -o out_dir
+
+# Inspect built artifacts (metrics file optional)
+python -m parser.inspect out_dir/parser_data.json out_dir/parser_metrics.json
 
 # Counts-and-events summary of a loaded session
 python -m parser <submission-path> --framework {apm,speckit} --inspect
@@ -67,9 +75,10 @@ silently mis-classify.
 
 ## Documentation
 
-For module-level details, label and constructed flag conventions,
-and the per-metric formulas and rationale, see the docstrings
-inside each module under `parser/` and its `data/`,
+For the kind, label, and formula of every emitted leaf, run
+`--schema` and read `parser_schema.json`, whose contract is defined
+in `parser/contract.py`. For module-level details and rationale, see
+the docstrings inside each module under `parser/` and its `data/`,
 `metrics/`, and `report/` subpackages.
 
 ## Related

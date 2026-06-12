@@ -3,14 +3,17 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Command-line interface for the Claude Code chat parser.
 
-Five modes are available, all selected by flag and combinable
-(``--inspect``, ``--economic``, and ``--process`` print
-human-readable summaries; ``--metrics`` writes the canonical
-scope-nested JSON artifact; ``--sanitize`` and ``--unsanitize``
-seal and unseal the raw JSONL files for archival).
+The modes are selected by flag and combinable. ``--inspect``,
+``--economic``, and ``--process`` print human-readable summaries.
+``--metrics`` writes the two per-session artifacts (``parser_data.json``
+and ``parser_metrics.json``) into the ``-o`` directory. ``--schema`` writes
+the field contract (``parser_schema.json``) once and needs no session.
+``--sanitize`` and ``--unsanitize`` seal and unseal the raw JSONL files for
+archival.
 
 Usage:
-    python -m parser <path> --framework {apm,speckit} --metrics -o out.json
+    python -m parser <path> --framework {apm,speckit} --metrics -o out_dir
+    python -m parser --schema -o out_dir
     python -m parser <path> --framework {apm,speckit} --inspect
     python -m parser <path> --framework {apm,speckit} --economic
     python -m parser <path> --framework {apm,speckit} --process
@@ -55,6 +58,7 @@ except ImportError:
     pass
 
 from . import log
+from .contract import schema_document
 from .data.aggregate.tokens import compute_session_token_data, merge_subagent_indices
 from .data.buckets import DEFAULT_SHORT_THRESHOLD
 from .data.commands import FRAMEWORK_APM, FRAMEWORK_SPECKIT
@@ -67,12 +71,15 @@ from .rates import (
     RateTableError,
     load_rate_table,
 )
-from .report.build import build_report
+from .report.build import build_artifacts
 from .report.notices import collect_notices
 from .report.render import print_economic, print_inspection, print_process
 from .sanitize import sanitise_jsonl_file, unsanitise_to_text
 
 SECRET_ENV_VAR = "CC_PARSER_SECRET"
+DATA_ARTIFACT_FILENAME = "parser_data.json"
+METRICS_ARTIFACT_FILENAME = "parser_metrics.json"
+SCHEMA_ARTIFACT_FILENAME = "parser_schema.json"
 SANITIZED_FILENAME_PREFIX = "sanitized_"
 UNSANITIZED_FILENAME_PREFIX = "unsanitized_"
 
@@ -93,17 +100,40 @@ def main(argv: list[str] | None = None) -> int:
         log.enable_debug()
     if args.sanitize and args.unsanitize:
         parser.error("--sanitize and --unsanitize are mutually exclusive")
+    if args.schema:
+        schema_status = _run_schema(args.output)
+        if not (
+            args.inspect
+            or args.economic
+            or args.process
+            or args.metrics
+            or args.sanitize
+            or args.unsanitize
+        ):
+            return schema_status
+        if schema_status != 0:
+            return schema_status
     if args.sanitize:
+        if args.path is None:
+            parser.error("--sanitize requires a path argument")
         return _run_sanitize(args.path)
     if args.unsanitize:
+        if args.path is None:
+            parser.error("--unsanitize requires a path argument")
         return _run_unsanitize(args.path)
-    if not (args.inspect or args.economic or args.process or args.metrics):
+    if not (args.inspect or args.economic or args.process or args.metrics or args.schema):
         parser.error(
             "no mode selected; choose --inspect, --economic, --process, "
-            "--metrics, --sanitize, or --unsanitize"
+            "--metrics, --schema, --sanitize, or --unsanitize"
         )
+    if not (args.inspect or args.economic or args.process or args.metrics):
+        return 0
+    if args.path is None:
+        parser.error("a path argument is required for inspection and metric modes")
     if args.framework is None:
         parser.error("--framework is required for inspection and metric modes")
+    if args.metrics and args.output is None:
+        parser.error("--metrics requires -o <output directory> for the data and metrics artifacts")
     try:
         session = load_session(args.path, args.framework)
     except SchemaError as error:
@@ -137,20 +167,53 @@ def main(argv: list[str] | None = None) -> int:
     if args.metrics:
         try:
             rate_table = load_rate_table()
-            artifact = build_report(session, rate_table, args.short_threshold)
+            data_artifact, metrics_artifact = build_artifacts(
+                session, rate_table, args.short_threshold
+            )
         except RateTableError as error:
             log.error(f"metrics build failed: {error}")
             return 1
-        if args.output is not None:
-            try:
-                write_json(artifact, args.output)
-            except OSError as error:
-                log.error(f"could not write to {args.output}: {error}")
-                return 1
-            log.info(f"metrics written to {args.output}")
-        else:
-            json.dump(artifact, sys.stdout, indent=2, ensure_ascii=False)
-            log.blank()
+        data_path = args.output / DATA_ARTIFACT_FILENAME
+        metrics_path = args.output / METRICS_ARTIFACT_FILENAME
+        try:
+            args.output.mkdir(parents=True, exist_ok=True)
+            write_json(data_artifact, data_path)
+            write_json(metrics_artifact, metrics_path)
+        except OSError as error:
+            log.error(f"could not write artifacts to {args.output}: {error}")
+            return 1
+        log.info(f"data written to {data_path}")
+        log.info(f"metrics written to {metrics_path}")
+        log.notice_block((n.tag, n.label, n.summary, n.detail) for n in collect_notices(session))
+    return 0
+
+
+def _run_schema(output: Path | None) -> int:
+    """Emit the field-contract schema artifact.
+
+    Writes ``parser_schema.json`` into ``output`` when a directory is
+    given, otherwise dumps the schema to stdout. The schema is independent
+    of any session, so this mode reads no transcript.
+
+    Args:
+        output: The output directory, or ``None`` to write to stdout.
+
+    Returns:
+        ``0`` on success, ``1`` on a write error.
+    """
+    document = schema_document()
+    if output is None:
+        json.dump(document, sys.stdout, indent=2, ensure_ascii=False)
+        log.blank()
+        return 0
+    schema_path = output / SCHEMA_ARTIFACT_FILENAME
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        write_json(document, schema_path)
+    except OSError as error:
+        log.error(f"could not write schema to {schema_path}: {error}")
+        return 1
+    log.info(f"schema written to {schema_path}")
     return 0
 
 
@@ -251,9 +314,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "path",
         type=Path,
+        nargs="?",
+        default=None,
         help=(
             "Path to a single .jsonl file or a directory of .jsonl files "
-            "copied straight from ~/.claude/projects/<dashed-cwd>/."
+            "copied straight from ~/.claude/projects/<dashed-cwd>/. Not "
+            "required by --schema."
         ),
     )
     parser.add_argument(
@@ -297,10 +363,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--metrics",
         action="store_true",
         help=(
-            "Build the canonical scope-nested metrics artifact "
-            "(session, phases, roles for APM, turns, diagnostics) "
-            "and write it to --output, or stdout when --output is "
-            "absent."
+            "Build the data and metrics artifacts (parser_data.json, "
+            "parser_metrics.json) and write them into the -o directory."
+        ),
+    )
+    parser.add_argument(
+        "--schema",
+        action="store_true",
+        help=(
+            "Emit the field-contract schema (parser_schema.json) into the "
+            "-o directory, or stdout when -o is absent. Needs no session."
         ),
     )
     parser.add_argument(
@@ -308,7 +380,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="Destination path for --metrics output. Default writes to stdout.",
+        help=(
+            "Output directory for --metrics (parser_data.json, "
+            "parser_metrics.json) and --schema (parser_schema.json)."
+        ),
     )
     parser.add_argument(
         "--short-threshold",
