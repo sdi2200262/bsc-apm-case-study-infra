@@ -106,7 +106,7 @@ def resolve_metric_path(metrics: Any, tokens: list[str | int]) -> Any:
 
     Args:
         metrics: The parsed ``metrics.json`` payload.
-        tokens: A token list from :func:`parse_metric_path`.
+        tokens: A token list from ``parse_metric_path``.
 
     Returns:
         The node at the resolved path.

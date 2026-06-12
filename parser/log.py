@@ -59,9 +59,9 @@ def _render_token(name: str, stream: TextIO, pad: bool = True) -> str:
         name: Level or tag name, e.g. ``"INFO"`` or ``"WARNING"``.
         stream: Destination stream; colour is applied only when it is a
             TTY.
-        pad: When true, left-pad the token to the common column width so
+        pad: When ``True``, left-pad the token to the common column width so
             inline messages align. A token that sits alone on its line (a
-            notice tag) passes false to avoid a trailing space.
+            notice tag) passes ``False`` to avoid a trailing space.
 
     Returns:
         The token ``[name]``, padded to the common width when ``pad`` is

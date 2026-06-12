@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Invariant evaluator for the metrics artifact.
@@ -14,7 +13,7 @@ inspection.
 
 This module is a leaf: it operates on the assembled artifact dict
 and the real-APM-role predicate, with no parser-package
-dependencies. It is imported by ``report_diagnostics`` for the
+dependencies. It is imported by ``data.diagnostics`` for the
 diagnostics block.
 """
 
@@ -57,7 +56,7 @@ def _evaluate_invariants(
     ``subagent_dispatches_bracketed`` counters surface the
     attribution mix instead.
     """
-    checks: dict[str, Any] = {}
+    results: dict[str, Any] = {}
     scopes: list[tuple[str, dict[str, Any]]] = [("session", artifact["session"])]
     for phase, block in artifact["phases"].items():
         scopes.append((f"phase_{phase}", block))
@@ -66,26 +65,26 @@ def _evaluate_invariants(
     for scope_label, block in scopes:
         time_block = block["process"]["time"]
         if "duration" in time_block and "inter_turn_time" in time_block:
-            checks[f"time_composition_{scope_label}"] = _check_close(
+            results[f"time_composition_{scope_label}"] = _assert_close(
                 time_block["duration"]["value"],
                 time_block["turn_time"]["value"] + time_block["inter_turn_time"]["value"],
                 INVARIANT_TOLERANCE_SECONDS,
             )
         if "turn_time_solo" in time_block and "turn_time_concurrent" in time_block:
-            checks[f"turn_time_decomposition_{scope_label}"] = _check_close(
+            results[f"turn_time_decomposition_{scope_label}"] = _assert_close(
                 time_block["turn_time"]["value"],
                 time_block["turn_time_solo"]["value"] + time_block["turn_time_concurrent"]["value"],
                 INVARIANT_TOLERANCE_SECONDS,
             )
         economic = block["economic"]
         for category in ("input", "output", "cache_read", "cache_5m", "cache_1h"):
-            checks[f"token_composition_{scope_label}_{category}"] = _check_close(
+            results[f"token_composition_{scope_label}_{category}"] = _assert_close(
                 economic[f"total_{category}_tokens"]["value"],
                 economic[f"main_{category}_tokens"]["value"]
                 + economic[f"delegated_{category}_tokens"]["value"],
                 INVARIANT_TOLERANCE_TOKENS,
             )
-        checks[f"prompt_token_composition_{scope_label}"] = _check_close(
+        results[f"prompt_token_composition_{scope_label}"] = _assert_close(
             economic["total_prompt_tokens"]["value"],
             economic["total_input_tokens"]["value"]
             + economic["total_cache_read_tokens"]["value"]
@@ -94,7 +93,7 @@ def _evaluate_invariants(
             INVARIANT_TOLERANCE_TOKENS,
         )
         user_input = block["process"]["user_input"]
-        checks[f"steer_accounting_{scope_label}"] = _check_close(
+        results[f"steer_accounting_{scope_label}"] = _assert_close(
             user_input["steer_attempted_count"]["value"],
             user_input["steer_delivered_count"]["value"]
             + user_input["steer_abandoned_count"]["value"],
@@ -107,7 +106,7 @@ def _evaluate_invariants(
         # quantity, so the identity holds exactly.
         process_requests = block["process"]["requests"]
         for field in ("request_count", "delegated_request_count"):
-            checks[f"economic_requests_mirror_{scope_label}_{field}"] = _check_close(
+            results[f"economic_requests_mirror_{scope_label}_{field}"] = _assert_close(
                 economic[field]["value"],
                 process_requests[field]["value"],
                 0,
@@ -123,7 +122,7 @@ def _evaluate_invariants(
         ):
             shares = user_input[share_key]["value"]
             expected = 1.0 if denominator > 0 else 0.0
-            checks[f"bucket_shares_{share_key}_{scope_label}"] = _check_close(
+            results[f"bucket_shares_{share_key}_{scope_label}"] = _assert_close(
                 sum(shares.values()), expected, INVARIANT_TOLERANCE_RATIO
             )
     session_economic = artifact["session"]["economic"]
@@ -132,7 +131,7 @@ def _evaluate_invariants(
             artifact["phases"][phase]["economic"][f"total_{category}_tokens"]["value"]
             for phase in artifact["phases"]
         )
-        checks[f"phase_partition_{category}"] = _check_close(
+        results[f"phase_partition_{category}"] = _assert_close(
             session_economic[f"total_{category}_tokens"]["value"],
             phase_sum,
             INVARIANT_TOLERANCE_TOKENS,
@@ -143,7 +142,7 @@ def _evaluate_invariants(
             artifact["phases"][phase]["supplementary"][field]["value"]
             for phase in artifact["phases"]
         )
-        checks[f"phase_partition_{field}"] = _check_close(
+        results[f"phase_partition_{field}"] = _assert_close(
             session_supplementary[field]["value"],
             phase_sum,
             0,
@@ -167,7 +166,7 @@ def _evaluate_invariants(
             artifact["phases"][phase]["process"][subblock][field]["value"]
             for phase in artifact["phases"]
         )
-        checks[f"phase_partition_{field}"] = _check_close(
+        results[f"phase_partition_{field}"] = _assert_close(
             session_process[subblock][field]["value"],
             phase_sum,
             0,
@@ -182,7 +181,7 @@ def _evaluate_invariants(
             artifact["phases"][phase]["process"]["requests"][field]["value"]
             for phase in artifact["phases"]
         )
-        checks[f"phase_partition_{field}"] = _check_close(
+        results[f"phase_partition_{field}"] = _assert_close(
             session_requests[field]["value"],
             phase_sum,
             0,
@@ -202,7 +201,7 @@ def _evaluate_invariants(
         if not isinstance(request_count, int):
             continue
         share_sum = sum(int(v) for v in share.values())
-        checks[f"turn_phase_request_share_sum_{index}"] = _check_close(
+        results[f"turn_phase_request_share_sum_{index}"] = _assert_close(
             share_sum,
             request_count,
             0,
@@ -218,7 +217,7 @@ def _evaluate_invariants(
                 artifact["roles"][role]["economic"][f"total_{category}_tokens"]["value"]
                 for role in artifact["roles"]
             )
-            checks[f"role_partition_{category}"] = _check_close(
+            results[f"role_partition_{category}"] = _assert_close(
                 session_economic[f"total_{category}_tokens"]["value"],
                 role_sum,
                 INVARIANT_TOLERANCE_TOKENS,
@@ -228,7 +227,7 @@ def _evaluate_invariants(
                 artifact["roles"][role]["supplementary"][field]["value"]
                 for role in artifact["roles"]
             )
-            checks[f"role_partition_{field}"] = _check_close(
+            results[f"role_partition_{field}"] = _assert_close(
                 session_supplementary[field]["value"],
                 role_sum,
                 0,
@@ -244,7 +243,7 @@ def _evaluate_invariants(
                 artifact["roles"][role]["process"][subblock][field]["value"]
                 for role in artifact["roles"]
             )
-            checks[f"role_partition_{field}"] = _check_close(
+            results[f"role_partition_{field}"] = _assert_close(
                 session_process[subblock][field]["value"],
                 role_sum,
                 0,
@@ -254,12 +253,12 @@ def _evaluate_invariants(
                 artifact["roles"][role]["process"]["requests"][field]["value"]
                 for role in artifact["roles"]
             )
-            checks[f"role_partition_{field}"] = _check_close(
+            results[f"role_partition_{field}"] = _assert_close(
                 session_requests[field]["value"],
                 role_sum,
                 0,
             )
-    return checks
+    return results
 
 
 def _every_conversation_has_real_role(
@@ -270,7 +269,7 @@ def _every_conversation_has_real_role(
     return all(is_real_apm_role(conv["role_key"]) for conv in conversations)
 
 
-def _check_close(left: float, right: float, tolerance: float) -> dict[str, Any]:
+def _assert_close(left: float, right: float, tolerance: float) -> dict[str, Any]:
     """Return ``{"status": "ok"}`` when within tolerance, otherwise residuals."""
     residual = abs(left - right)
     if residual <= tolerance:

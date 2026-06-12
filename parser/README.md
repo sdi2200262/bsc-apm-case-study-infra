@@ -6,7 +6,7 @@ scope-nested metrics artifact used by the analysis pipeline.
 
 ## Package
 
-- **[cc_chat_parser/](cc_chat_parser/)**: Python package implementing
+- **[parser/](parser/)**: Python package implementing
   the metric set defined for the case study. Reads one or more
   `<sessionId>.jsonl` files copied from
   `~/.claude/projects/<dashed-cwd>/`, computes per-scope metrics
@@ -24,24 +24,24 @@ path:
 cd bsc-apm-case-study-infra/parser
 
 # Build the canonical scope-nested metrics artifact
-python -m cc_chat_parser <submission-path> --framework {apm,speckit} --metrics -o metrics.json
+python -m parser <submission-path> --framework {apm,speckit} --metrics -o metrics.json
 
 # Inspect a built artifact
-python -m cc_chat_parser.inspect metrics.json
+python -m parser.inspect metrics.json
 
 # Counts-and-events summary of a loaded session
-python -m cc_chat_parser <submission-path> --framework {apm,speckit} --inspect
+python -m parser <submission-path> --framework {apm,speckit} --inspect
 
 # Economic or process dimension summary at session scope
-python -m cc_chat_parser <submission-path> --framework {apm,speckit} --economic
-python -m cc_chat_parser <submission-path> --framework {apm,speckit} --process
+python -m parser <submission-path> --framework {apm,speckit} --economic
+python -m parser <submission-path> --framework {apm,speckit} --process
 
 # Sanitise raw JSONL files for archival; secret via CC_PARSER_SECRET
-python -m cc_chat_parser <submission-path> --sanitize
-python -m cc_chat_parser <sidecar-path>    --unsanitize
+python -m parser <submission-path> --sanitize
+python -m parser <sidecar-path>    --unsanitize
 
 # Full option list
-python -m cc_chat_parser --help
+python -m parser --help
 ```
 
 `<submission-path>` is either a single `*.jsonl` file (development
@@ -63,14 +63,14 @@ silently mis-classify.
 - **CC_PARSER_RATE_TABLE**: optional override path to an alternate
   rate-table YAML file. Useful for re-running an older session
   against historical rates without modifying the canonical
-  `cc_chat_parser/rates.yaml`.
+  `parser/rates.yaml`.
 
 ## Documentation
 
 For module-level details, label and constructed flag conventions,
 and the per-metric formulas and rationale, see the docstrings
-inside each module under `cc_chat_parser/` and its `metrics/`
-subpackage.
+inside each module under `parser/` and its `data/`,
+`metrics/`, and `report/` subpackages.
 
 ## Related
 

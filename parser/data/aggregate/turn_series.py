@@ -29,7 +29,7 @@ def build_turn_records(session: Session) -> list[dict[str, Any]]:
     phase keys (``planning``, ``implementation``, ``other``). The
     values are integer counts of the turn's non-synthetic
     non-API-error main requests (deduplicated by ``requestId``,
-    matching the recipe in ``metrics.economic._sum_main_from_records``)
+    matching the selection rule in ``data.aggregate.call_records.iter_main_request_records``)
     bucketed by each request's phase. A request's phase is the phase
     of its first emitting assistant record in the conversation file's
     document order, looked up against a per-conversation phase index

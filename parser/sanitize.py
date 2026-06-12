@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Reversible sanitisation of Claude Code JSONL conversation files.
@@ -62,7 +61,7 @@ def sanitise_jsonl_file(path: Path, secret: bytes) -> dict[str, Any]:
     Returns:
         A JSON-serialisable dict with ``_sanitization_meta`` and
         ``payload`` keys; the caller writes it to disk with the
-        package's ``io.write_json`` helper.
+        package's ``write_json`` helper.
 
     Raises:
         OSError: When the file cannot be read.
@@ -81,7 +80,7 @@ def unsanitise_to_text(payload: dict[str, Any], secret: bytes) -> str:
 
     Args:
         payload: The decoded JSON object produced by
-            :func:`sanitise_jsonl_file`.
+            ``sanitise_jsonl_file``.
         secret: The decryption key. Must equal the secret used for
             encryption.
 
@@ -114,7 +113,7 @@ def _encrypt(plaintext: str, secret: bytes) -> str:
 
 
 def _decrypt(encoded: str, secret: bytes) -> str:
-    """Reverse :func:`_encrypt` with the same secret."""
+    """Reverse ``_encrypt`` with the same secret."""
     parts = encoded.split(":", 2)
     if len(parts) != 3 or parts[0] != CIPHER_MARKER:
         raise ValueError(f"invalid encoded format: {encoded[:50]}...")

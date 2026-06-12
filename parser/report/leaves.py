@@ -16,9 +16,9 @@ analysis:
   dimension.
 - ``Supplementary``: descriptive only, no hypothesis test.
 
-``constructed`` is a Boolean. ``true`` means the metric was defined for this
+``constructed`` is a Boolean. ``True`` means the metric was defined for this
 study and rests on face validity until the literature-grounding pass
-attaches a published construct; ``false`` means the metric maps directly
+attaches a published construct; ``False`` means the metric maps directly
 onto a JSONL, API, or grader field with aggregation as the only
 study-author degree of freedom.
 
@@ -152,7 +152,7 @@ def time_block(metrics: TimeMetrics, turn_count: int, scope_kind: str) -> dict[s
     because the phase boundary is itself derived from the per-prompt phase
     labels rather than read directly from a JSONL field; at session scope
     ``duration`` is the wall-clock extent between the earliest and latest
-    non-synthetic record and the flag is ``false``. ``turn_count`` is data and
+    non-synthetic record and the flag is ``False``. ``turn_count`` is data and
     is supplied by the caller from ``data/aggregate/counts``.
     """
     duration_constructed = scope_kind == "phase"
