@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Derive APM conversation roles and per-record phases.
 
-The APM counterpart to :mod:`speckit_phase_assigner`. APM phase is
+The APM counterpart to ``speckit_phases``. APM phase is
 role-derived: each conversation file carries one role, which fixes
 the phase for the whole conversation (Planner is planning, Manager
 and Worker are implementation), with records before the role is
@@ -18,7 +17,7 @@ mechanisms; the first by record order fixes the role:
    the typed command did not expand (an assistant ``Skill`` tool_use).
 
 The structural detection of a ``Skill`` tool_use is shared with the
-Spec-kit phase assigner through :func:`commands.skill_tool_use_name`.
+Spec-kit phase assigner through ``commands.skill_tool_use_name``.
 """
 
 from __future__ import annotations
@@ -64,7 +63,7 @@ class ConversationRole:
 
 @dataclass(frozen=True)
 class ApmRoleResult:
-    """Output of :func:`assign_apm_roles`.
+    """Output of ``assign_apm_roles``.
 
     Attributes:
         conversation_roles: Per-conversation roles, aligned
@@ -90,7 +89,7 @@ def assign_apm_roles(conversations: list[Conversation]) -> ApmRoleResult:
         conversations: The conversation files of one APM submission.
 
     Returns:
-        An :class:`ApmRoleResult` aligned to ``conversations``.
+        An ``ApmRoleResult`` aligned to ``conversations``.
     """
     roles: list[ConversationRole] = []
     phase_by_uuid: dict[str, str] = {}

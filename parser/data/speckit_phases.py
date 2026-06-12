@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Run the Spec-kit phase ratchet over a session's event stream.
@@ -64,7 +63,7 @@ _EVENT_KIND_SKILL = "skill"
 
 @dataclass(frozen=True)
 class PhaseWalkResult:
-    """Output of :func:`assign_speckit_phases`.
+    """Output of ``assign_speckit_phases``.
 
     Attributes:
         phase_by_uuid: Phase label keyed by record uuid. Covers
@@ -101,7 +100,7 @@ def assign_speckit_phases(conversations: list[Conversation]) -> PhaseWalkResult:
             ordering.
 
     Returns:
-        A :class:`PhaseWalkResult` carrying the per-record phase
+        A ``PhaseWalkResult`` carrying the per-record phase
         mapping and the chronological backward-Skill log.
     """
     events, requestid_to_uuids = _collect_events(conversations)
@@ -237,7 +236,7 @@ def _tag_skill_request_group(
             the event.
         event_phase: The Skill's declared Spec-kit phase.
         requestid_to_uuids: Per-file ``requestId`` fan-out index
-            built by :func:`_collect_events`.
+            built by ``_collect_events``.
         phase_by_uuid: Output mapping mutated in place.
     """
     request_id = assistant_request_id(record)

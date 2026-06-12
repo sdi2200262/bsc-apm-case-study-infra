@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Assemble a participant submission into a typed ``Session``.
@@ -100,7 +99,7 @@ class ConversationView:
             APM this maps each genuine user-prompt record to the
             role's phase. For Spec-kit this is the per-conversation
             slice of
-            :attr:`speckit_phase_assigner.PhaseWalkResult.phase_by_uuid`,
+            ``speckit_phases.PhaseWalkResult.phase_by_uuid``,
             which documents the three populations covered.
     """
 
@@ -128,7 +127,7 @@ class Session:
         backward_skill_invocations: Chronological log of backward
             Skill events from the Spec-kit phase assigner; entry schema is
             documented on
-            :attr:`speckit_phase_assigner.PhaseWalkResult.backward_skill_invocations`.
+            ``speckit_phases.PhaseWalkResult.backward_skill_invocations``.
             Empty tuple for APM sessions and for Spec-kit sessions
             with no backward Skill invocations.
     """
@@ -183,7 +182,7 @@ def _build_apm_views(conversations: list[Conversation]) -> tuple[ConversationVie
     """Assemble per-conversation views for an APM submission.
 
     Roles and per-record phases are computed by
-    ``apm_role_assigner.assign_apm_roles``. Conversations are then
+    ``apm_roles.assign_apm_roles``. Conversations are then
     numbered sequentially per role kind by their earliest record
     timestamp ascending so that handoffs produce ``manager-2``,
     ``manager-3`` and parallel workers produce ``worker-1``,
