@@ -362,7 +362,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "serialize every outgoing JSON-RPC frame compact (no inter-token "
-            "whitespace) and write the secondary results_compact_serialization.json; "
+            "whitespace) and write the secondary grader_results_compact_serialization.json; "
             "leaves the canonical spaced run untouched"
         ),
     )

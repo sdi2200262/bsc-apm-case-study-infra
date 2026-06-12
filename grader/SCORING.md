@@ -105,7 +105,7 @@ default `0.45` ([config.py](config.py)), overridable under
 Partial credit never moves a strict grade: only a row that matched no
 accepted form is eligible, and the structural and leak-only rows (the
 `initialize` frame, `tools/list`, the memory rows) carry no similarity.
-The similarity ratio is recorded in `results.json` on every string row
+The similarity ratio is recorded in `grader_results.json` on every string row
 that ran the partial check, `partial` or `failed`, and is scored only on
 `partial` rows, so the full ratio distribution is available for floor tuning.
 Each score node reports `total_strict` (full points over `passed` rows),

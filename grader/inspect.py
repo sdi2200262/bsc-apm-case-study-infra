@@ -15,9 +15,9 @@ A sibling utility under ``../parser/`` renders the parser's metrics
 artefact in the same style.
 
 Invocation:
-    ./inspect.py <results.json>                  # score summary
-    ./inspect.py <results.json> --test P.2.5     # one test's detail
-    ./inspect.py <results.json> --failed         # filtered list
+    ./inspect.py <grader_results.json>                  # score summary
+    ./inspect.py <grader_results.json> --test P.2.5     # one test's detail
+    ./inspect.py <grader_results.json> --failed         # filtered list
     ./inspect.py --help                          # full options
 """
 
@@ -354,19 +354,19 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="""
 Usage Examples:
   Score summary (default):
-    ./inspect.py results.json
+    ./inspect.py grader_results.json
 
   Other one-shot views:
-    ./inspect.py results.json --summary
-    ./inspect.py results.json --test P.2.5
-    ./inspect.py results.json --failed
-    ./inspect.py results.json --passed
-    ./inspect.py results.json --category course
-    ./inspect.py results.json --full-output P.1.4
-    ./inspect.py results.json --list-categories
+    ./inspect.py grader_results.json --summary
+    ./inspect.py grader_results.json --test P.2.5
+    ./inspect.py grader_results.json --failed
+    ./inspect.py grader_results.json --passed
+    ./inspect.py grader_results.json --category course
+    ./inspect.py grader_results.json --full-output P.1.4
+    ./inspect.py grader_results.json --list-categories
 
   Pipe full output for processing:
-    ./inspect.py results.json -o C.5.3 | python3 -m json.tool
+    ./inspect.py grader_results.json -o C.5.3 | python3 -m json.tool
 
 Test IDs:
   Python: P.1.1 to P.1.11, P.2.1 to P.2.9, P.3.1 to P.3.7

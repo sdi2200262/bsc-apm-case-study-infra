@@ -82,7 +82,7 @@ python -m grader /path/to/solution.patch \
     --mock-root ~/.bsc-apm
 
 # Browse a results JSON in the terminal
-./inspect.py /path/to/results.json
+./inspect.py /path/to/grader_results.json
 
 # Attach a free-prose note to a graded submission
 python -m grader.notes add /path/to/results-dir \
@@ -154,7 +154,7 @@ constrain structure and newline framing, not token spacing, so a
 conformant parser accepts both forms.
 
 `--compact-json` emits every frame compact and writes the result to
-`results_compact_serialization.json` beside the canonical `results.json`,
+`grader_results_compact_serialization.json` beside the canonical `grader_results.json`,
 recording how a sound-but-compact-only replica would score. Only
 emission changes; the read side is whitespace-insensitive.
 
