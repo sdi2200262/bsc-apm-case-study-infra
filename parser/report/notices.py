@@ -2,25 +2,26 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Session-attention notices for the parser's CLI summary modes.
 
-A ``Notice`` captures a single condition that an analyst should be
-aware of before interpreting or accepting a session's metrics. Two
-tags are defined: ``REVIEW`` for conditions that are qualitatively
-ambiguous and require human judgment, and ``WARNING`` for conditions
-that are objectively abnormal and require no judgment to classify.
-
-``collect_notices`` inspects a loaded ``Session`` and returns the
-full tuple of applicable notices, REVIEW notices first, then WARNING
-notices, in deterministic iteration order within each group. Rendering
-is not done here: a caller hands the collected notices to the terminal
-logging module's ``notice_block`` to emit them.
+A ``Notice`` flags one condition to weigh before accepting a session's metrics:
+``REVIEW`` for a qualitatively ambiguous one needing judgment, ``WARNING`` for
+an objectively abnormal one. ``collect_notices`` returns them REVIEW before
+WARNING, deterministically; the logging module's ``notice_block`` renders them.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..data.aggregate.call_records import ModelPurityReport, ModelSwitch, compute_model_purity
+from ..data.aggregate.counts import compute_tool_counts
 from ..data.aggregate.tokens import compute_session_token_data
-from ..data.commands import extract_command_names, is_known_command
+from ..data.aggregate.turn_series import turns_in_phase
+from ..data.commands import (
+    FRAMEWORK_SPECKIT,
+    PHASE_IMPLEMENTATION,
+    extract_command_names,
+    is_known_command,
+)
 from ..data.prompts import (
     is_slash_command_marker,
     is_slash_command_rendered_body,
@@ -46,19 +47,11 @@ class Notice:
     """A single session-attention signal surfaced in the CLI summary.
 
     Attributes:
-        tag: Either ``"REVIEW"`` or ``"WARNING"``. REVIEW notices are
-            qualitatively ambiguous; the analyst must examine the
-            session before the result enters the cohort record.
-            WARNING notices are objectively abnormal; no judgment is
-            required to classify them, but the report author should
-            acknowledge them.
-        label: A short identifier for the condition, suitable for a
-            heading or index entry.
-        summary: A single sentence naming the condition and its
-            quantitative magnitude where applicable.
-        detail: Elaboration that gives the analyst a concrete next
-            step or names the impact on downstream consumers. May
-            equal ``summary`` when no additional detail exists.
+        tag: ``"REVIEW"`` (qualitatively ambiguous; needs human judgment) or
+            ``"WARNING"`` (objectively abnormal; no judgment to classify).
+        label: A short identifier for the condition.
+        summary: One sentence naming the condition and its magnitude.
+        detail: A concrete next step or downstream impact; may equal ``summary``.
     """
 
     tag: str
@@ -68,23 +61,9 @@ class Notice:
 
 
 def collect_notices(session: Session) -> tuple[Notice, ...]:
-    """Collect all applicable session-attention notices for ``session``.
+    """Return every applicable notice for ``session``, REVIEW before WARNING.
 
-    Inspects the session for each catalogued condition and returns a
-    tuple of notices in canonical order: all REVIEW notices first (in
-    the order the conditions are checked), then all WARNING notices
-    (in the order the conditions are checked). The caller does not
-    need to sort.
-
-    This function is a pure aggregator: it performs no I/O, has no
-    side effects, and does not mutate the session.
-
-    Args:
-        session: The fully loaded session to inspect.
-
-    Returns:
-        A tuple of ``Notice`` objects, possibly empty when no
-        conditions fire.
+    A pure aggregator (no I/O or mutation); conditions check in a fixed order.
     """
     review_notices: list[Notice] = []
     warning_notices: list[Notice] = []
@@ -138,6 +117,24 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
                 label="activity past session cap",
                 summary=cap_overrun_summary(session),
                 detail=cap_overrun_detail(session),
+            )
+        )
+
+    # REVIEW: spec-kit implementation phase never reached
+    if speckit_implementation_ratchet_unreached(session):
+        review_notices.append(
+            Notice(
+                tag=TAG_REVIEW,
+                label="spec-kit implementation phase never reached",
+                summary=(
+                    "spec-kit session did tool-driven work but reached zero "
+                    "implementation-phase turns; the planning-vs-implementation split is unreliable"
+                ),
+                detail=(
+                    "the implementation ratchet never advanced (no speckit-implement issued), so "
+                    "implementation-scale work likely ran inside planning-labelled turns; treat "
+                    "the split as planning-inflated and confirm the phase boundary before using it"
+                ),
             )
         )
 
@@ -243,16 +240,8 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
 
     health = session_health_signals(session)
 
-    # REVIEW: model drift
-    if health["model_drift"]:
-        review_notices.append(
-            Notice(
-                tag=TAG_REVIEW,
-                label="model drift",
-                summary="more than one distinct model observed across the session",
-                detail="cue: per-model attribution mixes models; confirm the intended model",
-            )
-        )
+    # REVIEW: model purity (multi-model conversations and off-assignment calls)
+    review_notices.extend(model_purity_notices(session))
 
     # REVIEW: cost is a floor (compaction synthesis excluded)
     compaction_total = sum(len(view.conversation.compaction_events) for view in session.views)
@@ -326,15 +315,87 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
     return tuple(review_notices + warning_notices)
 
 
-def agent_dispatch_counts(session: Session) -> tuple[int, int]:
-    """Count Agent dispatches and how many had populated usage at session level.
+def speckit_implementation_ratchet_unreached(session: Session) -> bool:
+    """Return ``True`` when a working spec-kit session never reached implementation.
 
-    The dispatch total is the number of distinct Agent tool_use ids observed
-    across non-synthetic assistant records. The with-usage count is the number
-    of user records whose ``tool_result`` references one of those ids and
-    whose ``toolUseResult.usage`` is populated. Matching by tool_use id
-    prevents non-Agent tools that may carry their own usage from inflating the
-    with-usage count.
+    Fires for spec-kit only when no turn is assigned implementation (the ratchet
+    never advanced, no ``speckit-implement`` issued) yet the session did
+    tool-driven work; ``tool_result_count > 0`` keeps a planning-only session
+    unflagged.
+    """
+    if session.framework != FRAMEWORK_SPECKIT:
+        return False
+    if any(True for _ in turns_in_phase(session, PHASE_IMPLEMENTATION)):
+        return False
+    scope_records = [record for view in session.views for record in view.conversation.records]
+    return compute_tool_counts(scope_records).tool_result_count > 0
+
+
+def model_purity_notices(session: Session) -> list[Notice]:
+    """Return the model-purity REVIEW notices, empty when the session is model-pure.
+
+    A conversation whose main calls bill on more than one model is impure: every
+    model change raises a notice naming the conversation, the prior and new
+    models, the time, and whether a user ``/model`` command backed it or it fell
+    back silently. A leading summary carries the per-model counts and the share
+    of calls off the assigned (modal) model. A single ``/model`` at startup
+    leaves one billed model, so it raises nothing.
+    """
+    report = compute_model_purity(session)
+    if not report.switches and report.off_assignment_calls == 0:
+        return []
+    notices = [_model_purity_summary_notice(report)]
+    notices.extend(_switch_notice(switch) for switch in report.switches)
+    return notices
+
+
+def _model_purity_summary_notice(report: ModelPurityReport) -> Notice:
+    """Build the summary notice: switch breakdown, per-model counts, off-assignment share."""
+    counts_str = ", ".join(
+        f"{model}: {report.per_model_counts[model]}" for model in sorted(report.per_model_counts)
+    )
+    total = len(report.switches)
+    silent = len(report.silent_switches)
+    return Notice(
+        tag=TAG_REVIEW,
+        label="model purity",
+        summary=(
+            f"{total} main-model switch{'es' if total != 1 else ''} observed "
+            f"({silent} silent, {total - silent} user-backed); "
+            f"{report.off_assignment_calls} of {report.total_main_calls} deduped main "
+            f"calls ({report.off_assignment_fraction:.1%}) billed off the assigned model "
+            f"{report.assigned_model or '(none)'!r}"
+        ),
+        detail=(
+            f"per-model deduped main-call counts: {counts_str or '(none)'}; "
+            "cue: confirm the session ran on the assigned model"
+        ),
+    )
+
+
+def _switch_notice(switch: ModelSwitch) -> Notice:
+    """Build the per-switch notice, classified by whether a user ``/model`` backed it."""
+    when = switch.timestamp.isoformat() if switch.timestamp is not None else "(no timestamp)"
+    cause = (
+        "a user /model command preceded it"
+        if switch.backed
+        else "no user /model command preceded it (silent fallback)"
+    )
+    return Notice(
+        tag=TAG_REVIEW,
+        label="main-model switch",
+        summary=(
+            f"{switch.role_key}: main model changed from "
+            f"{switch.from_model or '(none)'} to {switch.to_model or '(none)'} at {when}"
+        ),
+        detail=f"{cause}; cue: confirm whether the off-model calls belong in the cohort record",
+    )
+
+
+def agent_dispatch_counts(session: Session) -> tuple[int, int]:
+    """Return ``(total_dispatches, with_usage)`` for Agent tool calls in ``session``.
+
+    Matched by tool_use id so a non-Agent tool's own usage cannot inflate it.
     """
     agent_tool_use_ids: set[str] = set()
     for view in session.views:
@@ -387,10 +448,8 @@ def unknown_commands(session: Session) -> list[str]:
 def slash_invocation_counts(session: Session) -> int:
     """Return the count of slash markers without a paired rendered body.
 
-    A slash marker without a paired rendered body in the same ``promptId``
-    group ran a local-only command or carried a typo; the invocation never
-    reached the model and is dropped from turn-starting detection. Counting
-    these renders the dropped population visible.
+    An unpaired marker (same ``promptId``) ran a local-only command or a typo;
+    the invocation never reached the model.
     """
     markers_dropped = 0
     for view in session.views:
@@ -418,11 +477,7 @@ def turns_with_missing_uuid_count(session: Session) -> int:
 
 
 def subagent_file_counts(session: Session) -> tuple[int, int]:
-    """Return ``(files_seen, files_without_model)`` across every conversation.
-
-    ``files_seen`` is the total subagent file count and ``files_without_model``
-    is the subset whose model could not be resolved.
-    """
+    """Return ``(files_seen, files_without_model)`` across every conversation."""
     files_seen = sum(view.conversation.subagent_model_index.files_seen for view in session.views)
     files_without_model = sum(
         view.conversation.subagent_model_index.files_without_model for view in session.views

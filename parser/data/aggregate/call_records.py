@@ -1,33 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""The shared main-call selection rule and the per-call / per-dispatch model series.
+"""Main-call selection, per-call/dispatch model resolution, and model-purity detection.
 
-Token usage on a Claude Code conversation comes from two disjoint
-populations. Main usage is the per-API-call usage of a conversation's
-main agent: Claude Code emits one JSONL record per content block of a
-streaming response, every record of one call carrying an identical
-``message.usage``, so a per-``requestId`` dedup is needed before summing.
-Delegated usage is the rolled-up usage of subagent dispatches, reported
-back on the parent user record's ``toolUseResult.usage``.
+Two token populations: main (per-API-call, needs per-``requestId`` dedup) and
+delegated (subagent dispatch usage on parent user records). This module owns the
+single selection rule and the model-resolution iterators consumed by ``tokens``,
+``counts``, ``turn_series``, and ``metrics/cost``.
 
-This module owns the one selection rule for the main-call population and
-the resolution of which model billed each call and each dispatch. It
-produces resolution-only series (model plus token bag, no pricing); the
-token-sum fold over them lives in ``tokens`` (data) and the rate fold in
-``metrics/cost`` (metric). Holding the selection rule and the model
-resolution here keeps a single implementation for every consumer:
-
-- ``is_main_request_record`` / ``iter_main_request_records`` are consumed
-  by ``tokens``, ``counts``, and ``turn_series`` (data) and by
-  ``metrics/cost`` (metric) for the main-call population.
-- ``iter_main_call_entries`` yields each main call's canonical record
-  (request id, model, timestamp, token bag) before membership is attached;
-  ``turn_series`` wraps these with turn, phase, and role to build the
-  per-call canonical series the data artifact emits.
-- ``iter_resolved_main_calls`` yields each main call's canonical model and
-  token bag; the token-volume distribution and the cost fold consume it.
-- ``iter_resolved_dispatches`` yields each Agent dispatch's resolved model,
-  optional rate bracket, and token bag; the same two consumers fold it.
+It also owns ``compute_model_purity``, which detects silent main-model fallbacks.
+Placed here because it drives off ``iter_main_request_records`` and
+``canonical_model_id`` already resident; ``report/notices`` imports it from here.
+``commands`` and ``prompts`` are imported for the ``/model``-command backing check;
+neither imports this module, so the import graph stays acyclic.
 """
 
 from __future__ import annotations
@@ -45,6 +29,8 @@ from ...rates import (
     CATEGORY_OUTPUT,
     canonical_model_id,
 )
+from ..commands import extract_command_names
+from ..prompts import is_user_authored_prompt
 from ..schema import (
     CONTENT_BLOCK_TOOL_RESULT,
     RECORD_TYPE_ASSISTANT,
@@ -52,19 +38,21 @@ from ..schema import (
     SYNTHETIC_MODEL_MARKER,
     Record,
     iter_agent_dispatch_blocks,
+    user_prompt_text,
 )
+from ..session import Session
 from ..subagent_models import resolve_unindexed_subagent_model
+
+_MODEL_COMMAND_NAME = "model"
 
 
 @dataclass(frozen=True)
 class ResolvedMainCall:
-    """One priced-population main call: its canonical model and token bag.
+    """One priced-population main call: canonical model and token bag.
 
     Attributes:
-        canonical_model: The canonicalised ``message.model`` of the
-            call's first record for its ``requestId``.
-        token_bag: The five-category token bag keyed by the
-            ``rates.CATEGORY_*`` constants.
+        canonical_model: Canonicalised ``message.model`` of the call's first record.
+        token_bag: Five-category token bag keyed by ``rates.CATEGORY_*`` constants.
     """
 
     canonical_model: str
@@ -73,20 +61,13 @@ class ResolvedMainCall:
 
 @dataclass(frozen=True)
 class ResolvedDispatch:
-    """One Agent dispatch with its resolved model, optional bracket, and token bag.
+    """One Agent dispatch: resolved model, optional bracket, and token bag.
 
     Attributes:
-        point_model: The point-estimate model the dispatch billed at:
-            the indexed model when the dispatch's ``agentId`` was in the
-            subagent-model index, else the unindexed resolver's
-            canonical model.
-        bracket: ``(lower_model, upper_model)`` when the unindexed
-            resolver could not commit to a single model, else ``None``.
-        token_bag: The five-category token bag keyed by the
-            ``rates.CATEGORY_*`` constants.
-        resolved_without_index: ``True`` when the dispatch's ``agentId``
-            was not in the subagent-model index and the unindexed
-            resolver was consulted.
+        point_model: Point-estimate model the dispatch billed at.
+        bracket: ``(lower, upper)`` when the resolver could not commit to one model.
+        token_bag: Five-category token bag keyed by ``rates.CATEGORY_*`` constants.
+        resolved_without_index: ``True`` when the ``agentId`` was not in the index.
     """
 
     point_model: str
@@ -97,24 +78,13 @@ class ResolvedDispatch:
 
 @dataclass(frozen=True)
 class MainCallEntry:
-    """One main call resolved to its identity, time, and token bag.
-
-    This is the per-call canonical record before turn, phase, and role
-    membership is attached; attribution lives in ``turn_series``.
+    """One main call: identity, timestamp, and token bag, before turn/phase/role attribution.
 
     Attributes:
-        request_id: The call's ``message.requestId``; the join key the
-            cost metric and any downstream analysis use to pair a call's
-            tokens (in the data artifact) with its cost (in the metrics
-            artifact).
-        canonical_model: The canonicalised ``message.model`` of the call's
-            first record, or the empty string when the field was not a
-            usable string.
-        timestamp: The timestamp of the call's first record, or ``None``
-            when that record carried none.
-        token_bag: The five-category token bag keyed by the
-            ``rates.CATEGORY_*`` constants; all zero for a call whose first
-            record lacked a usable ``message.usage`` block.
+        request_id: ``message.requestId``; join key for pairing tokens with cost.
+        canonical_model: Canonicalised ``message.model``, or empty string when absent.
+        timestamp: Timestamp of the call's first record, or ``None``.
+        token_bag: Five-category token bag; all-zero when the first record lacked usage.
     """
 
     request_id: str
@@ -123,22 +93,62 @@ class MainCallEntry:
     token_bag: dict[str, int]
 
 
+@dataclass(frozen=True)
+class ModelSwitch:
+    """One observed change of a conversation's main model.
+
+    Attributes:
+        role_key: Conversation's role key (e.g. ``planner-1``, ``manager-2``).
+        from_model: Canonical model of the previous main call.
+        to_model: Canonical model of the switching main call.
+        timestamp: Switching call's timestamp, or ``None``.
+        backed: ``True`` when a user ``/model`` command preceded the switch;
+            ``False`` for a silent fallback.
+    """
+
+    role_key: str
+    from_model: str
+    to_model: str
+    timestamp: datetime | None
+    backed: bool
+
+
+@dataclass(frozen=True)
+class ModelPurityReport:
+    """Session-level model-purity reading.
+
+    Attributes:
+        assigned_model: Modal canonical main-call model; empty string when no main calls.
+        per_model_counts: Deduped main-call count per canonical model across the session.
+        total_main_calls: Total deduped main calls across the session.
+        off_assignment_calls: Deduped calls whose model differs from ``assigned_model``.
+        switches: Every observed main-model switch, in view order then document order.
+    """
+
+    assigned_model: str
+    per_model_counts: dict[str, int]
+    total_main_calls: int
+    off_assignment_calls: int
+    switches: tuple[ModelSwitch, ...]
+
+    @property
+    def off_assignment_fraction(self) -> float:
+        """Return the off-assignment fraction, or ``0.0`` when no main calls exist."""
+        if self.total_main_calls == 0:
+            return 0.0
+        return self.off_assignment_calls / self.total_main_calls
+
+    @property
+    def silent_switches(self) -> tuple[ModelSwitch, ...]:
+        """Return the unbacked (silently fallen-back) switches, in order."""
+        return tuple(switch for switch in self.switches if not switch.backed)
+
+
 def is_main_request_record(record: Record) -> bool:
     """Return ``True`` for a record in the main-call selection population.
 
-    The rule is: a non-synthetic, non-API-error assistant record carrying
-    a string ``requestId``. ``message.model`` equal to the synthetic
-    marker, a missing or non-dict ``message``, an ``isApiErrorMessage``
-    flag, or a missing or non-string ``requestId`` each exclude the
-    record. This is the single selection rule for the main-call
-    population; the per-``requestId`` dedup is applied by
-    ``iter_main_request_records``.
-
-    Args:
-        record: A conversation record.
-
-    Returns:
-        Whether the record belongs to the main-call population.
+    Selects non-synthetic, non-API-error assistant records carrying a string
+    ``requestId``. Per-``requestId`` dedup is applied by ``iter_main_request_records``.
     """
     if record.record_type != RECORD_TYPE_ASSISTANT:
         return False
@@ -153,23 +163,7 @@ def is_main_request_record(record: Record) -> bool:
 
 
 def iter_main_request_records(records: Iterable[Record]) -> Iterator[Record]:
-    """Yield the first assistant record observed for each main-call requestId.
-
-    Walks ``records`` in order and yields one record per unique
-    ``message.requestId`` among records that satisfy
-    ``is_main_request_record``, skipping duplicates for an
-    already-yielded requestId. The dedup is local to the ``records``
-    iterable; callers wanting a global dedup must pass a single iterable
-    covering their scope.
-
-    Args:
-        records: Conversation records in document order. Mixed record
-            types are tolerated; only main-call records are yielded.
-
-    Yields:
-        The first ``Record`` carrying each unique main-call ``requestId``
-        encountered in ``records``.
-    """
+    """Yield the first assistant record for each main-call requestId, in document order."""
     seen: set[str] = set()
     for record in records:
         if not is_main_request_record(record):
@@ -182,22 +176,11 @@ def iter_main_request_records(records: Iterable[Record]) -> Iterator[Record]:
 
 
 def iter_main_call_entries(records: Iterable[Record]) -> Iterator[MainCallEntry]:
-    """Yield the canonical per-call record for each main call in ``records``.
+    """Yield one ``MainCallEntry`` per distinct main-call requestId in ``records``.
 
-    Drives off ``iter_main_request_records`` so the per-call series covers
-    exactly the same population as ``request_count`` and the per-turn
-    ``request_count``: one entry per distinct main-call ``requestId``,
-    including calls whose first record carried no usable ``message.usage``
-    block (their token bag is all zero).
-
-    Args:
-        records: Conversation records in document order. The local dedup
-            covers only this iterable, so callers pass a single iterable
-            per scope (here, one turn's records).
-
-    Yields:
-        One ``MainCallEntry`` per distinct main-call ``requestId``, in
-        record order.
+    Drives off ``iter_main_request_records``; covers the same population as
+    ``request_count``. Calls whose first record lacks a usage block emit an all-zero
+    token bag.
     """
     for record in iter_main_request_records(records):
         message = record.payload["message"]
@@ -223,22 +206,10 @@ def iter_main_call_entries(records: Iterable[Record]) -> Iterator[MainCallEntry]
 
 
 def iter_resolved_main_calls(records: Iterable[Record]) -> Iterator[ResolvedMainCall]:
-    """Yield the canonical model and token bag of each billed main call.
+    """Yield canonical model and token bag for each billed main call.
 
-    Walks ``records`` deduplicating by ``requestId`` and, for the first
-    record of each call whose ``message.model`` is a non-synthetic string
-    and whose ``message.usage`` is present, yields the call's canonical
-    model and token bag. A call whose first record lacks a usable usage
-    block contributes no entry, exactly as the per-call pricing walk does
-    today; its ``requestId`` is still consumed so a later record for the
-    same call does not re-enter the population.
-
-    Args:
-        records: Conversation records in document order.
-
-    Yields:
-        One ``ResolvedMainCall`` per billed main call, in record
-        order.
+    Skips calls whose first record lacks a usage block; ``requestId`` is still consumed
+    so a later record for the same call does not re-enter the population.
     """
     seen: set[str] = set()
     for record in records:
@@ -269,25 +240,10 @@ def iter_resolved_dispatches(
     records: list[Record],
     subagent_models_by_agent_id: dict[str, str],
 ) -> Iterator[ResolvedDispatch]:
-    """Yield the resolved model and token bag of each Agent dispatch.
+    """Yield resolved model and token bag for each Agent dispatch.
 
-    For each user record carrying a populated ``toolUseResult.usage`` that
-    matches an Agent dispatch in ``records``, resolves the model that
-    billed the dispatch. When the dispatch's ``agentId`` is in
-    ``subagent_models_by_agent_id`` the indexed model is used and no
-    bracket is set. Otherwise the unindexed resolver is consulted using
-    the dispatch context captured from the matching assistant tool_use,
-    and the resolver's bracket (when it could not commit to one model) is
-    carried through.
-
-    Args:
-        records: The records in scope.
-        subagent_models_by_agent_id: ``agentId``-keyed map from the
-            session's merged subagent-model index.
-
-    Yields:
-        One ``ResolvedDispatch`` per matched dispatch, in record
-        order.
+    Uses the subagent-model index when the dispatch's ``agentId`` is present;
+    falls back to the unindexed resolver otherwise.
     """
     contexts = _build_dispatch_contexts(records)
     for record in records:
@@ -327,16 +283,139 @@ def iter_resolved_dispatches(
 
 
 @dataclass(frozen=True)
+class _MainCall:
+    """One deduped main call reduced to the fields the purity detector reads."""
+
+    canonical_model: str
+    timestamp: datetime | None
+
+
+def compute_model_purity(session: Session) -> ModelPurityReport:
+    """Compute the session's model-purity report.
+
+    The modal canonical model across all deduped main calls is the assigned model.
+    Within each conversation, a model change is backed when a user ``/model`` command
+    falls between the previous and switching call; otherwise it is a silent fallback.
+    """
+    per_model_counts: dict[str, int] = {}
+    total_main_calls = 0
+    switches: list[ModelSwitch] = []
+
+    for view in session.views:
+        records = view.conversation.records
+        main_calls = _deduped_main_calls(records)
+        for call in main_calls:
+            per_model_counts[call.canonical_model] = (
+                per_model_counts.get(call.canonical_model, 0) + 1
+            )
+            total_main_calls += 1
+        switches.extend(_detect_switches(view.role, records, main_calls))
+
+    assigned_model = _modal_model(per_model_counts)
+    off_assignment_calls = sum(
+        count for model, count in per_model_counts.items() if model != assigned_model
+    )
+    return ModelPurityReport(
+        assigned_model=assigned_model,
+        per_model_counts=per_model_counts,
+        total_main_calls=total_main_calls,
+        off_assignment_calls=off_assignment_calls,
+        switches=tuple(switches),
+    )
+
+
+def _deduped_main_calls(records: tuple[Record, ...]) -> list[_MainCall]:
+    """Return the conversation's deduped main calls in document order."""
+    main_calls: list[_MainCall] = []
+    for record in iter_main_request_records(records):
+        message = record.payload["message"]
+        model = message.get("model")
+        canonical = canonical_model_id(model) if isinstance(model, str) else ""
+        main_calls.append(_MainCall(canonical_model=canonical, timestamp=record.timestamp))
+    return main_calls
+
+
+def _detect_switches(
+    role_key: str,
+    records: tuple[Record, ...],
+    main_calls: list[_MainCall],
+) -> list[ModelSwitch]:
+    """Detect and classify every main-model switch in one conversation.
+
+    A switch is backed when a user ``/model`` command falls within ``[prev_ts, switch_ts]``.
+    """
+    if len(main_calls) < 2:
+        return []
+    command_times = _model_command_timestamps(records)
+    switches: list[ModelSwitch] = []
+    previous = main_calls[0]
+    for call in main_calls[1:]:
+        if call.canonical_model != previous.canonical_model:
+            backed = _has_command_between(command_times, previous.timestamp, call.timestamp)
+            switches.append(
+                ModelSwitch(
+                    role_key=role_key,
+                    from_model=previous.canonical_model,
+                    to_model=call.canonical_model,
+                    timestamp=call.timestamp,
+                    backed=backed,
+                )
+            )
+        previous = call
+    return switches
+
+
+def _model_command_timestamps(records: tuple[Record, ...]) -> list[datetime]:
+    """Return sorted timestamps of user-issued ``/model`` commands.
+
+    The command is local-only and surfaces as a ``<command-name>/model</command-name>``
+    marker. Records without timestamps are dropped; they cannot position a switch.
+    """
+    times: list[datetime] = []
+    for record in records:
+        if not is_user_authored_prompt(record):
+            continue
+        if record.timestamp is None:
+            continue
+        if _MODEL_COMMAND_NAME in extract_command_names(user_prompt_text(record)):
+            times.append(record.timestamp)
+    times.sort()
+    return times
+
+
+def _has_command_between(
+    command_times: list[datetime],
+    lower: datetime | None,
+    upper: datetime | None,
+) -> bool:
+    """Return ``True`` when a ``/model`` falls in ``[lower, upper]`` (``None`` unbounded)."""
+    for command_time in command_times:
+        if lower is not None and command_time < lower:
+            continue
+        if upper is not None and command_time > upper:
+            continue
+        return True
+    return False
+
+
+def _modal_model(per_model_counts: dict[str, int]) -> str:
+    """Return the model with the highest deduped main-call count.
+
+    Ties break on the lexicographically smallest model id for determinism.
+    """
+    if not per_model_counts:
+        return ""
+    return min(per_model_counts.items(), key=lambda item: (-item[1], item[0]))[0]
+
+
+@dataclass(frozen=True)
 class _DispatchContext:
     """Context for one Agent dispatch needed by the unindexed-model resolver.
 
     Attributes:
-        subagent_type: ``input.subagent_type`` on the dispatch's tool_use
-            block, or ``None`` when the field was omitted.
-        input_model: ``input.model`` on the dispatch's tool_use block, or
-            ``None`` when the field was not set.
-        parent_main_model: The ``message.model`` of the assistant record
-            that emitted the dispatch.
+        subagent_type: ``input.subagent_type`` on the tool_use block, or ``None``.
+        input_model: ``input.model`` on the tool_use block, or ``None``.
+        parent_main_model: ``message.model`` of the emitting assistant record.
     """
 
     subagent_type: str | None
@@ -345,15 +424,7 @@ class _DispatchContext:
 
 
 def _build_dispatch_contexts(records: list[Record]) -> dict[str, _DispatchContext]:
-    """Build a tool_use_id -> dispatch context map from a record subset.
-
-    Walks non-synthetic assistant records, capturing every ``Agent``
-    tool_use block's ``input.subagent_type`` and ``input.model`` along
-    with the emitting record's ``message.model`` (the parent's main
-    model). The resulting map is the join input the unindexed-model
-    resolver consumes when an ``agentId`` is not in the subagent-model
-    index.
-    """
+    """Build a tool_use_id -> dispatch context map from ``Agent`` tool_use blocks."""
     contexts: dict[str, _DispatchContext] = {}
     for record, block in iter_agent_dispatch_blocks(records):
         parent_model = record.payload["message"].get("model")
@@ -383,14 +454,7 @@ def _matched_dispatch_tool_use_id(
     user_record: Record,
     contexts: dict[str, _DispatchContext],
 ) -> str | None:
-    """Return the tool_use_id of the Agent dispatch this user record carries.
-
-    The user record carries one ``tool_result`` block per dispatched tool
-    call; this helper returns the first ``tool_use_id`` whose matching
-    assistant ``tool_use`` block was an ``Agent`` dispatch (i.e. is keyed
-    in ``contexts``). Returns ``None`` when the user record is not an
-    Agent-dispatch result.
-    """
+    """Return the ``tool_use_id`` of the Agent dispatch this user record carries, or ``None``."""
     message = user_record.payload.get("message")
     if not isinstance(message, dict):
         return None
@@ -411,15 +475,7 @@ def _matched_dispatch_tool_use_id(
 def token_sums_dict_from_usage(usage: dict[str, Any]) -> dict[str, int]:
     """Extract the five-category token bag from a ``message.usage`` block.
 
-    Returns a dict keyed by the ``rates.CATEGORY_*`` constants, ready to
-    hand to ``rates.cost_in_usd`` or to fold into per-category sums.
-    Missing or non-integer fields contribute zero.
-
-    Args:
-        usage: One ``message.usage`` block.
-
-    Returns:
-        A dict with one entry per ``rates.CATEGORY_*`` constant.
+    Returns a dict keyed by ``rates.CATEGORY_*`` constants; missing fields contribute zero.
     """
     cache_creation = usage.get("cache_creation")
     if isinstance(cache_creation, dict):
