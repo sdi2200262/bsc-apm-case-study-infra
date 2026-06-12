@@ -1,14 +1,14 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Assemble the canonical scope-nested metrics artifact.
 
-The artifact has six top-level sections: ``session_metadata``,
-``parameters``, ``session``, ``phases``, optional ``roles`` (APM only),
-``turns``, and ``diagnostics``. Each measurement leaf is a ``{value,
+The artifact has six always-present top-level sections
+(``session_metadata``, ``parameters``, ``session``, ``phases``,
+``turns``, ``diagnostics``) plus an optional ``roles`` section emitted
+only for APM sessions. Each measurement leaf is a ``{value,
 label, constructed}`` triple so the analysis layer can iterate over
-Primary metrics to assemble its hypothesis-test family and flag every
-Constructed metric for the literature-grounding cross-check without
+``Primary`` metrics to assemble its hypothesis-test family and flag every
+``constructed`` metric for the literature-grounding cross-check without
 consulting an external index.
 
 This module owns the overall artifact assembly and the per-scope turn and
