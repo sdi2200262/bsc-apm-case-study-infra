@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from ..data.diagnostics import (
     agent_dispatch_counts,
     slash_invocation_counts,
+    subagent_file_counts,
+    turns_with_missing_uuid_count,
     unknown_commands,
 )
 from ..data.session import Session
@@ -104,7 +106,7 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
         )
 
     # REVIEW: turns with missing uuid
-    missing_uuid_count = sum(1 for t in session.turns if not t.starting_prompt.uuid)
+    missing_uuid_count = turns_with_missing_uuid_count(session)
     if missing_uuid_count > 0:
         review_notices.append(
             Notice(
@@ -184,13 +186,8 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
         )
 
     # WARNING: subagent files without resolvable model
-    subagent_files_without_model = sum(
-        view.conversation.subagent_model_index.files_without_model for view in session.views
-    )
+    subagent_files_seen, subagent_files_without_model = subagent_file_counts(session)
     if subagent_files_without_model > 0:
-        subagent_files_seen = sum(
-            view.conversation.subagent_model_index.files_seen for view in session.views
-        )
         warning_notices.append(
             Notice(
                 tag=TAG_WARNING,

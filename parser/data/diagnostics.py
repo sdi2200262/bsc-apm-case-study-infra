@@ -83,17 +83,12 @@ def build_diagnostics(
     entrypoint_value = metadata["entrypoint"]
     auth_value = metadata["auth_mode_indicator"]
     tool_result_total, tool_error_total = _tool_result_counts(session)
-    turns_with_missing_uuid = sum(1 for turn in session.turns if not turn.starting_prompt.uuid)
+    turns_with_missing_uuid = turns_with_missing_uuid_count(session)
     errored_excluded = sum(
         view.conversation.usage_index.errored_calls_excluded for view in session.views
     )
-    subagent_files_seen = sum(
-        view.conversation.subagent_model_index.files_seen for view in session.views
-    )
+    subagent_files_seen, subagent_files_without_model = subagent_file_counts(session)
     slash_markers_dropped = slash_invocation_counts(session)
-    subagent_files_without_model = sum(
-        view.conversation.subagent_model_index.files_without_model for view in session.views
-    )
     subagent_models_indexed = sum(
         len(view.conversation.subagent_model_index.by_agent_id) for view in session.views
     )
@@ -225,3 +220,23 @@ def slash_invocation_counts(session: Session) -> int:
             if promptid not in promptids_with_rendered_body:
                 markers_dropped += 1
     return markers_dropped
+
+
+def turns_with_missing_uuid_count(session: Session) -> int:
+    """Return the count of turns whose starting prompt carries no uuid."""
+    return sum(1 for turn in session.turns if not turn.starting_prompt.uuid)
+
+
+def subagent_file_counts(session: Session) -> tuple[int, int]:
+    """Return ``(files_seen, files_without_model)`` across every conversation.
+
+    Both counts sum the per-conversation subagent model index over the
+    session views: ``files_seen`` is the total subagent file count and
+    ``files_without_model`` is the subset whose model could not be
+    resolved.
+    """
+    files_seen = sum(view.conversation.subagent_model_index.files_seen for view in session.views)
+    files_without_model = sum(
+        view.conversation.subagent_model_index.files_without_model for view in session.views
+    )
+    return files_seen, files_without_model

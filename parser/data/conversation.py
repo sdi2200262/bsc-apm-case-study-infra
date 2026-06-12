@@ -274,11 +274,6 @@ def load_conversation(path: Path) -> Conversation:
     )
 
 
-def load_conversations(paths: Iterable[Path]) -> list[Conversation]:
-    """Load every conversation file in ``paths`` and return them in input order."""
-    return [load_conversation(Path(p)) for p in paths]
-
-
 def _parse_lines(path: Path) -> Iterable[Record]:
     """Yield one ``Record`` per non-empty line of ``path``."""
     with path.open("r", encoding="utf-8") as source:

@@ -21,8 +21,6 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from .schema import KNOWN_RECORD_TYPES
-
 SANITIZATION_META_KEY = "_sanitization_meta"
 
 
@@ -82,23 +80,3 @@ def is_sanitised_payload(payload: Any) -> bool:
     object at the top level (and is JSONL, not JSON).
     """
     return isinstance(payload, dict) and SANITIZATION_META_KEY in payload
-
-
-def looks_like_jsonl(path: Path) -> bool:
-    """Return ``True`` when the first non-empty line of a file decodes to a known record type.
-
-    Used to distinguish a raw Claude Code JSONL file from a
-    sanitised JSON sidecar without committing to a full parse.
-    """
-    try:
-        for line in iter_jsonl_lines(path):
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                return False
-            if not isinstance(rec, dict):
-                return False
-            return rec.get("type") in KNOWN_RECORD_TYPES
-    except OSError:
-        return False
-    return False
