@@ -8,6 +8,13 @@ indexed once and nothing is rebuilt. ``apply_session_cap`` partitions every
 conversation's parsed records at the cutoff; ``build_cap_filter`` assembles the
 ``CapFilter`` the loaded ``Session`` carries; ``cap_overrun`` and
 ``post_cap_actions`` read it back for the report layer.
+
+Every downstream aggregate, cost included, is computed from the survivors, so an
+overrunning session's cost, duration, and token sums all describe the in-cap
+window rather than the full transcript. The window is the unit of comparison
+across sessions, so measuring cost in-window is intended even though it discards
+spend that occurred past the cap; the post-cap notice surfaces that tail for
+review.
 """
 
 from __future__ import annotations
