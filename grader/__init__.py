@@ -4,15 +4,17 @@
 
 Grades a participant's ``eclass-mcp-server`` patch against the grading
 environment and writes a JSON results report scored against the rubric.
+The work is split across four layers, an acyclic ``environment`` ->
+``protocol`` -> ``scoring`` -> ``report`` flow:
 
-Subpackages:
-- ``environment``: preflight, reset, provisioning, Python/C builds.
-- ``protocol``: per-group test aggregators and the JSON-RPC client.
-- ``scoring``: rubric scoring, JSON/console reporting, notice policy.
+- ``environment``: prepares the checkout (patch, provision, builds).
+- ``protocol``: runs the MCP tests and records the per-row results.
+- ``scoring``: the rubric authority and the score aggregator.
+- ``report``: the JSON results artefact, console summary, notice policy.
 
-Command modules: ``python -m grader`` grades a patch,
-``python -m grader.notes`` manages result annotations, ``inspect.py``
-renders a results file for reading.
+The package is used through its command modules: ``python -m grader``
+grades a patch, ``python -m grader.notes`` manages result annotations,
+``python -m grader.inspect`` renders a results file for reading.
 """
 
 from __future__ import annotations

@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Protocol-test subpackage: drive a spawned MCP server and grade its replies.
+"""Protocol-test layer: drive a spawned MCP server and grade its replies.
+
+This layer runs the per-group tests against the prepared checkout and
+records each row's outcome into the ``Scorer`` the CLI supplies. It
+imports the root leaves only; it does not import ``scoring`` (the caller
+holds the scorer) nor ``environment``. The ``report`` layer reads its
+``matching`` constants to phrase lenient-acceptance notices.
 
 Submodules:
 

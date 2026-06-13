@@ -4,7 +4,8 @@
 
 Reads a submission's Claude Code CLI JSONL conversation files and emits
 the data, metrics, and schema artifacts for the thesis case study. The
-work is split across three layers:
+work is split across three layers, an acyclic ``data`` -> ``metrics`` ->
+``report`` flow:
 
 - ``data``: the sole JSONL reader; record schema, conversation and
   session assembly, and the per-scope aggregation series.

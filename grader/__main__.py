@@ -35,7 +35,8 @@ from .environment import (
 )
 from .errors import GraderError
 from .protocol import groups, set_compact_emission
-from .scoring import reporting, scoring
+from .report import build, render
+from .scoring import scoring
 
 GroupRunner = Callable[
     [Path, Path, bool], dict[str, tuple[bool, str, str, str | None, float | None]]
@@ -144,7 +145,7 @@ def _run(args: argparse.Namespace) -> int:
         patch_name = patch_path.stem
 
     scorer = scoring.Scorer(partial_floor=config.partial_floor)
-    paths = reporting.report_paths(eclass_root.parent, patch_name, compact=args.compact_json)
+    paths = build.report_paths(eclass_root.parent, patch_name, compact=args.compact_json)
 
     if patch_path is not None:
         log.info(f"patch: applying {patch_path.name}")
@@ -310,13 +311,13 @@ def _skip_remaining(
 
 
 def _write_reports(
-    paths: reporting.ReportPaths,
+    paths: build.ReportPaths,
     scorer: scoring.Scorer,
     verbose: bool,
 ) -> None:
     """Write the JSON report and print the console summary."""
-    reporting.write_report(paths, scorer)
-    reporting.print_console_summary(paths, scorer, verbose)
+    build.write_report(paths, scorer)
+    render.print_console_summary(paths, scorer, verbose)
 
 
 def _build_parser() -> argparse.ArgumentParser:

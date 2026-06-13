@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Sandbox-preparation layer.
+"""Sandbox-preparation layer: readies the checkout the run grades against.
+
+This is the most upstream layer: it applies the patch, provisions
+credentials and certificates, and builds both implementations, leaving a
+ready tree for ``protocol`` to exercise. It imports the root leaves only
+and is driven by the CLI entrypoint; no other layer imports it.
 
 Submodules:
 

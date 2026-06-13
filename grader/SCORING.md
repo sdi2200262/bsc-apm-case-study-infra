@@ -114,7 +114,7 @@ sum), and `max`.
 
 ## Review and warning flags
 
-[scoring/notices.py](scoring/notices.py) prints human-review flags
+[report/notices.py](report/notices.py) prints human-review flags
 after the scores, in two categories:
 
 - `REVIEW`: a row passed via a lenient form, or earned partial credit.

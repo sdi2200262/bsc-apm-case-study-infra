@@ -217,11 +217,14 @@ grader/
 │       ├── general_announcements.py   # P.3 / C.4 assertions
 │       ├── memory.py                  # C.5 multi-step scenarios under valgrind
 │       └── config_surface.py          # C.1.5 / C.1.6 surface-isolated probes
-└── scoring/                           # scoring + output layer
+├── scoring/                          # scoring layer: rubric authority + aggregation
+│   ├── __init__.py
+│   ├── rubric.py                      # the 90 test definitions and their groupings
+│   └── scoring.py                     # the Scorer and the point-budget guard
+└── report/                           # report layer: artefact, console, notices
     ├── __init__.py
-    ├── rubric.py                      # the 90 test definitions and their groupings
-    ├── scoring.py                     # the Scorer and the point-budget guard
-    ├── reporting.py                   # JSON and console report writers
+    ├── build.py                       # JSON results artefact writer
+    ├── render.py                      # console grading summary
     └── notices.py                     # REVIEW/WARNING notice policy
 ```
 

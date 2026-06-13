@@ -171,7 +171,7 @@ PYTHON_TESTS: tuple[TestDefinition, ...] = PYTHON_BASELINE_TESTS + PYTHON_FEATUR
 C_FEATURE_TESTS: tuple[TestDefinition, ...] = (
     C_COURSE_TESTS + C_GENERAL_TESTS + C_MULTISTEP_MEMORY_TESTS + C_SCENARIO_MEMORY_TESTS
 )
-# Combined alias used by reporting.py for the "C MEMORY" report section.
+# Combined alias used by report.render for the "C MEMORY" report section.
 C_MEMORY_TESTS: tuple[TestDefinition, ...] = C_MULTISTEP_MEMORY_TESTS + C_SCENARIO_MEMORY_TESTS
 
 C_TESTS: tuple[TestDefinition, ...] = C_INFRA_TESTS + C_BASELINE_TESTS + C_FEATURE_TESTS

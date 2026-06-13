@@ -30,7 +30,7 @@ from ..protocol.matching import (
     LENIENT_MODES,
     MISSING_CREDS_DOCUMENTED,
 )
-from .scoring import Scorer
+from ..scoring.scoring import Scorer
 
 TAG_REVIEW = "REVIEW"
 TAG_WARNING = "WARNING"
