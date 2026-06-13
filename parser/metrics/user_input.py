@@ -4,18 +4,12 @@
 
 Two populations of user input drive this dimension: the turn-starting
 prompts that open a conversational turn, and the delivered steers the user
-queued mid-turn that reached the model. The four counts of those
-populations are data and live in ``data/aggregate/counts``, which also
-attaches each input's bucket label and character length as a series.
-
-This module folds those series into the dimension's metrics: the share of
-each input-size bucket across three populations (turn prompts alone,
-delivered steers alone, and their union), and the mean character magnitude
-per bucket within the turn-prompt and delivered-steer populations. The
-union distribution is the headline metric because it characterises the
-full surface area of user-driven coordination work the model processed.
-Folding the pre-bucketed series here keeps the metric layer from reading
-the conversation records.
+queued mid-turn that reached the model. The data layer
+(``data/aggregate/counts``) attaches each input's bucket label and
+character length as a series; this module folds those pre-bucketed series
+into the dimension's metrics. The union distribution is the headline
+metric, characterising the full surface area of user-driven coordination
+work the model processed.
 """
 
 from __future__ import annotations

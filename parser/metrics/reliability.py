@@ -4,18 +4,16 @@
 
 Anthropic's API marks a failed tool invocation by setting
 ``is_error: true`` on the ``tool_result`` content block returned to the
-model; successful invocations either omit the field or set it to
-``false``. The convention is uniform across every tool the Claude Code
-agent can invoke, making ``is_error != True`` a single reliable success
-signal across the entire tool surface.
+model; successful invocations omit the field or set it to ``false``. The
+convention is uniform across every tool the Claude Code agent can invoke,
+making ``is_error != True`` a single reliable success signal across the
+whole tool surface.
 
-The success rate is the share of tool invocations whose result indicated
-success, over every tool result the agent received in scope. The two
-counts are data and are produced by ``data/aggregate/counts``; this module
-divides them. The rate is reported as a supplementary descriptor: its
-value is dominated by the underlying model's tool-use capability rather
-than by framework choice, so it is reported descriptively rather than
-hypothesis-tested.
+The two counts that form the rate are data, produced by
+``data/aggregate/counts``; this module divides them. The rate is a
+supplementary descriptor: its value is dominated by the underlying model's
+tool-use capability rather than by framework choice, so it is reported
+descriptively rather than hypothesis-tested.
 """
 
 from __future__ import annotations

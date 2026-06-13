@@ -3,18 +3,13 @@
 """Human-readable renderers for the parser's three terminal modes.
 
 The CLI in ``__main__`` drives ``--inspect``, ``--economic``, and
-``--process`` against a loaded session and prints a summary that
-fits a terminal. The summary shapes are intentionally different
-from the canonical metrics artifact: the artifact is a single
-nested JSON document optimised for downstream consumers, while
-these renderers walk the same in-memory session and lay out
-counts, distributions, and invariants in a form a human can read
-at a glance during development or troubleshooting.
+``--process`` against a loaded session and prints a terminal-fit summary
+for development and troubleshooting. These views walk the same in-memory
+session as the canonical artifact (assembled in ``build``) but lay it out
+for a human reader rather than a downstream consumer.
 
 Each renderer is a pure side-effect function that emits through the
-terminal logging module and returns ``None``; they share no state
-with the CLI beyond the loaded session and the rate table their
-mode requires.
+terminal logging module and returns ``None``.
 """
 
 from __future__ import annotations
@@ -167,11 +162,9 @@ def print_inspection(session: Session) -> None:
 def print_economic(tokens: TokenData, cost: CostMetrics, rate_table: RateTable) -> None:
     """Render the session-scope economic metric block to stdout.
 
-    The output groups the three populations the parser distinguishes
-    (main API calls, delegated subagent dispatches, and their sum),
-    shows the modal main-call model alongside the rate-table
-    metadata, and reports the per-model token distribution and the
-    delegated-attribution mix that drove the headline cost figure.
+    Lays out per-category token volumes across the three populations the
+    parser distinguishes (main calls, delegated dispatches, their sum), the
+    rate-table metadata, the per-model token distribution, and the cost.
     """
     log.info("economic dimension (session scope):")
     log.info(f"  modal main model:             {tokens.model or '(none)'}")

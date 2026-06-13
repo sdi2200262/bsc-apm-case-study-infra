@@ -2,18 +2,12 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Bare-value leaf rendering for the data and metrics artifacts.
 
-Each measurement in the two per-session artifacts is a bare ``name: value``
-leaf. The kind (data versus metric), the analysis label, and the metric
-formula are not repeated per leaf: they live once in ``parser.contract``
-and are emitted to ``parser_schema.json`` by ``--schema``. This module owns
-only the per-dimension renderers that turn the computed data and metric
-blocks into flat ``name: value`` dicts.
-
-The renderers are grouped by artifact: data renderers (token sums, counts)
-feed ``parser_data.json``; metric renderers (cost, time statistics, bucket
-shares, the success rate) feed ``parser_metrics.json``. An empty scope
-renders zero values so the shape is uniform; consumers filter empty scopes
-by ``turn_count == 0`` rather than by missing keys.
+This module owns the per-dimension renderers that turn computed data and
+metric blocks into flat ``name: value`` dicts. The kind, analysis label,
+and formula are not repeated per leaf: they live in ``parser.contract``.
+The renderers are grouped by which of the two artifacts they feed (the
+data/metrics split is owned by ``build``); an empty scope renders zero
+values to keep the per-scope shape uniform.
 """
 
 from __future__ import annotations
@@ -86,10 +80,6 @@ def model_token_distribution_leaves(tokens: TokenData | None) -> dict[str, dict[
 def request_count_leaves(counts: RequestCounts) -> dict[str, int]:
     """Render the per-scope request-count data leaves.
 
-    Request counts are emitted once, in the data artifact: a request is the
-    same population whether used as a cost denominator or a model-action
-    count.
-
     Args:
         counts: The scope's request counts.
 
@@ -97,6 +87,8 @@ def request_count_leaves(counts: RequestCounts) -> dict[str, int]:
         The ``request_count``, ``delegated_request_count``, and
         ``requests_with_tool_use_count`` leaves.
     """
+    # Emitted once, in the data artifact: a request is the same population
+    # whether used as a cost denominator or a model-action count.
     return {
         "request_count": counts.request_count,
         "delegated_request_count": counts.delegated_request_count,

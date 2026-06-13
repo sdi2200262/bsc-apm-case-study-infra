@@ -5,21 +5,14 @@
 Cost is the metric layer's only economic computation. The data layer
 resolves which model billed each main call and each Agent dispatch and
 carries the token bag (``data/aggregate/call_records``); this module
-prices each entry against that model's row in the rate table and sums.
-It does no record walk of its own.
+prices each entry against that model's row in the rate table and sums. The
+metric layer reads no transcript records of its own (see ``metrics``).
 
-Two populations are priced. Each main call is priced at its own
-canonicalised ``message.model``. Each delegated dispatch is priced at the
-subagent's resolved model: the indexed model when the dispatch's
-``agentId`` was in the subagent-model index, otherwise the unindexed
-resolver's model, which may be a ``(lower, upper)`` rate bracket for an
-unknown custom subagent. The cost output mirrors that branch: a scope
-whose every dispatch was priced deterministically reports a single
-``cost_usd`` and ``None`` bounds; a scope with at least one bracketed
-dispatch reports ``None`` for ``cost_usd`` and the bound pair (every
-deterministic dispatch contributes its certain price to both bounds, each
-bracketed dispatch its lower-model price to the lower bound and its
-upper-model price to the upper bound).
+Two populations are priced: each main call at its own canonicalised model,
+each delegated dispatch at the subagent's resolved model, which may be a
+``(lower, upper)`` rate bracket for an unknown custom subagent. A bracketed
+dispatch turns the scope's cost from a point into a bound pair; the exact
+output shape is documented on ``CostMetrics``.
 """
 
 from __future__ import annotations
@@ -60,6 +53,14 @@ def compute_cost_for_records(
     subagent_models_by_agent_id: dict[str, str],
 ) -> CostMetrics:
     """Fold the rate table over a record subset's resolved call series.
+
+    Each main call is priced at its own canonicalised model and each
+    delegated dispatch at its resolved model. A certain cost (every main
+    call, and every dispatch priced deterministically) is added to both
+    bounds; a bracketed dispatch adds its lower-model price to the lower
+    bound and its upper-model price to the upper bound. The scope reports a
+    single ``cost_usd`` when no dispatch was bracketed, otherwise the bound
+    pair with ``cost_usd`` set to ``None``.
 
     Args:
         records: The records to price.

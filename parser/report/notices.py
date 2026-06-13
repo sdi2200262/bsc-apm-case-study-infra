@@ -63,7 +63,7 @@ class Notice:
 def collect_notices(session: Session) -> tuple[Notice, ...]:
     """Return every applicable notice for ``session``, REVIEW before WARNING.
 
-    A pure aggregator (no I/O or mutation); conditions check in a fixed order.
+    A pure aggregator: no I/O, no mutation of ``session``.
     """
     review_notices: list[Notice] = []
     warning_notices: list[Notice] = []

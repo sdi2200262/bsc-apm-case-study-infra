@@ -2,32 +2,25 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Assemble the data and metrics artifacts from a session.
 
-The parser emits two per-session artifacts with bare ``name: value``
-leaves. ``parser_data.json`` carries the data: the identity block, the
-per-scope token sums, counts, tool-result counts, and per-model token
-distribution, the per-call canonical series, and the per-turn series.
-``parser_metrics.json`` carries
-the metrics: per-scope cost, time statistics, user-input bucket
-distributions, and the tool success rate. A third artifact,
-``parser_schema.json``, is the field contract and is emitted once by the
-``--schema`` mode, not per session.
+The parser emits two per-session artifacts of bare ``name: value`` leaves,
+and this module owns that two-artifact split. ``parser_data.json`` carries
+the data (identity, token sums, counts, the per-call and per-turn series);
+``parser_metrics.json`` carries the metrics (cost, time statistics, bucket
+distributions, the success rate). A third artifact, ``parser_schema.json``,
+is the field contract and is emitted once by ``--schema``, not per session.
+The two per-session artifacts join downstream on ``request_id``.
 
-This module owns the overall artifact assembly and the per-scope turn and
-record selection. It computes nothing transcript-derived itself: each value
-is sourced from the data layer (token sums, counts, the per-call and
-per-turn series, identity) or the metrics layer (cost, time
-statistics, bucket shares, the success rate), and each leaf's kind and label
-live in ``parser.contract``, not in the artifacts.
+Beyond the split, this module owns the per-scope turn and record selection.
+It computes nothing transcript-derived (see ``report``); each leaf's kind
+and label live in ``parser.contract``, and leaf formatting lives in
+``leaves``.
 
 Naming convention. Every artifact key is snake_case. Per-conversation
-identity (role key, session id, first slash command, first record
-timestamp, record count) is collected into a single ``conversations`` array
-under ``identity``, so downstream consumers iterate one array regardless of
-framework. The ``other`` phase is rendered with zeroed values when the
-session has no unmarked-phase prompts so the per-scope shape is uniform
-across sessions; analysis consumers filter empty scopes by
-``turn_count == 0`` rather than by missing keys. The two artifacts join
-downstream on ``request_id``.
+identity is collected into a single ``conversations`` array under
+``identity``, so downstream consumers iterate one array regardless of
+framework. The ``other`` phase and other empty scopes render zeroed values
+for a uniform per-scope shape; consumers filter them by ``turn_count == 0``
+rather than by missing keys.
 """
 
 from __future__ import annotations
