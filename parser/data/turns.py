@@ -2,12 +2,14 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Derive conversational turns from a Claude Code conversation's record stream.
 
-A JSONL assistant record is not a conversational turn. One API
-streaming response writes one record per content block (one for
-``thinking``, one for ``text``, one for each ``tool_use``); a
-conversational turn (one user prompt, one model response, possibly with
-tool work in the middle) spans many such records. This module groups
-records into ``Turn`` instances bounded by turn-starting user prompts.
+This module owns the ``Turn`` model and ``derive_turns``, which groups a
+conversation's records into turns bounded by turn-starting user prompts.
+
+A JSONL assistant record is not a conversational turn. One API streaming
+response writes one record per content block (one for ``thinking``, one
+for ``text``, one for each ``tool_use``); a conversational turn (one user
+prompt, one model response, possibly with tool work in the middle) spans
+many such records.
 
 Turn-starting prompts come in two shapes. A free-typed user record is
 turn-starting on its own. A user-driven slash invocation is turn-starting
@@ -19,24 +21,13 @@ anchor: it carries the user's invocation including the command name and
 arguments and feeds the bucket classifier directly via the
 ``<command-name>`` tag.
 
-Three group-level guards keep platform bookkeeping out of the
-turn-starting set. A slash marker whose ``promptId`` group has no
-rendered body never reached the model: this covers local-only commands
-(``/model``, ``/effort``, ``/clear``) and typos that hit the local
-parser. A free-typed-shaped error string in a ``promptId`` group whose
-only sibling is a caveat is the ``Unknown command: ...`` line Claude
-Code emits for typos. A user record carrying ``sourceToolUseID`` is the
-rendering of a Skill the model itself invoked via the Skill tool, which
-is model-driven content rather than a user-authored prompt.
-
-A delivered steer extends the ongoing turn rather than opening a new
-one: a queued-then-delivered prompt reaches the model mid-turn. The set
-of delivered-steer dequeue records is provided by the loader's
-queue-lifecycle replay.
-
-Compact-summary user records are excluded from turn-starting
-consideration: they are Claude Code's own context-rebuild artefact, not
-user-authored prompts.
+The per-record user-authored shape predicates live in ``prompts``; the
+group-level guards that need conversation-level ``promptId`` context are
+applied here in ``_is_turn_starting``. This module also owns the
+delivered-steer rule for turns: a queued-then-delivered prompt extends
+the ongoing turn rather than opening a new one, keyed off the
+delivered-steer dequeue records the loader's queue-lifecycle replay
+produces.
 """
 
 from __future__ import annotations

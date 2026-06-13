@@ -2,40 +2,29 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Subagent-model attribution: indexed lookup plus the documented fallback resolver.
 
-The canonical case-study submission ships a sibling
-``<sessionId>/subagents/agent-<agentId>.jsonl`` next to every main
-session JSONL. Each such file's first non-synthetic assistant record
-carries the actual ``message.model`` the subagent ran on; the parent's
-``toolUseResult.usage`` rolls up the subagent's token totals but does
-not name the model. ``build_subagent_model_index`` reads the sibling
-files and returns a ``agentId -> canonical model id`` map, and the cost
-layer prices each delegated dispatch against the matched model's rates
-rather than the parent's. This is the canonical
-path and produces a deterministic single cost.
+This module resolves which model a delegated subagent dispatch ran on, so
+the cost layer can price the dispatch against that model's rates rather
+than the parent's, and owns the two paths that do it.
 
-Some case-study submissions arrived without those sibling files. For
-those, ``resolve_unindexed_subagent_model`` is the documented fallback
-the parser uses: it inspects the dispatch's ``input.subagent_type`` and
-``input.model`` from the main JSONL, looks up the documented default
-for known subagent types, and otherwise frames the cost as a
-``(haiku, opus)`` bracket so the cost output is honest about its
-unverified assumption rather than committing to a single number.
+The canonical path, ``build_subagent_model_index``, reads the sibling
+``<sessionId>/subagents/agent-<agentId>.jsonl`` files Claude Code ships
+next to every main session JSONL: each carries the subagent's actual
+``message.model`` in its first non-synthetic assistant record (the
+parent's ``toolUseResult.usage`` rolls up the token totals but does not
+name the model). It returns an ``agentId -> canonical model id`` map and
+produces a deterministic single cost.
 
-The resolver honours Claude Code's documented precedence
-(https://docs.claude.com/en/docs/claude-code/sub-agents): a
-per-invocation ``input.model`` overrides every registry lookup, the
-subagent's frontmatter default applies otherwise, and the frontmatter
-default falls through to the main conversation's model when set to
-``inherit``. The parser cannot read environment variables or the
-subagent's frontmatter from the participant's host, so this module
-registers the public defaults of every subagent type the case study
-expects (Claude Code built-ins plus the one APM framework agent) and
-brackets the cost for any custom subagent type it does not know.
+The fallback path, ``resolve_unindexed_subagent_model``, handles
+submissions that arrived without those sibling files by applying Claude
+Code's documented model-resolution precedence against the registries
+declared at module level. The precedence rules and the bracketing of
+unknown subagent types are documented on that function; the registries it
+reads carry their sourcing in inline comments.
 
-The date-suffixed model id Claude Code writes on subagent records
-(e.g. ``claude-haiku-4-5-20251001``) is normalised through
-``rates.canonical_model_id`` so the result matches the family-keyed
-entries in ``rates.yaml``.
+Date-suffixed model ids Claude Code writes on subagent records
+(e.g. ``claude-haiku-4-5-20251001``) are normalised through
+``rates.canonical_model_id`` so results match the family-keyed entries in
+``rates.yaml``.
 """
 
 from __future__ import annotations

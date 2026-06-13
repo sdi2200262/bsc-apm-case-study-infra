@@ -18,15 +18,17 @@ records:
 1. Parse every JSONL line into a typed ``Record`` (via
    ``schema.parse_record``).
 2. Build the ``RequestUsageIndex`` deduplicating ``message.usage`` by
-   ``requestId``. Claude Code emits one record per content block of a
-   streaming response, each carrying the same ``usage``; summing per
-   record would multiply each call's tokens by the block count. The
-   dedup index is the canonical per-call usage for token-sum metrics.
+   ``requestId``, the canonical per-call usage for token-sum metrics; the
+   dedup rationale is on ``_build_usage_index`` and ``RequestUsageIndex``.
 3. Replay the queue lifecycle to classify each ``queue-operation`` record
    as a ``delivered`` steer, an ``abandoned`` steer, or (for
-   system-generated enqueues) filtered out. Imbalances are recorded as
-   warnings, not errors, so the parser continues and surfaces them in
-   diagnostics.
+   system-generated enqueues) filtered out, emitting one ``SteerEvent``
+   per resolved user enqueue. Imbalances are recorded as warnings, not
+   errors, so the parser continues and surfaces them in diagnostics.
+
+Steer classification (delivered vs abandoned) is owned here; how a
+delivered steer affects turn boundaries is owned by ``turns``, which
+reads these ``SteerEvent`` records.
 """
 
 from __future__ import annotations

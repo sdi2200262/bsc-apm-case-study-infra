@@ -2,79 +2,41 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Slash-command vocabulary for the two frameworks the case study compares.
 
-The Agentic Project Management (APM) framework defines nine
-participant-facing slash commands. Three of them (``apm-1-initiate-planner``,
+This module owns the command-name tables and the predicates over them:
+the APM role and known-command sets, the Spec-kit phase and known-command
+tables, the Claude Code built-in sets, and the helpers that classify a
+command name's framework, role, or phase. The downstream classifiers
+consume these tables; this module does not run them.
+
+APM vocabulary lives here in full. The framework defines nine
+participant-facing slash commands; three (``apm-1-initiate-planner``,
 ``apm-2-initiate-manager``, ``apm-3-initiate-worker``) are role
-initiators: the first such command in a conversation file fixes that
-file's role for the whole session. The remaining six commands continue
-work within an existing role's conversation.
+initiators that fix a conversation's role for the whole session, and the
+other six continue work within an existing role. APM phase is
+role-derived (a Planner conversation is all planning, Manager and Worker
+all implementation), so there is no APM command-to-phase table; the
+per-conversation role-to-phase derivation lives in ``apm_roles``.
 
-In APM, the conversation's role determines the phase. A Planner
-conversation is entirely planning; Manager and Worker conversations are
-entirely implementation. Individual commands within a conversation do
-not change the phase, so APM has no command-to-phase table at the
-classifier level. The set of recognised APM command names is kept here
-to drive the protocol-bucket classifier and to surface unknown
-``apm-*`` commands in diagnostics.
+Spec-kit commands reach the JSONL in the hyphenated form Claude Code uses
+for the spec-kit integration's skills (``/speckit-specify``,
+``/speckit-git-commit``), not spec-kit's own dotted canonical names, and
+the tables here match that form. The forward-only Spec-kit phase ratchet
+that consumes ``SPECKIT_PHASE_BY_COMMAND`` is owned by ``speckit_phases``;
+see there for the ratchet mechanics. The five git-extension commands are
+recognised vocabulary but absent from the phase table because they are
+repo bookkeeping or out-of-band hooks, not phase events.
 
-The Spec Kit framework's commands are surfaced in Claude Code as slash
-commands by the spec-kit Claude integration. Spec-kit's own canonical
-names use dotted notation (``speckit.specify``, ``speckit.git.commit``);
-the integration installs them as Claude Code skills with dots replaced
-by hyphens (``/speckit-specify``, ``/speckit-git-commit``), and the
-integration's own hook note instructs the model to use the hyphenated
-form when constructing slash commands. The JSONL records this parser
-consumes therefore carry the hyphenated form, and the table below
-matches that form.
-
-Two installable surfaces ship: the core template set with nine commands
-(``analyze``, ``checklist``, ``clarify``, ``constitution``,
-``implement``, ``plan``, ``specify``, ``tasks``, ``taskstoissues``) and
-the git extension with five (``git-commit``, ``git-feature``,
-``git-initialize``, ``git-remote``, ``git-validate``). Of the core
-commands, only ``speckit-implement`` sits on the implementation side;
-the other eight are planning. The five git-extension commands are
-not phase-defining work: they are repo bookkeeping or out-of-band hooks
-(per the upstream extension's own description, ``speckit.git.commit``
-runs as a hook around core commands rather than as a phase event), so
-they are recognised by the known-command set but do not participate in
-phase assignment. Phase assignment in Spec-kit is per-prompt and follows
-a forward-only ratchet with surgical exceptions: once a prompt advances
-the ratchet to ``implementation``, later ``planning`` commands count
-themselves as planning but do not move the ratchet back. The
-command-to-phase table is consumed by the per-prompt classifier in the
-session assembler.
-
-A third vocabulary lives alongside the framework tables: Claude Code's
-own built-in slash commands. The platform ships dozens of built-ins,
-split here into two disjoint sets by whether invoking the command
-issues a model request:
-
-- Local-only built-ins act on the CLI, session, UI, or configuration
-  and send no payload to the model: session control (``/exit``,
-  ``/clear``, ``/compact``, ``/resume``), configuration (``/model``,
-  ``/effort``, ``/permissions``, ``/config``, ``/theme``), and
-  diagnostic surfaces (``/status``, ``/usage``, ``/stats``, ``/doctor``).
-- Model-calling built-ins are bundled skills or commands that render a
-  body to the model and drive a model request (``/review``, ``/loop``,
-  ``/simplify``, ``/init``, ``/security-review``).
-
-``CLAUDE_CODE_BUILTINS`` is the derived union of the two sets: it is the
-recognition surface for ``is_known_command``, unchanged by the split.
-The split exists because steer detection in the schema layer excludes a
-queued local-only command (a queued ``/ide`` controls the CLI and never
-reaches the model, so it is not a steer) while a queued model-calling
-command stays a real steer.
-
-Source: https://code.claude.com/docs/en/commands. A participant typing
-any built-in produces a slash-command marker that the parser must
-recognise as a known invocation; otherwise every such occurrence
-pollutes the ``unknown_commands_observed`` diagnostic. Built-ins are
-classified separately from the framework tables: they do not move the
-Spec-kit phase ratchet, do not assign an APM role, and do not count
-toward the framework protocol bucket. The case study compares the two
-frameworks, not the platform; built-ins are platform vocabulary the
-participant happens to use alongside the framework they are running.
+A third vocabulary is Claude Code's own built-in slash commands, split
+into two disjoint sets (``LOCAL_ONLY_BUILTINS`` and
+``MODEL_CALLING_BUILTINS``) whose recognition union is
+``CLAUDE_CODE_BUILTINS``. Which set a given command falls in lives in the
+inline comments next to each constant below; the split exists because the
+schema layer's steer detection treats a queued local-only command as a
+non-steer and a queued model-calling command as a real steer (see
+``schema``). Built-ins are recognised so they do not pollute the
+``unknown_commands_observed`` diagnostic, but they never move the Spec-kit
+ratchet, assign an APM role, or count toward the framework protocol
+bucket: the study compares the two frameworks, not the platform.
 """
 
 from __future__ import annotations

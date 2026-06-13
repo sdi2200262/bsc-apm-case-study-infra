@@ -12,25 +12,23 @@ continuations).
 Three responsibilities sit here, above the per-conversation loader work
 and the framework role and phase computation:
 
-1. Number each APM conversation's role and key it. The role is
-   determined by ``apm_roles.assign_apm_roles``; this module numbers
-   roles sequentially by first-record timestamp ascending, with no
-   parsing of participant-supplied identifiers. Participants type worker
-   identifiers by hand on ``/apm-3-initiate-worker <id>``, so a typo in a
-   re-invocation would split one semantic worker into two keys
-   (``frontend-agent`` and ``fronend-agent``) if the parser keyed on the
-   id. Sequential numbering avoids that; the verbatim first command of
-   each conversation is preserved per file so a reviewer can spot two
-   role-keys with typo-different first commands and decide to merge them.
+1. Number each APM conversation's role and key it. The role comes from
+   ``apm_roles.assign_apm_roles``; this module numbers roles sequentially
+   by first-record timestamp ascending, never keying on a
+   participant-supplied identifier. Worker identifiers are typed by hand
+   on ``/apm-3-initiate-worker <id>``, so keying on the id would split one
+   semantic worker into two on a re-invocation typo. The verbatim first
+   command of each conversation is preserved so a reviewer can spot and
+   merge typo-different role-keys.
 
 2. Partition each framework assigner's per-record phase output back per
-   conversation file and attach it to the view. This module does no phase
-   computation of its own.
+   conversation file and attach it to the view; no phase computation of
+   its own.
 
 3. Compute the session identity facts surfaced through the report layer's
    session-metadata block.
 
-The session-duration cap is applied here at load time but lives in
+The session-duration cap applied here at load time lives in
 ``session_cap``; ``load_session`` calls it before view assembly.
 """
 

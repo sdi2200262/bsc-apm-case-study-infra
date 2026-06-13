@@ -2,25 +2,20 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Predicates that classify the shape of a Claude Code user record.
 
-A ``user`` record in the JSONL rollout can carry several distinct
-kinds of content. Most are bookkeeping the platform writes around
-the user's own input rather than the input itself: the wrapper
-that introduces a local-command run, the echo of a slash
-invocation, the stdout of a local-only command, the rendered body
-the platform delivers to the model when the slash invocation
-expands into a Skill body, the rendering of a Skill the model
-itself invoked via the Skill tool, the bracketed marker the
-platform writes when the user presses Esc to interrupt a tool
-execution. Identifying each kind from the schema fields lets the
-rest of the package distinguish the user's sent prompts from the
-platform's own narration around them.
+A ``user`` record can carry the user's own input or one of several kinds
+of platform bookkeeping written around it: the local-command caveat
+wrapper, the slash-invocation marker (echo), local-command stdout/stderr,
+the platform-rendered slash body, a model-invoked Skill rendering, and
+the user-interrupt marker. The predicates here read one record at a time
+and let the rest of the package tell the user's sent prompts apart from
+that narration; each predicate documents the kind it matches and why it
+is or is not user-authored.
 
-The predicates here read a single record at a time. Two failure
-modes need conversation-level context (the ``promptId`` group of
-sibling records) and live in ``turns.derive_turns`` instead: a
+Two failure modes need conversation-level context (the ``promptId`` group
+of sibling records) and live in ``turns.derive_turns`` instead: a
 slash-marker whose paired rendered body is missing, and the
-free-typed-shaped error string (``Unknown command: ...``) Claude
-Code emits when the user types a malformed slash invocation.
+free-typed-shaped error string (``Unknown command: ...``) Claude Code
+emits for a malformed slash invocation.
 """
 
 from __future__ import annotations

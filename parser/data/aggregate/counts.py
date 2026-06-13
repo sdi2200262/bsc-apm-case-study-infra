@@ -4,22 +4,17 @@
 
 Every count the parser exposes is data: a value read or tallied from the
 transcript whose only freedom is which records are selected. This module
-owns them, grouped by population:
-
-- Requests: distinct non-synthetic non-error main ``requestId`` values,
-  Agent dispatch blocks, and requests whose response carried any tool use.
-- Subagents: Agent dispatch blocks, rolled-up subagent tool-use counts,
-  and model-invoked Skill renderings.
-- Tools: ``tool_result`` blocks and the subset carrying ``is_error``.
-- Turns: the count of turns in scope.
-- User inputs: turn-prompt and steer counts, and the per-input bucket
-  label and character length attached as a series so the user-input
-  metric can fold shares and magnitudes without re-reading the records.
+owns those counts: the request, subagent, tool, and user-input groups as
+one dataclass each (see each dataclass's ``Attributes`` for the exact
+populations), the turn count as the standalone ``turn_count`` function,
+and the per-input ``BucketedInput`` bucket-and-length series the
+user-input metric folds without re-reading records.
 
 The request, subagent, and tool counts share their selection rules with
-the token and reliability folds: the main-call rule lives once in
-``call_records`` and is consumed here, and the ``tool_result`` rule is the
-same block predicate the reliability rate divides over.
+the token and reliability folds rather than redefining them: the main-call
+rule lives once in ``call_records`` and is consumed here, and the
+``tool_result`` rule is the same block predicate the reliability rate
+divides over.
 """
 
 from __future__ import annotations

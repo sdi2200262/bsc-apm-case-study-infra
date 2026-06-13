@@ -9,15 +9,12 @@ and Worker are implementation), with records before the role is
 initiated phased ``other``.
 
 A role is initiated when its initiation skill loads, by either of two
-mechanisms; the first by record order fixes the role:
-
-1. The participant types the role command and Claude Code expands it
-   (a ``<command-name>`` marker in a user prompt).
-2. The model invokes the role skill through the ``Skill`` tool when
-   the typed command did not expand (an assistant ``Skill`` tool_use).
-
-The structural detection of a ``Skill`` tool_use is shared with the
-Spec-kit phase assigner through ``commands.skill_tool_use_name``.
+mechanisms; the first by record order fixes the role: the participant
+types the role command and Claude Code expands it (a ``<command-name>``
+marker in a user prompt), or the model invokes the role skill through the
+``Skill`` tool when the typed command did not expand (an assistant
+``Skill`` tool_use). The structural detection of a ``Skill`` tool_use is
+owned by ``commands.skill_tool_use_name``; see there.
 """
 
 from __future__ import annotations
