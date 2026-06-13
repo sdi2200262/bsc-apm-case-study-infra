@@ -11,7 +11,7 @@ Submodules:
 
 - ``build``: assemble the scope-nested metrics artifact.
 - ``leaves``: value formatting for the artifact leaves.
-- ``render``: the ``--inspect`` / ``--economic`` / ``--process`` views.
+- ``render``: the ``--economic`` / ``--process`` views.
 - ``notices``: session-attention ``Notice`` collection and rendering.
 """
 

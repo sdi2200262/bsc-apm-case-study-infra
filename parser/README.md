@@ -39,9 +39,6 @@ python -m parser --schema -o out_dir
 python -m parser.inspect out_dir/parser_data.json out_dir/parser_metrics.json \
     --schema out_dir/parser_schema.json
 
-# Counts-and-events summary of a loaded session
-python -m parser <submission-path> --framework {apm,speckit} --inspect
-
 # Economic or process dimension summary at session scope
 python -m parser <submission-path> --framework {apm,speckit} --economic
 python -m parser <submission-path> --framework {apm,speckit} --process

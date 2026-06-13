@@ -12,14 +12,13 @@ sanitisation is a separate concern with its own entry point,
 Usage:
     python -m parser <path> --framework {apm,speckit} --metrics -o out_dir
     python -m parser --schema -o out_dir
-    python -m parser <path> --framework {apm,speckit} --inspect
     python -m parser <path> --framework {apm,speckit} --economic
     python -m parser <path> --framework {apm,speckit} --process
 
 ``<path>`` is a single ``*.jsonl`` file or a directory of ``*.jsonl`` files
 copied straight from ``~/.claude/projects/<dashed-cwd>/``. ``--framework``
 (whose vocabulary is owned by ``data.commands``) is required for the metric
-and inspection modes: content auto-detection is deliberately not performed,
+modes: content auto-detection is deliberately not performed,
 so that a non-protocol opening prompt cannot be silently misclassified; in
 production the framework is known from the submission directory naming.
 
@@ -58,7 +57,7 @@ from .rates import (
 )
 from .report.build import build_artifacts
 from .report.notices import collect_notices
-from .report.render import print_economic, print_inspection, print_process
+from .report.render import print_economic, print_process
 
 DATA_ARTIFACT_FILENAME = "parser_data.json"
 METRICS_ARTIFACT_FILENAME = "parser_metrics.json"
@@ -81,20 +80,18 @@ def main(argv: list[str] | None = None) -> int:
         log.enable_debug()
     if args.schema:
         schema_status = _run_schema(args.output)
-        if not (args.inspect or args.economic or args.process or args.metrics):
+        if not (args.economic or args.process or args.metrics):
             return schema_status
         if schema_status != 0:
             return schema_status
-    if not (args.inspect or args.economic or args.process or args.metrics or args.schema):
-        parser.error(
-            "no mode selected; choose --inspect, --economic, --process, --metrics, or --schema"
-        )
-    if not (args.inspect or args.economic or args.process or args.metrics):
+    if not (args.economic or args.process or args.metrics or args.schema):
+        parser.error("no mode selected; choose --economic, --process, --metrics, or --schema")
+    if not (args.economic or args.process or args.metrics):
         return 0
     if args.path is None:
-        parser.error("a path argument is required for inspection and metric modes")
+        parser.error("a path argument is required for the metric modes")
     if args.framework is None:
-        parser.error("--framework is required for inspection and metric modes")
+        parser.error("--framework is required for the metric modes")
     if args.metrics and args.output is None:
         parser.error("--metrics requires -o <output directory> for the data and metrics artifacts")
     try:
@@ -103,9 +100,6 @@ def main(argv: list[str] | None = None) -> int:
         log.error(str(error))
         return 1
     printed_any = False
-    if args.inspect:
-        print_inspection(session)
-        printed_any = True
     if args.economic:
         if printed_any:
             log.blank()
@@ -206,16 +200,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=[FRAMEWORK_APM, FRAMEWORK_SPECKIT],
         required=False,
         default=None,
-        help="Framework label for the submission. Required for metric and inspection modes.",
-    )
-    parser.add_argument(
-        "--inspect",
-        action="store_true",
-        help=(
-            "Print a counts-and-events summary for the submission "
-            "(record-type counts, per-conversation roles, queue "
-            "lifecycle counts, derived turn counts)."
-        ),
+        help="Framework label for the submission. Required for the metric modes.",
     )
     parser.add_argument(
         "--economic",

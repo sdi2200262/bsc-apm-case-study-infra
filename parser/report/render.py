@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Human-readable renderers for the parser's three terminal modes.
+"""Human-readable renderers for the parser's two terminal modes.
 
-The CLI in ``__main__`` drives ``--inspect``, ``--economic``, and
-``--process`` against a loaded session and prints a terminal-fit summary
-for development and troubleshooting. These views walk the same in-memory
+The CLI in ``__main__`` drives ``--economic`` and ``--process`` against a
+loaded session and prints a terminal-fit summary for development and
+troubleshooting. These views walk the same in-memory
 session as the canonical artifact (assembled in ``build``) but lay it out
 for a human reader rather than a downstream consumer.
 
@@ -14,8 +14,6 @@ terminal logging module and returns ``None``.
 
 from __future__ import annotations
 
-from collections import Counter
-
 from .. import log
 from ..data.aggregate.counts import (
     compute_tool_counts,
@@ -24,13 +22,6 @@ from ..data.aggregate.counts import (
 )
 from ..data.aggregate.tokens import TokenData
 from ..data.buckets import BUCKETS
-from ..data.conversation import STEER_FATE_DELIVERED
-from ..data.prompts import is_user_authored_prompt
-from ..data.schema import (
-    is_compact_summary_user,
-    is_synthetic_assistant,
-    queue_operation,
-)
 from ..data.session import Session
 from ..metrics.cost import CostMetrics
 from ..metrics.reliability import tool_success_rate
@@ -45,118 +36,6 @@ from ..rates import (
     RateTable,
 )
 from .notices import collect_notices
-
-
-def print_inspection(session: Session) -> None:
-    """Render a counts-and-events summary of a loaded session to stdout."""
-    log.info(f"framework: {session.framework}")
-    log.info(f"conversation files: {len(session.views)}")
-    record_counts: Counter[str] = Counter()
-    subtype_counts: Counter[tuple[str, str]] = Counter()
-    queue_op_counts: Counter[str] = Counter()
-    genuine_user_prompts = 0
-    compact_summary_records = 0
-    synthetic_assistant_records = 0
-    total_records = 0
-    total_unique_request_ids = 0
-    total_steer_events = 0
-    total_steers_delivered = 0
-    total_steers_abandoned = 0
-    total_compaction_events = 0
-    total_queue_warnings = 0
-    log.blank()
-    log.info("per-conversation:")
-    for view in session.views:
-        conversation = view.conversation
-        records = conversation.records
-        total_records += len(records)
-        per_file_counts: Counter[str] = Counter()
-        per_file_subtypes: Counter[tuple[str, str]] = Counter()
-        per_file_queue: Counter[str] = Counter()
-        per_file_user_prompts = 0
-        per_file_compact_summary = 0
-        per_file_synthetic = 0
-        for record in records:
-            per_file_counts[record.record_type] += 1
-            record_counts[record.record_type] += 1
-            if record.subtype:
-                per_file_subtypes[(record.record_type, record.subtype)] += 1
-                subtype_counts[(record.record_type, record.subtype)] += 1
-            op = queue_operation(record)
-            if op:
-                per_file_queue[op] += 1
-                queue_op_counts[op] += 1
-            if is_user_authored_prompt(record):
-                per_file_user_prompts += 1
-                genuine_user_prompts += 1
-            if is_compact_summary_user(record):
-                per_file_compact_summary += 1
-                compact_summary_records += 1
-            if is_synthetic_assistant(record):
-                per_file_synthetic += 1
-                synthetic_assistant_records += 1
-        unique_request_ids = len(conversation.usage_index.usage_by_request_id)
-        total_unique_request_ids += unique_request_ids
-        user_steer_events = [ev for ev in conversation.steer_events if ev.is_user_authored]
-        steer_count = len(user_steer_events)
-        total_steer_events += steer_count
-        delivered = sum(1 for ev in user_steer_events if ev.fate == STEER_FATE_DELIVERED)
-        abandoned = steer_count - delivered
-        total_steers_delivered += delivered
-        total_steers_abandoned += abandoned
-        compaction_count = len(conversation.compaction_events)
-        total_compaction_events += compaction_count
-        warnings_count = len(conversation.queue_lifecycle_warnings)
-        total_queue_warnings += warnings_count
-        turns = [t for t in session.turns if t.conversation_path == conversation.path]
-        log.info(f"  {conversation.path}")
-        log.info(f"    role:                       {view.role}")
-        log.info(f"    first_command:              {view.first_command!r}")
-        log.info(f"    first_record_timestamp:     {view.first_record_timestamp}")
-        log.info(f"    records:                    {len(records)}")
-        for record_type, count in sorted(per_file_counts.items()):
-            log.info(f"      {record_type:32} {count}")
-        if per_file_subtypes:
-            log.info("    subtypes:")
-            for (record_type, subtype), count in sorted(per_file_subtypes.items()):
-                log.info(f"      {record_type}/{subtype:24} {count}")
-        if per_file_queue:
-            log.info("    queue operations:")
-            for op, count in sorted(per_file_queue.items()):
-                log.info(f"      {op:32} {count}")
-        log.info(f"    genuine user prompts:       {per_file_user_prompts}")
-        log.info(f"    compact-summary records:    {per_file_compact_summary}")
-        log.info(f"    synthetic assistant records: {per_file_synthetic}")
-        log.info(f"    unique requestIds:          {unique_request_ids}")
-        log.info(f"    steers (delivered/abandoned): {delivered}/{abandoned}")
-        log.info(f"    compaction events:          {compaction_count}")
-        log.info(f"    derived turns:              {len(turns)}")
-        if warnings_count:
-            log.info("    queue lifecycle warnings:")
-            for warning in conversation.queue_lifecycle_warnings:
-                log.info(f"      - {warning}")
-    log.blank()
-    log.info("session totals:")
-    log.info(f"  records:                       {total_records}")
-    log.info("  record types:")
-    for record_type, count in sorted(record_counts.items()):
-        log.info(f"    {record_type:32} {count}")
-    if subtype_counts:
-        log.info("  subtypes:")
-        for (record_type, subtype), count in sorted(subtype_counts.items()):
-            log.info(f"    {record_type}/{subtype:24} {count}")
-    if queue_op_counts:
-        log.info("  queue operations:")
-        for op, count in sorted(queue_op_counts.items()):
-            log.info(f"    {op:32} {count}")
-    log.info(f"  genuine user prompts:          {genuine_user_prompts}")
-    log.info(f"  compact-summary records:       {compact_summary_records}")
-    log.info(f"  synthetic assistant records:   {synthetic_assistant_records}")
-    log.info(f"  unique requestIds (deduped):   {total_unique_request_ids}")
-    log.info(f"  steers (delivered/abandoned):  {total_steers_delivered}/{total_steers_abandoned}")
-    log.info(f"  compaction events:             {total_compaction_events}")
-    log.info(f"  queue lifecycle warnings:      {total_queue_warnings}")
-    log.info(f"  derived turns:                 {len(session.turns)}")
 
 
 def print_economic(tokens: TokenData, cost: CostMetrics, rate_table: RateTable) -> None:
