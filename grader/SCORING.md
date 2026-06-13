@@ -93,8 +93,8 @@ expected output, so a row's `verdict` is `passed` (an accepted form
 matched, full `points`), `partial` (none matched but the response is
 near one, earning `points` times its similarity and flagged for
 review), or `failed` (zero). Nearness is a Levenshtein edit-distance
-ratio in `[0, 1]` on the whitespace-normalized forms, against the
-closest accepted form ([protocol/similarity.py](protocol/similarity.py);
+ratio in `[0, 1]` (1 is identical) on the whitespace-normalized forms,
+against the closest accepted form ([protocol/similarity.py](protocol/similarity.py);
 see [Levenshtein distance]). A row scores `partial` at or above a floor,
 default `0.45` ([config.py](config.py)), overridable under
 `partial.floor` in `grader.yaml` or with `--partial-floor` (CLI over
