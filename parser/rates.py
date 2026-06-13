@@ -9,24 +9,14 @@ public Anthropic API rates current on the snapshot date. The
 conversion makes APM and Spec-kit sessions comparable on the same
 monetary scale regardless of each participant's billing arrangement.
 
-The Anthropic API exposes five mutually-exclusive token categories per
-call: non-cached input tokens, output tokens, cache-read tokens (input
-tokens served from a previously-written cache prefix), cache 5-minute
-write tokens, and cache 1-hour write tokens. Each category is billed
-at its own rate.
-
-Rates are loaded at module import time from a YAML file whose default
-location is ``rates.yaml`` next to this module. The file carries the
-snapshot date, the source URLs the rates were sourced from, and the
-five-category rates per model. Editing the YAML is the standard way to
-refresh rates; the change is one commit and the snapshot date moves
-with the values so their provenance stays attached.
-
-An alternate rate file may be supplied via the environment variable
-``CC_PARSER_RATE_TABLE`` (absolute path to a YAML file with the same
-top-level shape). Useful for re-running an older study against
-historical rates without modifying the canonical file, or for ad-hoc
-what-if comparisons.
+The API bills five mutually-exclusive token categories per call; the
+per-category meaning and the documented cache multipliers live on
+``ModelRates``. Rates come from a YAML file (``rates.yaml`` next to this
+module by default) that carries the snapshot date, the source URLs, and the
+per-model rates, so editing it to refresh rates is one commit with
+provenance attached. ``load_rate_table`` documents the env-var override that
+points the loader at an alternate file, for re-running against historical
+rates without touching the canonical one.
 """
 
 from __future__ import annotations

@@ -3,13 +3,9 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Command-line interface for the Claude Code chat parser.
 
-The modes are selected by flag and combinable. ``--inspect``,
-``--economic``, and ``--process`` print human-readable summaries.
-``--metrics`` writes the two per-session artifacts (``parser_data.json``
-and ``parser_metrics.json``) into the ``-o`` directory. ``--schema`` writes
-the field contract (``parser_schema.json``) once and needs no session.
-``--sanitize`` and ``--unsanitize`` seal and unseal the raw JSONL files for
-archival.
+Owns the CLI surface: the mode flags (combinable), argument validation, and
+the dispatch into the data, metrics, schema, and sanitisation layers. Each
+flag's behaviour is documented on the argument in ``_build_parser``.
 
 Usage:
     python -m parser <path> --framework {apm,speckit} --metrics -o out_dir
@@ -20,21 +16,17 @@ Usage:
     python -m parser <path> --sanitize
     python -m parser <path> --unsanitize
 
-``<path>`` is either a single ``*.jsonl`` file or a directory of
-``*.jsonl`` files copied straight from
-``~/.claude/projects/<dashed-cwd>/``. ``--framework`` is required
-for the metric and inspection modes (auto-detection by content is
-not performed because in production the framework is known from
-the submission directory naming, and ad-hoc inspection callers
-declare it explicitly so misclassification of a non-protocol
-opening prompt cannot happen silently). The sanitisation modes do
-not require ``--framework`` because they operate on the raw bytes
-without parsing the protocol vocabulary.
-
-Sanitisation requires the ``CC_PARSER_SECRET`` environment
-variable (or a ``.env`` entry of the same name) to hold the
-encryption key. Use the same key for matched ``--sanitize`` and
-``--unsanitize`` invocations.
+``<path>`` is a single ``*.jsonl`` file or a directory of ``*.jsonl`` files
+copied straight from ``~/.claude/projects/<dashed-cwd>/``. ``--framework``
+(whose vocabulary is owned by ``data.commands``) is required for the metric
+and inspection modes: content auto-detection is deliberately not performed,
+so that a non-protocol opening prompt cannot be silently misclassified; in
+production the framework is known from the submission directory naming. The
+sanitisation modes do not need it, as they operate on raw bytes without
+parsing the protocol vocabulary, but they do require the
+``CC_PARSER_SECRET`` environment variable (or a ``.env`` entry of the same
+name) to hold the encryption key, matched between ``--sanitize`` and
+``--unsanitize``.
 
 Exit codes:
     0: Success.
@@ -302,7 +294,7 @@ def _read_secret() -> bytes | None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the top-level argument parser for the CLI."""
+    """Build the argument parser defining the combinable mode flags and shared inputs."""
     parser = argparse.ArgumentParser(
         prog="python -m parser",
         description=(

@@ -2,15 +2,12 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Common exception base for the Claude Code chat parser package.
 
-Every parser failure raised deliberately by the package is a
-subclass of ``ParserError``; a caller that wants to catch any
-parser failure regardless of its origin catches the base type.
-The concrete subclasses live in the module whose work they
-describe rather than here: ``schema.SchemaError`` covers a JSONL
-line that does not match the expected record shape;
-``rates.RateTableError`` covers a missing or malformed rate-table
-YAML file; ``notes.NotesError`` covers a recoverable failure in a
-notes-sidecar operation.
+Owns ``ParserError``, the base type whose catch-at-base contract is
+documented on the class. The concrete subclasses live in the module whose
+work they describe rather than here: ``schema.SchemaError`` (a JSONL line
+that does not match the expected record shape), ``rates.RateTableError`` (a
+missing or malformed rate-table YAML file), and ``notes.NotesError`` (a
+recoverable failure in a notes-sidecar operation).
 """
 
 from __future__ import annotations

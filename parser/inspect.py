@@ -14,12 +14,9 @@ leaves, and a per-call and per-turn summary.
 Leaves are bare ``name: value``; the kind, label, and formula of each
 measurement live in the schema artifact (``--schema``), not inline.
 
-Invocation:
-    python -m parser.inspect <parser_data.json> [<parser_metrics.json>]
-
-The first positional argument is the data artifact the parser emitted via
-``--metrics``; the optional second is the matching metrics artifact, which
-adds the per-scope metric leaves to the view.
+Invoked as ``python -m parser.inspect <parser_data.json>
+[<parser_metrics.json>]``; the two positional arguments are documented on
+``main``.
 """
 
 from __future__ import annotations
