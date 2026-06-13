@@ -14,12 +14,16 @@ scenario passes, the gating the runner enforces before recording.
 This module owns the rubric data: the ``TestDefinition`` row type, the
 per-group row tuples, and the derived per-implementation and reporting
 groupings. ``scoring`` imports them to build the scorer and to enforce
-the per-group point budget at import. See SCORING.md for the full table.
+the per-group point budget at import. ``schema_document`` serializes the
+static per-row metadata to the ``grader_schema.json`` body, the
+authority the results artifact's per-row outcomes are read against. See
+SCORING.md for the full table.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -176,3 +180,29 @@ C_MEMORY_TESTS: tuple[TestDefinition, ...] = C_MULTISTEP_MEMORY_TESTS + C_SCENAR
 
 C_TESTS: tuple[TestDefinition, ...] = C_INFRA_TESTS + C_BASELINE_TESTS + C_FEATURE_TESTS
 ALL_TESTS: tuple[TestDefinition, ...] = PYTHON_TESTS + C_TESTS
+
+
+def schema_document() -> dict[str, dict[str, Any]]:
+    """Serialize the rubric to the schema-artifact mapping.
+
+    Each test id maps to its static rubric metadata: the point value,
+    category, target implementation, description, and baseline-versus-
+    feature bucket. The results artifact carries only the per-row
+    outcomes; this static description lives here and is emitted once by
+    ``--schema`` into ``grader_schema.json``, the authority a reader
+    joins to interpret an opaque row id.
+
+    Returns:
+        The ``grader_schema.json`` body: a dict from test id to its
+        rubric specification dict.
+    """
+    return {
+        test.id: {
+            "points": test.points,
+            "category": test.category,
+            "target": test.target,
+            "description": test.description,
+            "bucket": test.bucket,
+        }
+        for test in ALL_TESTS
+    }

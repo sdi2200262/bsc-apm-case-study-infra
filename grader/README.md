@@ -81,8 +81,12 @@ python -m grader /path/to/solution.patch \
     --eclass-dir /path/to/eclass-mcp-server \
     --mock-root ~/.bsc-apm
 
-# Browse a results JSON in the terminal
-./inspect.py /path/to/grader_results.json
+# Emit the rubric schema once (the static per-row metadata)
+python -m grader --schema -o /path/to/output-dir
+
+# Browse a results JSON in the terminal (joins the schema for the
+# row descriptions, categories, and point maxima)
+./inspect.py /path/to/grader_results.json --schema /path/to/grader_schema.json
 
 # Attach a free-prose note to a graded submission
 python -m grader.notes add /path/to/results-dir \
@@ -133,6 +137,15 @@ Test failures are recorded in the results JSON without halting the
 run. Patch-apply, provisioning, pre-flight, and reset failures
 terminate the run early, each printing one actionable line on stderr.
 
+The results JSON carries only each row's per-submission outcome (its
+verdict, credited points, message, and captured output). The static
+rubric metadata each row is read against, its point maximum, category,
+target, and description, lives once in `grader_schema.json`, emitted by
+`python -m grader --schema`; `inspect.py` joins it to render the
+descriptive views. This mirrors the parser's `parser_schema.json` and
+keeps the per-submission artifact free of metadata that repeats
+identically across every grading.
+
 The scored verdicts are reproducible against the pinned references
 below, but the captured `full_output` transcript is not byte-stable
 across seedings: the seed writes each announcement date relative to
@@ -179,7 +192,7 @@ python -m grader /path/to/solution.patch \
 grader/
 ├── __init__.py
 ├── __main__.py                        # CLI entry: python -m grader
-├── inspect.py                         # one-shot results browser (./inspect.py)
+├── inspect.py                         # one-shot results browser; joins grader_schema.json
 ├── notes.py                           # CLI entry: python -m grader.notes
 ├── log.py                             # terminal-output routing (all human output)
 ├── config.py                          # path resolution from CLI flags or grader.yaml
@@ -219,7 +232,7 @@ grader/
 │       └── config_surface.py          # C.1.5 / C.1.6 surface-isolated probes
 ├── scoring/                          # scoring layer: rubric authority + aggregation
 │   ├── __init__.py
-│   ├── rubric.py                      # the 90 test definitions and their groupings
+│   ├── rubric.py                      # the 90 test definitions, groupings, and schema_document
 │   └── scoring.py                     # the Scorer and the point-budget guard
 └── report/                           # report layer: artefact, console, notices
     ├── __init__.py

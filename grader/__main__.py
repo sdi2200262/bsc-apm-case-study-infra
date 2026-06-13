@@ -7,6 +7,10 @@ C group modules, the JSON report, the console summary); the per-group
 ordering and the C compile gate live with ``_run_python_groups`` and
 ``_run_c_groups``.
 
+The ``--schema`` mode bypasses grading and emits the rubric schema
+artifact (``grader_schema.json``), the static authority a reader joins
+to interpret the results rows; it needs no grading environment.
+
 Exit codes: ``0`` on a clean run (recorded test failures do not change
 it); ``1`` on a configuration, preflight, reset, provisioning, or patch-
 application failure; ``2`` on an argument error or a missing patch file.
@@ -17,6 +21,7 @@ Invoke as ``python -m grader``.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import sys
@@ -34,9 +39,13 @@ from .environment import (
     reset,
 )
 from .errors import GraderError
+from .json_io import write_json
 from .protocol import groups, set_compact_emission
 from .report import build, render
 from .scoring import scoring
+from .scoring.rubric import schema_document
+
+SCHEMA_ARTIFACT_FILENAME = "grader_schema.json"
 
 GroupRunner = Callable[
     [Path, Path, bool], dict[str, tuple[bool, str, str, str | None, float | None]]
@@ -56,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    if args.schema:
+        return _run_schema(args.output)
+
+    if args.eclass_dir is None:
+        parser.error("--eclass-dir is required to grade (omit only with --schema)")
     if not args.no_patch and not args.patch_file:
         parser.error("either provide a patch file or use --no-patch")
     if args.no_patch and args.patch_file:
@@ -72,6 +86,35 @@ def main(argv: list[str] | None = None) -> int:
     except GraderError as error:
         log.error(str(error))
         return 1
+
+
+def _run_schema(output: Path | None) -> int:
+    """Emit the rubric schema artifact.
+
+    Writes ``grader_schema.json`` into ``output`` when a directory is
+    given, otherwise dumps the schema to stdout. The schema is the
+    static rubric authority and reads no grading environment.
+
+    Args:
+        output: The output directory, or ``None`` to write to stdout.
+
+    Returns:
+        ``0`` on success, ``1`` on a write error.
+    """
+    document = schema_document()
+    if output is None:
+        json.dump(document, sys.stdout, indent=2, ensure_ascii=False)
+        log.blank()
+        return 0
+    schema_path = output / SCHEMA_ARTIFACT_FILENAME
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        write_json(document, schema_path)
+    except OSError as error:
+        log.error(f"could not write schema to {schema_path}: {error}")
+        return 1
+    log.info(f"schema written to {schema_path}")
+    return 0
 
 
 def _install_cleanup_signal_handlers(eclass_root: Path) -> None:
@@ -366,8 +409,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--eclass-dir",
         type=Path,
-        required=True,
-        help="path to the eclass-mcp-server checkout the patch applies to",
+        default=None,
+        help="path to the eclass-mcp-server checkout the patch applies to (required to grade)",
     )
     parser.add_argument(
         "--mock-root",
@@ -383,6 +426,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "similarity floor at or above which a near-miss string row earns "
             "partial credit (overrides grader.yaml; default 0.45)"
         ),
+    )
+    parser.add_argument(
+        "--schema",
+        action="store_true",
+        help=(
+            "emit the rubric schema (grader_schema.json) and exit, running no "
+            "grading sequence; writes into -o when given, otherwise to stdout"
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
+        help="output directory for --schema (grader_schema.json); stdout when omitted",
     )
     return parser
 

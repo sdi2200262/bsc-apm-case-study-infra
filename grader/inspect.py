@@ -3,22 +3,26 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Render an emitted grader results artefact in a human-readable form.
 
-The grader writes a results JSON document for each graded patch:
-each row's verdict, points awarded against the rubric, and
-diagnostic messages. This module reads such an artefact and prints a
+The grader writes a results JSON document for each graded patch: each
+row's verdict, credited points, and diagnostic messages. The static
+rubric metadata (each row's point maximum, category, and description)
+lives once in the schema artefact, not on the rows, so every
+interpretive view joins the schema by test id; only the raw
+``--full-output`` dump reads a row without it. This module prints a
 one-shot view selected by flags: the score summary (the default), a
 single test's detail, a filtered list, the available categories, or one
 test's raw ``full_output`` for piping. It is non-interactive and runs to
 completion without prompting.
 
 A sibling utility under ``../parser/`` renders the parser's metrics
-artefact in the same style.
+artefact in the same style, joining ``parser_schema.json`` the same way.
 
 Invocation:
-    ./inspect.py <grader_results.json>                  # score summary
-    ./inspect.py <grader_results.json> --test P.2.5     # one test's detail
-    ./inspect.py <grader_results.json> --failed         # filtered list
-    ./inspect.py --help                          # full options
+    ./inspect.py <grader_results.json> --schema <grader_schema.json>              # score summary
+    ./inspect.py <grader_results.json> --schema <grader_schema.json> --test P.2.5 # one test
+    ./inspect.py <grader_results.json> --schema <grader_schema.json> --failed     # filtered
+    ./inspect.py <grader_results.json> --full-output P.1.4                        # raw, no schema
+    ./inspect.py --help                                                   # full options
 """
 
 from __future__ import annotations
@@ -50,6 +54,41 @@ def _load_results(filepath: Path) -> dict[str, Any]:
         FileNotFoundError: When the file does not exist.
     """
     return read_json(filepath)
+
+
+def _load_schema(filepath: Path) -> dict[str, Any]:
+    """Load and parse the rubric schema JSON file.
+
+    Args:
+        filepath: Path to the ``grader_schema.json`` file.
+
+    Returns:
+        Parsed schema data: a mapping of test id to rubric metadata.
+
+    Raises:
+        json.JSONDecodeError: When the file contains invalid JSON.
+        FileNotFoundError: When the file does not exist.
+    """
+    return read_json(filepath)
+
+
+def _merge_schema(
+    tests: dict[str, dict[str, Any]], schema: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Join each result row with its rubric schema entry.
+
+    The static rubric fields (``points``, ``category``, ``target``,
+    ``description``, ``bucket``) come from ``schema``; the per-submission
+    outcome fields on the row take precedence on any key collision.
+
+    Args:
+        tests: Mapping of test id to per-row outcome data.
+        schema: Mapping of test id to rubric metadata.
+
+    Returns:
+        The rows enriched with their schema metadata, keyed by test id.
+    """
+    return {test_id: {**schema.get(test_id, {}), **row} for test_id, row in tests.items()}
 
 
 def _print_header(text: str) -> None:
@@ -132,13 +171,14 @@ def _node_points(node: dict[str, Any]) -> str:
 def _category_breakdown(tests: dict[str, dict[str, Any]]) -> dict[str, dict[str, list[float]]]:
     """Recompute the per-target, per-category score view from the test rows.
 
-    The grader no longer persists a ``category_breakdown`` block, so
-    this rebuilds it from ``tests``: each row is assigned to the Python
-    or C target by its identifier prefix (``"P"`` or ``"C"``), and its
-    credited and maximum points accumulate under its category.
+    The grader persists no ``category_breakdown`` block, so this rebuilds
+    it from the schema-joined rows: each row is assigned to the Python or
+    C target by its identifier prefix (``"P"`` or ``"C"``), and its
+    credited and maximum points accumulate under its category. The
+    ``category`` and maximum ``points`` come from the joined schema.
 
     Args:
-        tests: Mapping of test identifier to test result data.
+        tests: Mapping of test identifier to schema-joined row data.
 
     Returns:
         ``{"python": {category: [earned, max]}, "c": {...}}``.
@@ -153,16 +193,16 @@ def _category_breakdown(tests: dict[str, dict[str, Any]]) -> dict[str, dict[str,
     return breakdown
 
 
-def _print_summary(data: dict[str, Any]) -> None:
+def _print_summary(data: dict[str, Any], tests: dict[str, dict[str, Any]]) -> None:
     """Print the score summary including the recomputed category breakdown.
 
     Args:
         data: Complete results data dictionary as written by the
-            grader's ``Scorer.to_dict``.
+            grader's ``Scorer.to_dict`` (metadata and score nodes).
+        tests: The schema-joined rows, used for the category breakdown.
     """
     meta = data.get("metadata", {})
     scores = data.get("scores", {})
-    tests = data.get("tests", {})
 
     _print_header(f"RESULTS: {meta.get('patch_name', 'Unknown')}")
     log.info(f"Timestamp: {meta.get('timestamp', 'N/A')}")
@@ -279,8 +319,9 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code: ``0`` on success or any informational
         path (summary, list, filter, full output); ``1`` when the
-        results file is missing, invalid JSON, unreadable, or names a
-        test ID not present in the file.
+        results or schema file is missing, invalid JSON, unreadable,
+        names a test ID not present, or an interpretive view is
+        requested without the rubric schema.
     """
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -300,12 +341,8 @@ def main(argv: list[str] | None = None) -> int:
 
     tests = data.get("tests", {})
 
-    if args.list_categories:
-        # Raw, one-per-line output for scripting; not decorated.
-        for cat in _get_categories(tests):
-            print(cat)
-        return 0
-
+    # The raw full_output dump is the one view that reads a row without
+    # any rubric metadata, so it needs no schema.
     if args.full_output:
         test_id = args.full_output.upper()
         if test_id not in tests:
@@ -316,32 +353,60 @@ def main(argv: list[str] | None = None) -> int:
         print(tests[test_id].get("full_output", ""))
         return 0
 
+    # Every other view interprets the rows against the rubric schema; the
+    # rows carry only outcomes, so the schema is required, not optional.
+    if args.schema_file is None:
+        log.error(
+            "this view needs the rubric schema; pass --schema grader_schema.json "
+            "(emit it with 'python -m grader --schema')"
+        )
+        return 1
+    if not args.schema_file.exists():
+        log.error(f"Schema file not found: {args.schema_file}")
+        return 1
+    try:
+        schema = _load_schema(args.schema_file)
+    except json.JSONDecodeError as error:
+        log.error(f"Invalid JSON: {error}")
+        return 1
+    except OSError as error:
+        log.error(str(error))
+        return 1
+
+    merged = _merge_schema(tests, schema)
+
+    if args.list_categories:
+        # Raw, one-per-line output for scripting; not decorated.
+        for cat in _get_categories(merged):
+            print(cat)
+        return 0
+
     if args.test:
         test_id = args.test.upper()
-        if test_id not in tests:
+        if test_id not in merged:
             log.error(f"Test '{test_id}' not found")
-            log.error(f"Available tests: {', '.join(tests.keys())}")
+            log.error(f"Available tests: {', '.join(merged.keys())}")
             return 1
-        _print_test(test_id, tests[test_id], show_full=True)
+        _print_test(test_id, merged[test_id], show_full=True)
         return 0
 
     if args.failed:
         _print_header("FAILED TESTS")
-        _print_tests_list(tests, filter_passed=False)
+        _print_tests_list(merged, filter_passed=False)
         return 0
 
     if args.passed:
         _print_header("PASSED TESTS")
-        _print_tests_list(tests, filter_passed=True)
+        _print_tests_list(merged, filter_passed=True)
         return 0
 
     if args.category:
         _print_header(f"TESTS IN CATEGORY: {args.category.upper()}")
-        _print_tests_list(tests, filter_category=args.category)
+        _print_tests_list(merged, filter_category=args.category)
         return 0
 
     # Default and explicit --summary: the one-shot score summary.
-    _print_summary(data)
+    _print_summary(data, merged)
     return 0
 
 
@@ -354,18 +419,18 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="""
 Usage Examples:
   Score summary (default):
-    ./inspect.py grader_results.json
+    ./inspect.py grader_results.json --schema grader_schema.json
 
   Other one-shot views:
-    ./inspect.py grader_results.json --summary
-    ./inspect.py grader_results.json --test P.2.5
-    ./inspect.py grader_results.json --failed
-    ./inspect.py grader_results.json --passed
-    ./inspect.py grader_results.json --category course
-    ./inspect.py grader_results.json --full-output P.1.4
-    ./inspect.py grader_results.json --list-categories
+    ./inspect.py grader_results.json --schema grader_schema.json --summary
+    ./inspect.py grader_results.json --schema grader_schema.json --test P.2.5
+    ./inspect.py grader_results.json --schema grader_schema.json --failed
+    ./inspect.py grader_results.json --schema grader_schema.json --passed
+    ./inspect.py grader_results.json --schema grader_schema.json --category course
+    ./inspect.py grader_results.json --schema grader_schema.json --list-categories
 
-  Pipe full output for processing:
+  Raw full_output for piping (no schema needed):
+    ./inspect.py grader_results.json --full-output P.1.4
     ./inspect.py grader_results.json -o C.5.3 | python3 -m json.tool
 
 Test IDs:
@@ -383,6 +448,14 @@ Categories:
         "results_file",
         type=Path,
         help="Path to the results JSON file",
+    )
+    parser.add_argument(
+        "--schema",
+        dest="schema_file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Path to grader_schema.json; required for every view except --full-output",
     )
     parser.add_argument(
         "--summary",

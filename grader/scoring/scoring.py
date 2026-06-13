@@ -154,8 +154,8 @@ class Scorer:
         max}`` inline and nests its children as extra keys: ``scores``
         is the whole-submission node nesting ``python`` and ``c``, and
         ``python`` nests ``baseline`` and ``feature``. The by-category
-        view is no longer persisted; ``inspect`` recomputes it from the
-        per-row ``category`` under ``tests``.
+        view is not persisted; ``inspect`` recomputes it from each row's
+        ``category`` in the schema, joined to ``tests`` by test id.
         """
         defs = all_tests()
         scores = self._node(ALL_TESTS)
@@ -258,30 +258,28 @@ def _test_entry(
     test_id: str,
     result: TestResult,
 ) -> dict:
-    """Build the per-test JSON payload preserving the documented field set."""
+    """Build the per-test JSON payload: the row's per-submission outcomes.
+
+    The static rubric metadata (the point maximum, category, target,
+    description, bucket) is not repeated on the row; it lives once in the
+    schema artifact (``rubric.schema_document``) and is joined back by
+    test id. The row carries only what the grading run produced.
+    """
     definition = defs.get(test_id)
     points = definition.points if definition else 0
     entry: dict[str, Any] = {
         # ``verdict`` semantics: see ``Scorer.record``. ``points_earned``
-        # is kept distinct from ``points`` (the row maximum) so a partial
-        # row can report a value strictly between zero and it.
+        # is the credited points; the row maximum it is taken against is
+        # the schema's ``points`` for this id, not repeated here.
         "verdict": result.verdict,
-        "points": points,
         "points_earned": _earned(result, points) if definition else 0,
     }
-    # ``similarity`` (see ``TestResult``) is placed between ``points_earned``
-    # and the descriptive fields so the JSON carries the full ratio
+    # ``similarity`` (see ``TestResult``) carries the full ratio
     # distribution, not only the awarded partials.
     if result.similarity is not None:
         entry["similarity"] = result.similarity
-    entry.update(
-        {
-            "category": definition.category if definition else "unknown",
-            "description": definition.description if definition else "",
-            "message": result.message,
-            "full_output": result.full_output,
-        }
-    )
+    entry["message"] = result.message
+    entry["full_output"] = result.full_output
     if result.diagnostic is not None:
         entry["diagnostic"] = result.diagnostic
     return entry
