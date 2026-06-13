@@ -13,8 +13,8 @@ scenario passes, the gating the runner enforces before recording.
 
 This module owns the rubric data: the ``TestDefinition`` row type, the
 per-group row tuples, and the derived per-implementation and reporting
-groupings. ``scoring`` imports them to build the scorer and to enforce
-the per-group point budget at import. ``schema_document`` serializes the
+groupings. ``scoring`` imports them to build the scorer.
+``schema_document`` serializes the
 static per-row metadata to the ``grader_schema.json`` body, the
 authority the results artifact's per-row outcomes are read against. See
 SCORING.md for the full table.

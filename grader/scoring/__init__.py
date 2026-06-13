@@ -11,7 +11,7 @@ output. It is imported by ``report``; ``protocol`` records into its
 Submodules:
 
 - ``rubric``: the test definitions and their per-group groupings.
-- ``scoring``: the ``Scorer`` aggregator and the point-budget guard.
+- ``scoring``: the ``Scorer`` aggregator.
 """
 
 from __future__ import annotations

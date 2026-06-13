@@ -4,10 +4,8 @@ Total: 100 points across 90 atomic rows. The Python implementation
 holds 30 points across 27 rows; the C replica holds 70 across 63
 rows, of which 37 are functional or infrastructure rows and 26 are
 per-scenario memory sub-assertions. [scoring/rubric.py](scoring/rubric.py)
-declares every row and [scoring/scoring.py](scoring/scoring.py) asserts
-this per-section budget at import; a
-numeric drift between this document and the code is a bug in this
-document.
+is the authority for every row and these per-section budgets; a numeric
+drift between this document and `rubric.py` is a bug in this document.
 
 The grader is a JSON-RPC black box: it observes only the `text`
 content of each tool response and the dynamic-link stack of the C
