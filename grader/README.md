@@ -125,6 +125,5 @@ python -m grader /path/to/solution.patch \
 
 - [../grader-env/](../grader-env/): the openeclass and mock CAS the grader runs against.
 - [../parser/](../parser/): the Claude Code transcript parser.
-- [../pipeline/](../pipeline/): the submission processing pipeline.
 - [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task): the participant workspace and task specification.
 - [SCORING.md](SCORING.md): the rubric the grader implements.

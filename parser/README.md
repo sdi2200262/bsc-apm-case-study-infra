@@ -2,7 +2,7 @@
 
 Transcript parser for the case study. It reads the Claude Code CLI
 rollout JSONL a participant session produces and emits the data and
-metrics artifacts the analysis pipeline consumes.
+metrics artifacts for the case study analysis.
 
 ## Overview
 
@@ -76,5 +76,4 @@ restores each sealed file to its original name in place.
 
 ## Related
 
-- [../pipeline/README.md](../pipeline/README.md): the pipeline's parse stage subprocesses this package.
 - [../grader/README.md](../grader/README.md): the grading suite.
