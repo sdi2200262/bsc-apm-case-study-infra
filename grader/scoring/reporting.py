@@ -3,16 +3,13 @@
 """Grading-report writers: JSON and console summary.
 
 The JSON report at ``<workspace>/grader_results.json`` is the
-machine-readable artefact the pipeline's grade stage promotes; its
-shape is ``Scorer.to_dict`` verbatim (the per-row ``verdict`` and the
-four-field score nodes), which the inspect browser and the pipeline
-read. The console summary reports each rubric group's strict score
-against its maximum; in verbose mode it also lists every row's
-pass/fail status and short message. The report rolls the rubric's two memory budget
-groups (multi-step and per-scenario) into one "C MEMORY" group, so
-its eight groups (Python baseline, Python course, Python general, C
-infra, C baseline, C course, C general, C memory) cover the nine
-budget groups the scorer enforces.
+machine-readable artefact; its shape is ``Scorer.to_dict`` verbatim,
+which the inspect browser reads. The console summary reports each
+rubric group's strict score against its maximum; in verbose mode it
+also lists every row's pass/fail status and short message. The report
+rolls the rubric's two memory budget groups (multi-step and
+per-scenario) into one "C MEMORY" group, so its eight report groups
+cover the nine budget groups the scorer enforces.
 """
 
 from __future__ import annotations

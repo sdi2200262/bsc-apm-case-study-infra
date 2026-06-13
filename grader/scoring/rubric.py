@@ -11,11 +11,10 @@ multi-step memory behaviours) and every other row is one point. The
 ``<scenario>.mem``; each is awarded only when its paired functional
 scenario passes, the gating the runner enforces before recording.
 
-This module owns the rubric data only: the ``TestDefinition`` row type,
-the per-group row tuples, and the derived per-implementation and
-reporting groupings. ``scoring`` imports them to build the scorer and to
-enforce the per-group point budget at import; see SCORING.md for the
-full rubric.
+This module owns the rubric data: the ``TestDefinition`` row type, the
+per-group row tuples, and the derived per-implementation and reporting
+groupings. ``scoring`` imports them to build the scorer and to enforce
+the per-group point budget at import. See SCORING.md for the full table.
 """
 
 from __future__ import annotations
