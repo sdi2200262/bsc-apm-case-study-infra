@@ -2,19 +2,10 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Baseline protocol assertions (P.1.x / C.2.x).
 
-Each function tests one rubric row against a freshly-spawned MCP server.
-Principal: ``student_courses``. All return a 6-tuple
-``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)`` where
-``leak_tuple`` is ``(clean, detail)`` from
-``ServerProcess.leak_verdict``, or ``None`` when ``memcheck=False``,
-and ``mode`` is the ``matching`` mode the row was accepted under
-(``None`` for a failed match or a non-string-matched row).
-A non-passing string row carries the edit-distance similarity ratio
-against its expected form(s); a passing row carries ``None``.
-
-Leak-verdict pattern: functional result is saved inside the ``with``
-block; ``leak_after()`` is called after the block exits so
-``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
+Each function tests one rubric row against a freshly-spawned MCP server
+as the ``student_courses`` principal and returns the shared ``RowResult``
+six-tuple (see ``._support`` for the tuple contract and the leak-verdict
+call ordering ``leak_after`` documents).
 """
 
 from __future__ import annotations
@@ -250,21 +241,12 @@ def check_missing_credentials(
 
     Blanks both the env-var surface (empty ``ECLASS_USERNAME`` /
     ``ECLASS_PASSWORD``) and the on-disk ``.env``; restores the
-    verbatim ``.env`` in ``finally``.
-
-    Two error forms are accepted, mirroring the C.2.1 capabilities
-    and ``get_courses`` two-form rows:
-
-    - ``MISSING_CREDS_FAITHFUL``: the two-sentence error the Python
-      reference emits verbatim (``LOGIN_MISSING_CREDS``).
-    - ``MISSING_CREDS_DOCUMENTED``: the one-sentence error the
-      reference doc documents
-      (``LOGIN_MISSING_CREDS_DOCUMENTED``), accepted only for the C
-      replica and flagged for human review.
-
-    The faithful two-sentence form is always a candidate; the
-    documented one-sentence form is gated to ``impl == "c"`` because
-    the Python reference emits the two-sentence form verbatim.
+    verbatim ``.env`` in ``finally``. The two accepted error forms are
+    ``matching.match_missing_credentials``'s contract; the documented
+    one-sentence form is allowed only for the C replica
+    (``allow_documented=(impl == "c")``), because the Python reference
+    emits the two-sentence form verbatim and has no excuse for the
+    shorter one.
     """
     blank_dotenv_credentials(eclass_dir)
     overrides = {"ECLASS_USERNAME": "", "ECLASS_PASSWORD": ""}

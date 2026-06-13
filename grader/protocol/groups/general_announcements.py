@@ -2,17 +2,12 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """General-announcements protocol assertions (P.3.x / C.4.x).
 
-Principal: ``student_general`` (enrolled in BIO110 only). Each
-function accepts an optional ``instant`` (per-run seed-apply
-timestamp) and ``memcheck``. Return shape is a 6-tuple
-``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)``
-following the same convention as ``course_announcements``. A
-non-passing announcement row carries the edit-distance similarity
-against its expected ordered form.
-
-Leak-verdict pattern: functional result is saved inside the ``with``
-block; ``leak_after`` is called after the block exits so
-``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
+Principal: ``student_general`` (enrolled in BIO110 only). Each function
+accepts an optional ``instant`` (per-run seed-apply timestamp) and
+``memcheck``, and returns the shared ``RowResult`` six-tuple (see
+``._support`` for the tuple contract and the leak-verdict call ordering
+``leak_after`` documents). A non-passing announcement row carries the
+edit-distance similarity against its expected ordered form.
 """
 
 from __future__ import annotations

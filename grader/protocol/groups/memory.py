@@ -13,11 +13,10 @@ All three scenarios authenticate as ``student_courses``; content of
 announcement responses is not asserted in these multi-step runs
 (leak hygiene and responsiveness only).
 
-Scenario gate logic: a scenario whose ``gates_on`` are not all in
-the caller-supplied ``passed_tests`` set is skipped (recorded as a
-zero-point fail) because valgrind on a code path the participant
-did not implement correctly verifies leaks on a short-circuited
-error path, not the path the rubric awards points for.
+This module owns the scenario table and the valgrind run mechanism.
+Each scenario names the prerequisite rows it depends on in its
+``gates_on`` field; whether a scenario actually runs given a run's
+passed rows is decided by ``runners.run_c_memory``.
 """
 
 from __future__ import annotations

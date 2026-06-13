@@ -3,20 +3,16 @@
 """Rubric-group runners and the per-group assertion suites.
 
 ``runners`` holds the eight ``run_*`` entry points the grader CLI drives
-in rubric order; each runs one rubric group for one implementation over
-the shared row loop. The assertion suites it calls live beside it:
+in rubric order, re-exported here so ``groups.run_*`` resolves unchanged.
 
-- ``baseline``: the baseline rubric rows (P.1.x / C.2.x).
-- ``frame``: the tools/list and C-only initialize-frame checks.
-- ``course_announcements``: the course-announcement rows (P.2.x / C.3.x).
-- ``general_announcements``: the general-announcement rows (P.3.x / C.4.x).
-- ``memory``: the three C.5.x multi-step memory scenarios under valgrind.
-- ``config_surface``: the two configuration-surface probes (C.1.5, C.1.6).
-- ``_support``: the shared result shape, step-failure sentinels, and the
-  ``.mem`` sub-assertion recording the suites share.
-
-The eight entry points are re-exported here so ``from .protocol import
-groups`` and ``groups.run_*`` resolve unchanged for the CLI driver.
+- ``runners``: the eight ``run_*`` group entry points.
+- ``baseline``: baseline rubric rows (P.1.x / C.2.x).
+- ``frame``: tools/list and C-only initialize-frame rows.
+- ``course_announcements``: course-announcement rows (P.2.x / C.3.x).
+- ``general_announcements``: general-announcement rows (P.3.x / C.4.x).
+- ``memory``: C.5.x multi-step memory scenarios under valgrind.
+- ``config_surface``: configuration-surface probes (C.1.5, C.1.6).
+- ``_support``: shared result shape, step-failure sentinels, ``.mem`` recording.
 """
 
 from __future__ import annotations
