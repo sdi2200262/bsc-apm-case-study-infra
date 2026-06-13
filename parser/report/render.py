@@ -252,16 +252,6 @@ def print_process(session: Session, short_threshold: int) -> None:
     log.info(f"    turn_duration_p50:       {time_metrics.turn_duration_p50:14.2f} sec")
     log.info(f"    turn_duration_p95:       {time_metrics.turn_duration_p95:14.2f} sec")
     log.info(f"    turn_duration_stdev:     {time_metrics.turn_duration_stdev:14.2f} sec")
-    log.info(
-        f"    invariant duration ?= turn_time + inter_turn_time: "
-        f"{time_metrics.duration:.2f} ?= "
-        f"{time_metrics.turn_time + time_metrics.inter_turn_time:.2f}"
-    )
-    log.info(
-        f"    invariant turn_time ?= solo + concurrent:          "
-        f"{time_metrics.turn_time:.2f} ?= "
-        f"{time_metrics.turn_time_solo + time_metrics.turn_time_concurrent:.2f}"
-    )
     log.blank()
     log.info("  user_input:")
     log.info(f"    short_threshold:         {short_threshold}")

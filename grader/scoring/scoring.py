@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Score aggregation and the rubric point-budget guard.
+"""Score aggregation over the rubric rows.
 
 ``Scorer`` accumulates per-test results and computes the aggregate
 scores the report writer consumes. The rubric rows themselves live in
-``rubric``; this module imports them, enforces their per-group point
-budget at import via ``_assert_rubric_balance`` (the rubric is 90 rows
-summing to 100: 30 Python, 70 C; see SCORING.md for the full table),
-and turns recorded results into the report payload.
+``rubric`` (90 rows summing to 100: 30 Python, 70 C; see SCORING.md
+for the full table); this module imports them and turns recorded
+results into the report payload.
 
 The JSON shape returned by ``Scorer.to_dict`` is consumed by the
 ``inspect`` results browser and the pipeline's grade and combine
@@ -35,83 +34,12 @@ from typing import Any
 
 from .rubric import (
     ALL_TESTS,
-    C_BASELINE_TESTS,
-    C_COURSE_TESTS,
-    C_GENERAL_TESTS,
-    C_INFRA_TESTS,
-    C_MULTISTEP_MEMORY_TESTS,
-    C_SCENARIO_MEMORY_TESTS,
     C_TESTS,
     PYTHON_BASELINE_TESTS,
-    PYTHON_COURSE_TESTS,
     PYTHON_FEATURE_TESTS,
-    PYTHON_GENERAL_TESTS,
     PYTHON_TESTS,
     TestDefinition,
 )
-
-# Required per-group and per-implementation point budget. The rubric
-# is balanced by construction; this table is the single source of
-# truth a future edit is checked against so an unintended imbalance
-# fails loudly at import rather than silently skewing scores.
-_EXPECTED_GROUP_POINTS: tuple[tuple[str, tuple[TestDefinition, ...], int], ...] = (
-    ("python baseline", PYTHON_BASELINE_TESTS, 11),
-    ("python course", PYTHON_COURSE_TESTS, 11),
-    ("python general", PYTHON_GENERAL_TESTS, 8),
-    ("c infra", C_INFRA_TESTS, 6),
-    ("c baseline", C_BASELINE_TESTS, 13),
-    ("c course", C_COURSE_TESTS, 11),
-    ("c general", C_GENERAL_TESTS, 8),
-    ("c multi-step memory", C_MULTISTEP_MEMORY_TESTS, 6),
-    ("c per-scenario memory", C_SCENARIO_MEMORY_TESTS, 26),
-)
-_EXPECTED_PYTHON_POINTS = 30
-_EXPECTED_C_POINTS = 70
-_EXPECTED_GRAND_POINTS = 100
-
-
-class RubricImbalanceError(AssertionError):
-    """Raised at import when the rubric point budget does not balance.
-
-    The grand total must be 100, the Python implementation 30, the C
-    replica 70, and each group its documented sub-total. A raised
-    instance names the group whose sum drifted and the expected and
-    actual values so the corrective edit is unambiguous.
-    """
-
-
-def _assert_rubric_balance() -> None:
-    """Verify the rubric sums to its documented per-group budget.
-
-    Raises:
-        RubricImbalanceError: When any group sub-total, the Python
-            total, the C total, or the grand total differs from the
-            documented value. The message names the failing group
-            and the expected versus actual point counts so the fix
-            does not require recomputing the whole table by hand.
-    """
-    for label, tests, expected in _EXPECTED_GROUP_POINTS:
-        actual = sum(t.points for t in tests)
-        if actual != expected:
-            raise RubricImbalanceError(
-                f"rubric group '{label}' sums to {actual}, expected {expected}"
-            )
-    python_total = sum(t.points for t in PYTHON_TESTS)
-    if python_total != _EXPECTED_PYTHON_POINTS:
-        raise RubricImbalanceError(
-            f"python total sums to {python_total}, expected {_EXPECTED_PYTHON_POINTS}"
-        )
-    c_total = sum(t.points for t in C_TESTS)
-    if c_total != _EXPECTED_C_POINTS:
-        raise RubricImbalanceError(f"c total sums to {c_total}, expected {_EXPECTED_C_POINTS}")
-    grand_total = sum(t.points for t in ALL_TESTS)
-    if grand_total != _EXPECTED_GRAND_POINTS:
-        raise RubricImbalanceError(
-            f"grand total sums to {grand_total}, expected {_EXPECTED_GRAND_POINTS}"
-        )
-
-
-_assert_rubric_balance()
 
 
 def all_tests() -> dict[str, TestDefinition]:

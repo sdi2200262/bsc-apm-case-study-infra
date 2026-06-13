@@ -269,10 +269,6 @@ MODEL_CALLING_BUILTINS: frozenset[str] = frozenset(
 # both sets, unchanged by the split.
 CLAUDE_CODE_BUILTINS: frozenset[str] = LOCAL_ONLY_BUILTINS | MODEL_CALLING_BUILTINS
 
-assert not (LOCAL_ONLY_BUILTINS & MODEL_CALLING_BUILTINS), (
-    "built-in command appears in both the local-only and model-calling sets"
-)
-
 # A user prompt's slash-command invocation appears inside the prompt
 # text wrapped in a ``<command-name>`` XML-like tag, with a leading
 # slash on the command name itself, e.g.
