@@ -9,8 +9,7 @@ against the grading environment, and writes a JSON results artefact.
 The grader scores a submission against a 100-point rubric of 90 atomic
 rows, 30 to the Python implementation and 70 to the C replica.
 [SCORING.md](SCORING.md) is the rubric itself, listing every row and its
-points, the baseline-versus-feature split, and the per-section budget
-asserted at import.
+points, the baseline-versus-feature split, and the per-section budgets.
 
 It runs against the grading environment in [`../grader-env/`](../grader-env/),
 a self-contained openeclass and mock CAS built and released from this
@@ -60,7 +59,7 @@ python -m grader /path/to/solution.patch \
 python -m grader --schema -o /path/to/output-dir
 
 # Browse a results JSON, joined against the schema
-./inspect.py /path/to/grader_results.json --schema /path/to/grader_schema.json
+python -m grader.inspect /path/to/grader_results.json --schema /path/to/grader_schema.json
 
 # Attach a free-prose note to a graded submission
 python -m grader.notes add /path/to/results-dir \

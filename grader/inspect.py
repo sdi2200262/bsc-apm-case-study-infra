@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
 """Render an emitted grader results artefact in a human-readable form.
@@ -17,12 +16,11 @@ completion without prompting.
 A sibling utility under ``../parser/`` renders the parser's metrics
 artefact in the same style, joining ``parser_schema.json`` the same way.
 
-Invocation:
-    ./inspect.py <grader_results.json> --schema <grader_schema.json>              # score summary
-    ./inspect.py <grader_results.json> --schema <grader_schema.json> --test P.2.5 # one test
-    ./inspect.py <grader_results.json> --schema <grader_schema.json> --failed     # filtered
-    ./inspect.py <grader_results.json> --full-output P.1.4                        # raw, no schema
-    ./inspect.py --help                                                   # full options
+Invocation (every view but --full-output needs the schema):
+    python -m grader.inspect <grader_results.json> --schema <grader_schema.json>
+    python -m grader.inspect <grader_results.json> --schema <grader_schema.json> --test P.2.5
+    python -m grader.inspect <grader_results.json> --full-output P.1.4
+    python -m grader.inspect --help
 """
 
 from __future__ import annotations
@@ -413,25 +411,25 @@ def main(argv: list[str] | None = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     """Return the argparse parser configured for the inspect CLI."""
     parser = argparse.ArgumentParser(
-        prog="inspect.py",
+        prog="python -m grader.inspect",
         description="CLI utility for browsing grading results JSON files.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Usage Examples:
   Score summary (default):
-    ./inspect.py grader_results.json --schema grader_schema.json
+    python -m grader.inspect grader_results.json --schema grader_schema.json
 
   Other one-shot views:
-    ./inspect.py grader_results.json --schema grader_schema.json --summary
-    ./inspect.py grader_results.json --schema grader_schema.json --test P.2.5
-    ./inspect.py grader_results.json --schema grader_schema.json --failed
-    ./inspect.py grader_results.json --schema grader_schema.json --passed
-    ./inspect.py grader_results.json --schema grader_schema.json --category course
-    ./inspect.py grader_results.json --schema grader_schema.json --list-categories
+    python -m grader.inspect grader_results.json --schema grader_schema.json --summary
+    python -m grader.inspect grader_results.json --schema grader_schema.json --test P.2.5
+    python -m grader.inspect grader_results.json --schema grader_schema.json --failed
+    python -m grader.inspect grader_results.json --schema grader_schema.json --passed
+    python -m grader.inspect grader_results.json --schema grader_schema.json --category course
+    python -m grader.inspect grader_results.json --schema grader_schema.json --list-categories
 
   Raw full_output for piping (no schema needed):
-    ./inspect.py grader_results.json --full-output P.1.4
-    ./inspect.py grader_results.json -o C.5.3 | python3 -m json.tool
+    python -m grader.inspect grader_results.json --full-output P.1.4
+    python -m grader.inspect grader_results.json -o C.5.3 | python3 -m json.tool
 
 Test IDs:
   Python: P.1.1 to P.1.11, P.2.1 to P.2.9, P.3.1 to P.3.7
