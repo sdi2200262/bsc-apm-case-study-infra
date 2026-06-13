@@ -5,10 +5,10 @@
 
 A ``select``-bounded readline and the id-correlating read loop, plus the
 shared outgoing-frame serializer. The read side parses with ``json.loads``
-(whitespace-insensitive), so the process-wide ``--compact-json`` policy,
-set once via ``set_compact_emission`` and read by ``dump_message`` at
-every emit site, changes only how frames are emitted; its default
-reproduces ``json.dumps`` defaults, leaving an unflagged grade unchanged.
+(whitespace-insensitive), so the process-wide outgoing-spacing policy
+(``set_compact_emission``, applied by ``dump_message``) changes only how
+frames are emitted, never how a reply is read; its default reproduces the
+``json.dumps`` defaults.
 """
 
 from __future__ import annotations

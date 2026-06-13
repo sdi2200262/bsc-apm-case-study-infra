@@ -13,8 +13,8 @@ placeholder, so each ``Date:`` line is canonicalised to a calendar date
 before comparison and any rendering whose parsed date matches the expected
 calendar date is a legitimate accept. Every other field (title, body,
 source, count, grammar) stays byte-asserted. The order-insensitive form is
-a lenient acceptance warned for human review at end of grading (see
-``grader.scoring.reporting``).
+a lenient form (the lenient-form notice is owned by
+``grader.protocol.matching``).
 """
 
 from __future__ import annotations
@@ -46,10 +46,8 @@ def match_announcements(
     """Return the accepted announcement form, or ``None``.
 
     Two forms are accepted; both compare entries with each
-    ``Date:`` line canonicalised to a calendar date (PRD §2 leaves
-    the rendered date string as an unspecified ``<Date String>``
-    placeholder, so any rendering whose parsed date matches the
-    expected calendar date is a legitimate accept):
+    ``Date:`` line canonicalised to a calendar date (see the module
+    docstring):
 
     - ``ANNOUNCEMENTS_ORDERED``: the response equals the
       openeclass-derived ordered string after each side's
@@ -64,8 +62,7 @@ def match_announcements(
       or a ``Date:`` value that does not parse all fail.
 
     The matched form is the recorded diagnostic; the unordered
-    form is lenient and is warned for human review at end of
-    grading (see ``grader.scoring.reporting``).
+    form is the lenient one.
 
     Args:
         text: The tool's response text.

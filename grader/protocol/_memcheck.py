@@ -3,13 +3,11 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Valgrind memcheck helpers for the C replica functional scenarios.
 
-``parse_leak_bytes`` extracts the byte count for one leak category
-from captured valgrind stderr; ``tail_lines`` returns the trailing
-portion of a valgrind report for use in per-test detail fields;
-``classify_leak_verdict`` decides whether a captured valgrind run
-counts as leak-clean. The classifier is pure so the multi-step
-scenarios and the per-scenario ``.mem`` sub-assertions can share
-one decision instead of drifting between two near-copies.
+Parses captured valgrind stderr: a per-category byte-count extractor, a
+report tailer for per-test detail fields, and the leak-clean classifier.
+The classifier is pure so the multi-step scenarios and the per-scenario
+``.mem`` sub-assertions share one decision rather than drifting between
+two near-copies.
 """
 
 from __future__ import annotations

@@ -10,12 +10,9 @@ module owns only the measure, not the floor or the verdict.
 
 The ratio is taken on the whitespace-normalized forms (the same
 ``matching.normalize_response`` the matcher uses), so a row rejected only
-for insignificant whitespace is not penalized for it again. A row with
-more than one accepted form is scored against its closest form (the
-maximum ratio over them). Levenshtein distance
-(https://en.wikipedia.org/wiki/Levenshtein_distance) is used over
-Hamming because the misses involve length changes, not only
-equal-length substitutions.
+for insignificant whitespace is not penalized for it again. Levenshtein
+distance is used over Hamming because the misses involve length changes,
+not only equal-length substitutions.
 """
 
 from __future__ import annotations
