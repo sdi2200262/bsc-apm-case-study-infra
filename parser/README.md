@@ -46,9 +46,9 @@ python -m parser <submission-path> --framework {apm,speckit} --inspect
 python -m parser <submission-path> --framework {apm,speckit} --economic
 python -m parser <submission-path> --framework {apm,speckit} --process
 
-# Sanitise raw JSONL for archival (secret via CC_PARSER_SECRET)
-python -m parser <submission-path> --sanitize
-python -m parser <sidecar-path>    --unsanitize
+# Seal every file under a submission for archival
+python -m parser.sanitize <submission-path>
+python -m parser.sanitize <submission-path> --unsanitize
 
 # Full option list
 python -m parser --help
@@ -61,10 +61,17 @@ or a directory of them; sibling `<sessionId>/subagents/` and
 content, so a non-protocol opening prompt cannot silently mis-classify a
 session.
 
+Sanitisation has its own entry point, `python -m parser.sanitize`, because
+it shares none of the parser's framework, rate-table, or session
+machinery. It walks a directory recursively and seals every file beneath
+it (the transcripts, the `subagents/` and `tool-results/` contents, and
+the `solution.patch`), or seals a single file when given one; `--unsanitize`
+restores each sealed file to its original name in place.
+
 ## Environment variables
 
-- **CC_PARSER_SECRET**, required for `--sanitize` and `--unsanitize`,
-  must match across encrypt and decrypt. Read from the environment or a
+- **CC_PARSER_SECRET**, required by `python -m parser.sanitize`, must match
+  across sealing and restoring. Read from the environment or a
   `.env` entry of the same name.
 - **CC_PARSER_RATE_TABLE**, optional, overrides the rate-table YAML path
   so an older session can re-run against historical rates without

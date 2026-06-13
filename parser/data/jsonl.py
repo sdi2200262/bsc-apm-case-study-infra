@@ -2,14 +2,13 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """File input and output helpers shared across the parser package.
 
-Two file formats matter to the package: the raw Claude Code JSONL
-rollout (one JSON record per line) that comes in from a submission
-directory, and the sanitised sidecar wrapper (a single JSON object
-containing an HMAC-encrypted form of a JSONL file's full content
-plus plaintext cataloguing metadata) that ships into the analysis
-dataset. The helpers here cover reading and writing both formats
-and a small classifier that distinguishes a sanitised sidecar from
-a raw JSONL file at a glance.
+The package reads the raw Claude Code JSONL rollout (one JSON
+record per line) that arrives in a submission directory, and reads
+and writes the JSON data and metric artefacts it produces. It also
+moves the sealed sanitisation artefacts: a sealed file holds a
+single ``ENC:...`` cipher line as text, so sealing writes that line
+as text and unsealing reads it back as text and writes the restored
+original as raw bytes.
 """
 
 from __future__ import annotations
@@ -17,21 +16,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
-
-SANITIZATION_META_KEY = "_sanitization_meta"
-
-
-def iter_jsonl_lines(path: Path) -> Iterable[str]:
-    """Yield each non-empty line of a JSONL file as a stripped string."""
-    with path.open("r", encoding="utf-8") as source:
-        for line in source:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            yield stripped
 
 
 def read_file_text(path: Path) -> str:
@@ -44,6 +30,12 @@ def write_file_text(path: Path, text: str) -> None:
     """Write text content to a file as UTF-8."""
     with path.open("w", encoding="utf-8") as sink:
         sink.write(text)
+
+
+def write_file_bytes(path: Path, data: bytes) -> None:
+    """Write raw bytes to a file."""
+    with path.open("wb") as sink:
+        sink.write(data)
 
 
 def write_json(payload: Any, path: Path) -> None:
@@ -70,13 +62,3 @@ def read_json(path: Path) -> Any:
     """Read and parse one JSON file."""
     with path.open("r", encoding="utf-8") as source:
         return json.load(source)
-
-
-def is_sanitised_payload(payload: Any) -> bool:
-    """Return ``True`` when ``payload`` carries the sanitisation sidecar marker.
-
-    A sanitised sidecar is a JSON object with the
-    ``_sanitization_meta`` key set; the raw rollout has no such
-    object at the top level (and is JSONL, not JSON).
-    """
-    return isinstance(payload, dict) and SANITIZATION_META_KEY in payload

@@ -187,9 +187,8 @@ def discover_conversation_files(path: Path) -> list[Path]:
         A list of absolute paths in filesystem order. Top-level only when
         ``path`` is a directory; nested subdirectories are not descended.
         The ``SubagentModelIndex`` is built separately by
-        ``load_conversation``; a non-metric pass wanting every JSONL the
-        submission ships (main plus subagent) uses
-        ``discover_sanitisable_jsonl_files`` instead.
+        ``load_conversation``. Sealing every file a submission ships
+        is a separate concern owned by ``parser.sanitize``.
 
     Raises:
         SchemaError: When the path does not exist, when it is a file
@@ -211,25 +210,6 @@ def discover_conversation_files(path: Path) -> list[Path]:
             )
         return files
     raise SchemaError(f"submission path is neither a file nor a directory: {resolved}")
-
-
-def discover_sanitisable_jsonl_files(path: Path) -> list[Path]:
-    """Return every JSONL the sanitiser should seal under a submission path.
-
-    Extends ``discover_conversation_files`` by also walking the
-    sibling ``<sessionId>/subagents/agent-*.jsonl`` files Claude
-    Code wrote alongside each main JSONL. Tool-result files under
-    ``<sessionId>/tool-results/`` are not jsonl and out of scope.
-    """
-    main_files = discover_conversation_files(path)
-    if path.resolve().is_file():
-        return main_files
-    sanitisable: list[Path] = list(main_files)
-    for main_file in main_files:
-        subagents_dir = main_file.parent / main_file.stem / "subagents"
-        if subagents_dir.is_dir():
-            sanitisable.extend(sorted(subagents_dir.glob("agent-*.jsonl")))
-    return sanitisable
 
 
 def parse_conversation_records(path: Path) -> tuple[Record, ...]:

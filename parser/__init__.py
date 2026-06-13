@@ -16,7 +16,8 @@ work is split across three layers, an acyclic ``data`` -> ``metrics`` ->
 The package is used through its command modules: ``python -m parser``
 parses a submission's transcripts into artifacts and terminal views;
 ``python -m parser.notes`` manages the curated notes sidecar;
-``python -m parser.inspect`` renders emitted artifacts.
+``python -m parser.inspect`` renders emitted artifacts;
+``python -m parser.sanitize`` seals a submission's files for archival.
 """
 
 from __future__ import annotations
