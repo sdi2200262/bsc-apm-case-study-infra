@@ -35,8 +35,10 @@ python -m parser <submission-path> --framework {apm,speckit} --metrics -o out_di
 # Write the field-contract schema (needs no session)
 python -m parser --schema -o out_dir
 
-# Inspect built artifacts (metrics file optional)
-python -m parser.inspect out_dir/parser_data.json out_dir/parser_metrics.json
+# Inspect built artifacts (metrics file optional; --schema annotates
+# each leaf with its kind and label)
+python -m parser.inspect out_dir/parser_data.json out_dir/parser_metrics.json \
+    --schema out_dir/parser_schema.json
 
 # Counts-and-events summary of a loaded session
 python -m parser <submission-path> --framework {apm,speckit} --inspect

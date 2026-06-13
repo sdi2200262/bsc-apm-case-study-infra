@@ -12,11 +12,13 @@ its data leaves and, when the metrics artifact is supplied, its metric
 leaves, and a per-call and per-turn summary.
 
 Leaves are bare ``name: value``; the kind, label, and formula of each
-measurement live in the schema artifact (``--schema``), not inline.
+measurement live in the schema artifact, emitted by ``parser --schema``.
+Pass it with ``--schema`` to annotate each leaf with its kind and label,
+the interpretive companion the grader's inspector joins the same way.
 
 Invoked as ``python -m parser.inspect <parser_data.json>
-[<parser_metrics.json>]``; the two positional arguments are documented on
-``main``.
+[<parser_metrics.json>] [--schema <parser_schema.json>]``; the arguments
+are documented on ``main``.
 """
 
 from __future__ import annotations
@@ -33,16 +35,25 @@ from .data.jsonl import read_json
 _BUCKET_KEYS = ("protocol", "short", "standard")
 
 
-def render_artifacts(data: dict[str, Any], metrics: dict[str, Any] | None) -> None:
-    """Print a scope-by-scope readable view of the data and metrics artifacts."""
+def render_artifacts(
+    data: dict[str, Any],
+    metrics: dict[str, Any] | None,
+    schema: dict[str, Any] | None = None,
+) -> None:
+    """Print a scope-by-scope readable view of the data and metrics artifacts.
+
+    When ``schema`` is given, each leaf is annotated with its ``kind`` and
+    ``label`` from ``parser_schema.json``; without it the leaves render as
+    bare ``name: value``.
+    """
     _print_identity(data["identity"])
     _print_mapping("metadata", data["metadata"])
     metric_scopes = metrics["scopes"] if metrics is not None else {}
-    _print_scope("session", data["scopes"]["session"], metric_scopes.get("session"))
+    _print_scope("session", data["scopes"]["session"], metric_scopes.get("session"), schema)
     for phase, block in data["scopes"]["phases"].items():
-        _print_scope(f"phase: {phase}", block, metric_scopes.get("phases", {}).get(phase))
+        _print_scope(f"phase: {phase}", block, metric_scopes.get("phases", {}).get(phase), schema)
     for role, block in data["scopes"].get("roles", {}).items():
-        _print_scope(f"role: {role}", block, metric_scopes.get("roles", {}).get(role))
+        _print_scope(f"role: {role}", block, metric_scopes.get("roles", {}).get(role), schema)
     _print_calls_summary(data["calls"])
     _print_turns_summary(data["turns"])
 
@@ -73,6 +84,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to the matching parser_metrics.json artifact.",
     )
+    parser.add_argument(
+        "--schema",
+        dest="schema_file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Optional path to parser_schema.json; annotates each leaf with its kind and label.",
+    )
     args = parser.parse_args(argv)
     data = _load_artifact(args.data_file)
     if data is None:
@@ -88,7 +107,12 @@ def main(argv: list[str] | None = None) -> int:
         metrics = _load_artifact(args.metrics_file)
         if metrics is None:
             return 1
-    render_artifacts(data, metrics)
+    schema: dict[str, Any] | None = None
+    if args.schema_file is not None:
+        schema = _load_artifact(args.schema_file)
+        if schema is None:
+            return 1
+    render_artifacts(data, metrics, schema)
     return 0
 
 
@@ -130,22 +154,35 @@ def _print_mapping(label: str, mapping: dict[str, Any]) -> None:
 
 
 def _print_scope(
-    label: str, data_block: dict[str, Any], metric_block: dict[str, Any] | None
+    label: str,
+    data_block: dict[str, Any],
+    metric_block: dict[str, Any] | None,
+    schema: dict[str, Any] | None = None,
 ) -> None:
     """Render one scope's data leaves and, when present, its metric leaves."""
     _heading(f"scope: {label}")
     log.info("  data:")
-    _print_leaves(data_block, indent="    ")
+    _print_leaves(data_block, indent="    ", schema=schema)
     if metric_block is not None:
         log.info("  metrics:")
-        _print_leaves(metric_block, indent="    ")
+        _print_leaves(metric_block, indent="    ", schema=schema)
 
 
-def _print_leaves(block: dict[str, Any], indent: str) -> None:
-    """Render the bare leaves of a scope block, one line per entry."""
+def _print_leaves(block: dict[str, Any], indent: str, schema: dict[str, Any] | None = None) -> None:
+    """Render the leaves of a scope block, one line per entry.
+
+    When ``schema`` is given, each leaf carries its ``kind/label`` from
+    the schema artifact after the value, the interpretive companion to
+    the bare measurement; a leaf absent from the schema is left bare.
+    """
     name_width = max((len(name) for name in block), default=0)
     for name, value in block.items():
-        log.info(f"{indent}{name:<{name_width}}  {_render_value(value):>22}")
+        line = f"{indent}{name:<{name_width}}  {_render_value(value):>22}"
+        if schema is not None:
+            spec = schema.get(name)
+            if spec is not None:
+                line += f"  {spec.get('kind', '')}/{spec.get('label', '')}"
+        log.info(line)
 
 
 def _render_value(value: Any) -> str:
