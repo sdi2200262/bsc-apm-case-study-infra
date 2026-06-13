@@ -324,9 +324,7 @@ the whole handshake contract.
 
 The multi-step scenarios are scored as described under Memory checks:
 the binary is driven once under valgrind with a scripted JSON-RPC
-sequence, and a scenario passes only on a clean leak verdict, namely
-zero `definitely lost` and zero `indirectly lost` bytes, run
-complete, no signal exit, and exit code not the sentinel 99. Each
+sequence, and a scenario passes only on a clean leak verdict. Each
 gates on the functional rows it exercises and is a zero-point skip
 when any has not passed.
 
@@ -344,8 +342,8 @@ produced its functional verdict, awarded only when the functional row
 passed AND the leak verdict was clean, as defined under Memory checks.
 A failed functional row earns no `.mem` credit; a leak under a passing
 row deducts the `.mem` point without affecting the functional verdict.
-The pairing is mechanical, and the single per-row point weights
-correctness against leak hygiene evenly on the same execution.
+The single per-row point weights correctness against leak hygiene
+evenly on the same execution.
 
 ## Expected score upper bounds
 
