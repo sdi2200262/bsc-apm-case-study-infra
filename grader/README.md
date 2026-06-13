@@ -1,23 +1,26 @@
 # Grader
 
 Black-box testing suite that scores a participant's `eclass-mcp-server`
-submission: it applies the patch on a fresh test branch, runs the rubric
-against a separately-installed grading environment, and writes a JSON
-results artefact.
+submission. It applies the patch on a fresh test branch, runs the rubric
+against the grading environment, and writes a JSON results artefact.
 
 ## Overview
 
 The grader scores a submission against a 100-point rubric of 90 atomic
 rows, 30 to the Python implementation and 70 to the C replica.
-[SCORING.md](SCORING.md) is the rubric itself: every row and its points,
-the baseline-versus-feature split, and the per-section budget asserted at
-import. The participant workspace ships separately from
-[`bsc-apm-case-study-task`](https://github.com/sdi2200262/bsc-apm-case-study-task);
-the grader probes its endpoints, resets its seed, and spawns participant
-MCP servers under environment variables from its install prefix.
+[SCORING.md](SCORING.md) is the rubric itself, listing every row and its
+points, the baseline-versus-feature split, and the per-section budget
+asserted at import.
 
-The package is layered `environment -> protocol -> scoring -> report`;
-each layer's `__init__` documents its role and dependency direction.
+It runs against the grading environment in [`../grader-env/`](../grader-env/),
+a self-contained openeclass and mock CAS built and released from this
+repository, and spawns the participant's MCP server against it. That
+environment matches the participant package's openeclass pin but carries
+a richer two-user seed for the rubric, so it diverges from the mock
+participants used; the divergence is documented in `../grader-env/`.
+
+The package is layered `environment -> protocol -> scoring -> report`,
+and each layer's `__init__` documents its role and dependency direction.
 
 ## Prerequisites
 
@@ -33,55 +36,66 @@ curl -fsSL https://get.docker.com | sudo sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-The grading environment ships as per-architecture release tarballs from
-`bsc-apm-case-study-task`; install it and bring it up before grading (see
-that repository's
-[INSTALL.md](https://github.com/sdi2200262/bsc-apm-case-study-task/blob/main/docs/INSTALL.md)).
+Install and bring up the grading environment from [`../grader-env/`](../grader-env/)
+before grading.
 
 ## Quick start
 
 ```bash
-# Bring the grading environment up
-~/.bsc-apm/install
-~/.bsc-apm/scripts/up
+# Bring the grading environment up (see ../grader-env/)
+~/.bsc-apm-grader-env/install
+~/.bsc-apm-grader-env/scripts/up
 
-# Grade a patch (or --no-patch for the baseline)
+# Grade the baseline (no patch)
+python -m grader --no-patch \
+    --eclass-dir /path/to/eclass-mcp-server \
+    --mock-root ~/.bsc-apm-grader-env
+
+# Grade a patch file
 python -m grader /path/to/solution.patch \
-    --eclass-dir /path/to/eclass-mcp-server --mock-root ~/.bsc-apm
+    --eclass-dir /path/to/eclass-mcp-server \
+    --mock-root ~/.bsc-apm-grader-env
 
-# Emit the rubric schema once, then browse a results JSON against it
+# Emit the rubric schema once (the static per-row metadata)
 python -m grader --schema -o /path/to/output-dir
+
+# Browse a results JSON, joined against the schema
 ./inspect.py /path/to/grader_results.json --schema /path/to/grader_schema.json
 
-# Attach a note, or list every option
-python -m grader.notes add /path/to/results-dir --test-id C.5.2 --note "..."
+# Attach a free-prose note to a graded submission
+python -m grader.notes add /path/to/results-dir \
+    --test-id C.5.2 --note "context for the next reader"
+
+# Full options
 python -m grader --help
 ```
 
 ## How it works
 
-On each run the grader probes the environment's HTTP endpoints, resets
-the seed to baseline, applies the patch on a fresh branch, and provisions
-the documented `.env` and `certs/` into the checkout. It then runs the
-Python groups, gates the C side on the `make c-server` compile (C.1.1),
-and runs the C stack, configuration, announcement, and valgrind memory
-groups. SCORING.md covers the rows and their gating; the `protocol` layer
+On each run the grader probes the grading environment's HTTP endpoints,
+resets its seed to baseline, applies the patch on a fresh branch, and
+provisions the documented `.env` and `certs/` into the checkout. It then
+runs the Python groups, gates the C side on the `make c-server` compile
+(C.1.1), and runs the C stack, configuration, announcement, and valgrind
+memory groups.
+SCORING.md covers the rows and their gating, and the `protocol` layer
 carries the assertion detail.
 
-Two wiring mechanisms stay separate: the grader reads the environment's
-own `grader-env/seed/seed.yaml`, so the expected values cannot drift from
-the environment under test, while the `.env`/`certs/` copy guarantees the
-participant server runs with the literal documented wiring.
+Two wiring mechanisms stay separate. The grader reads the environment's
+own `../grader-env/seed/seed.yaml`, so the expected values cannot drift
+from the environment under test, while the `.env`/`certs/` copy
+guarantees the participant server runs with the literal documented
+wiring.
 
 The results JSON carries each row's per-submission outcome only (verdict,
 credited points, message, captured output). The static rubric metadata,
 the point maxima, categories, and descriptions, lives once in
 `grader_schema.json` (`--schema`), which `inspect.py` joins to render the
 descriptive views. Scored verdicts are reproducible against the pinned
-references below, but `full_output` is not byte-stable across seedings:
-announcement dates are written relative to the seeding wall clock and the
-`ldd` capture includes loader addresses, so compare on verdicts, not by
-byte diff.
+references below, but `full_output` is not byte-stable across seedings,
+because announcement dates are written relative to the seeding wall clock
+and the `ldd` capture includes loader addresses. Compare on verdicts, not
+by byte diff.
 
 ## Compact serialization
 
@@ -94,17 +108,24 @@ JSON-RPC / MCP stdio framing, so a conformant parser accepts both forms.
 `grader_results_compact_serialization.json` beside the canonical report,
 recording how a sound-but-compact-only replica would score.
 
+```bash
+python -m grader /path/to/solution.patch \
+    --eclass-dir /path/to/eclass-mcp-server \
+    --mock-root ~/.bsc-apm-grader-env \
+    --compact-json
+```
+
 ## Pinned references
 
 | Component | Pinned at |
 |---|---|
 | `eclass-mcp-server` | commit `dbd2d16` on `main` |
-| Grading environment (amd64) | `bsc-apm-case-study-task` release tag |
-| Grading environment (arm64) | `bsc-apm-case-study-task-arm64` release tag |
+| Grading environment | `grader-env-amd64` / `grader-env-arm64` release tags (this repo) |
 
 ## Related
 
-- [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task): the participant workspace and task specification.
+- [../grader-env/](../grader-env/): the openeclass and mock CAS the grader runs against.
 - [../parser/](../parser/): the Claude Code transcript parser.
 - [../pipeline/](../pipeline/): the submission processing pipeline.
+- [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task): the participant workspace and task specification.
 - [SCORING.md](SCORING.md): the rubric the grader implements.

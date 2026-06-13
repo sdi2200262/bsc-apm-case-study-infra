@@ -353,7 +353,7 @@ correctness against leak hygiene evenly on the same execution.
 
 | Submission shape | Score |
 |---|---|
-| No patch (baseline run against the unmodified upstream) | TBC |
+| No patch (baseline run against the unmodified upstream) | 10/100 (Python 10/30; the unmodified upstream ships no `c-replica/`, so every C row scores zero) |
 | Python implementation only (no C replica produced) | 30/100 (C.1.1 fails its sole hard gate; every other C row skip-records) |
 | Complete correct implementation | 100/100 |
 
