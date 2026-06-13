@@ -3,7 +3,7 @@
 """Course-announcements protocol assertions (P.2.x / C.3.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server
-as the ``student_courses`` principal and returns the shared ``RowResult``
+as the ``student_courses`` user and returns the shared ``RowResult``
 six-tuple (see ``._support`` for the tuple contract and the leak-verdict
 call ordering ``leak_after`` documents). A non-passing announcement row
 carries the edit-distance similarity against its expected ordered form.
@@ -43,7 +43,7 @@ from ._support import (
     leak_after,
 )
 
-_PRINCIPAL = user(SEED, "student_courses")
+_USER = user(SEED, "student_courses")
 TOOL_NAME = "get_course_announcements"
 
 
@@ -537,5 +537,5 @@ def check_course_days_40(
 
 
 def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_courses principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}
+    """Return credential env_overrides for the student_courses user."""
+    return {"ECLASS_USERNAME": _USER.username, "ECLASS_PASSWORD": _USER.password}

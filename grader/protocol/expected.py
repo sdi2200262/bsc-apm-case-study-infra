@@ -200,12 +200,12 @@ CAPABILITIES_DOCUMENTED = {
 def login_success(username: str) -> str:
     """Return the exact ``login`` success response for ``username``.
 
-    Single source for the principal-bearing success line the baseline
+    Single source for the user-bearing success line the baseline
     suite and the configuration-surface probes both assert; pinning
     the format here keeps the two callers in lockstep.
 
     Args:
-        username: Authenticated principal name to interpolate.
+        username: Authenticated user name to interpolate.
 
     Returns:
         ``Login successful! You are now logged in as <username>.``

@@ -448,10 +448,10 @@ def spawn_server(
     ``server.leak_verdict()`` on the still-live reference.
 
     When ``env_overrides`` carries a non-empty ``ECLASS_USERNAME``
-    and ``ECLASS_PASSWORD``, that principal is also written to
+    and ``ECLASS_PASSWORD``, that user is also written to
     the checkout's on-disk ``.env`` for the spawn and the
     provisioned ``.env`` is restored afterward, so a server reading
-    only the documented ``.env`` authenticates as the same principal
+    only the documented ``.env`` authenticates as the same user
     the env-var surface carries. An all-empty credential override is
     the missing-credentials deprivation probe: it is not written,
     so the caller's own ``.env`` deprivation stays in force.
@@ -462,7 +462,7 @@ def spawn_server(
         mock_root: Resolved grading environment path.
         debug: Whether to echo server stdio.
         env_overrides: Optional credential / credential-state
-            overrides. A non-empty principal here is written to
+            overrides. A non-empty user here is written to
             the on-disk ``.env`` as well; an all-empty deprivation
             override is not.
         memcheck: Run under valgrind (C only).
@@ -470,10 +470,10 @@ def spawn_server(
     env = mcp_server_env(mock_root)
     if env_overrides:
         env.update(env_overrides)
-    # Write a principal-bearing override to the on-disk .env as
+    # Write a user-bearing override to the on-disk .env as
     # well, so a server that reads only the documented .env file
     # (PRD section 4 makes that surface legitimate) authenticates as
-    # the same principal the env-var surface carries. The guard
+    # the same user the env-var surface carries. The guard
     # requires both values present AND non-empty: the
     # missing-credentials probe passes "" / "" to deprive both
     # surfaces and has already blanked the on-disk .env itself, so
@@ -505,7 +505,7 @@ def spawn_server(
         # Restore the provisioned .env verbatim (single-sourced from
         # <mock_root>/.env, so SSL_CERT_FILE and every non-credential
         # key are exactly as provisioned) only when this spawn wrote
-        # a principal to the .env, so non-credential spawns and the
+        # a user to the .env, so non-credential spawns and the
         # missing-credentials probe's own .env management are left
         # untouched.
         if wrote_env:

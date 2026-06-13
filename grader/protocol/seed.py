@@ -13,8 +13,8 @@ The seed carries two users with disjoint enrolment; the grader
 authenticates as one of them per scenario group (the course and
 baseline suites as ``student_courses``, the general suite as
 ``student_general``). That authenticated user is the scenario's
-principal: the seeded identity the grader logs in as. A scenario
-selects its principal and the loader answers per-principal enrolment
+user: the seeded identity the grader logs in as. A scenario
+selects its user and the loader answers per-user enrolment
 and window queries.
 
 Boundary semantics: ``days_back=N`` is an inclusive filter on
@@ -30,7 +30,7 @@ calendar-month subtraction whose span is 28 to 31 days depending on
 the month, not a flat 30. The general helper models that floor as a
 flat ``GENERAL_BACKEND_FLOOR_DAYS``-day clamp. That is a deliberate
 approximation, exact for this seed because the general view's union
-(the system-wide announcements plus the general principal's
+(the system-wide announcements plus the general user's
 enrolled-course announcements) has its oldest member at 20 days,
 inside even the shortest 28-day (February) calendar month, so the
 flat clamp and the calendar-month floor select the same set for
@@ -76,7 +76,7 @@ class SeedError(GraderError):
 
 @dataclass(frozen=True)
 class User:
-    """One seeded principal.
+    """One seeded user.
 
     Attributes:
         username: CAS / openeclass login name.
@@ -177,7 +177,7 @@ def user(seed: SeedData, username: str) -> User:
 
     Args:
         seed: Loaded seed data.
-        username: The principal to look up.
+        username: The user to look up.
 
     Returns:
         The matching user.
@@ -201,7 +201,7 @@ def enrolled_courses(seed: SeedData, username: str) -> tuple[Course, ...]:
 
     Args:
         seed: Loaded seed data.
-        username: The enrolled principal.
+        username: The enrolled user.
 
     Returns:
         The user's courses ordered alphabetically by title.
@@ -250,7 +250,7 @@ def general_announcements_in_window(
 
     Args:
         seed: Loaded seed data.
-        username: The authenticated principal whose enrolment
+        username: The authenticated user whose enrolment
             scopes the course side of the union.
         days_back: Inclusive upper bound on ``days_ago``, clamped
             to ``GENERAL_BACKEND_FLOOR_DAYS``.

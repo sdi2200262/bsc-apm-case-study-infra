@@ -45,7 +45,7 @@ from ..seed import SEED, user
 
 VALGRIND_TIMEOUT_SECONDS = 120
 
-_PRINCIPAL = user(SEED, "student_courses")
+_USER = user(SEED, "student_courses")
 
 ToolCall = tuple[str, dict[str, Any]]
 
@@ -185,8 +185,8 @@ def run_scenario(
     sequence = _build_sequence(scenario.calls)
     env = os.environ.copy()
     env.update(mcp_server_env(mock_root))
-    env["ECLASS_USERNAME"] = _PRINCIPAL.username
-    env["ECLASS_PASSWORD"] = _PRINCIPAL.password
+    env["ECLASS_USERNAME"] = _USER.username
+    env["ECLASS_PASSWORD"] = _USER.password
 
     try:
         result = subprocess.run(

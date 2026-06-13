@@ -175,8 +175,8 @@ error handling.
 The Python implementation extends the upstream `eclass-mcp-server`
 reference with the two announcement tools the PRD adds. The baseline
 rows run the four inherited tools against the seeded
-`student_courses` principal; the feature rows run the two new tools
-against the principal's enrolled courses.
+`student_courses` user; the feature rows run the two new tools
+against the user's enrolled courses.
 
 ### Baseline (11 points across 11 rows)
 
@@ -216,10 +216,10 @@ participant's responsibility.
 ### Feature: General Announcements (8 points across 7 rows)
 
 `get_general_announcements` unions the system-wide announcements with
-those of every course the authenticated principal is enrolled in,
+those of every course the authenticated user is enrolled in,
 ordered newest first across both sources, and rejects `days_back`
 above 30. The general suite runs against the `student_general`
-principal, whose enrolment is disjoint from the baseline and course
+user, whose enrolment is disjoint from the baseline and course
 suites, so the union covers both sources at the probed windows.
 
 | ID | Points | Description |

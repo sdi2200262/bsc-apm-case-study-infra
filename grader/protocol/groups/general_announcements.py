@@ -2,7 +2,7 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """General-announcements protocol assertions (P.3.x / C.4.x).
 
-Principal: ``student_general`` (enrolled in BIO110 only). Each function
+User: ``student_general`` (enrolled in BIO110 only). Each function
 accepts an optional ``instant`` (per-run seed-apply timestamp) and
 ``memcheck``, and returns the shared ``RowResult`` six-tuple (see
 ``._support`` for the tuple contract and the leak-verdict call ordering
@@ -37,7 +37,7 @@ from ._support import (
     leak_after,
 )
 
-_PRINCIPAL = user(SEED, "student_general")
+_USER = user(SEED, "student_general")
 TOOL_NAME = "get_general_announcements"
 
 
@@ -386,5 +386,5 @@ def check_general_default(
 
 
 def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_general principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}
+    """Return credential env_overrides for the student_general user."""
+    return {"ECLASS_USERNAME": _USER.username, "ECLASS_PASSWORD": _USER.password}

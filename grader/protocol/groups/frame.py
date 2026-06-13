@@ -5,7 +5,7 @@
 Owns the two rows that assert a raw protocol frame rather than a tool
 response: the ``tools/list`` advertisement and the C-replica
 hand-written ``initialize`` frame. Both run against a freshly-spawned
-MCP server as the ``student_courses`` principal and return the shared
+MCP server as the ``student_courses`` user and return the shared
 ``RowResult`` six-tuple (see ``._support`` for the tuple contract). These
 two rows assert a structured frame, not a single response string, so
 they carry no similarity and never earn partial credit. The
@@ -36,8 +36,8 @@ from ._support import (
     leak_after,
 )
 
-# Two-principal seed; baseline suite runs as student_courses.
-_PRINCIPAL = user(SEED, "student_courses")
+# Two-user seed; baseline suite runs as student_courses.
+_USER = user(SEED, "student_courses")
 
 
 def check_tools_list(
@@ -163,5 +163,5 @@ def check_initialize_frame(
 
 
 def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_courses principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}
+    """Return credential env_overrides for the student_courses user."""
+    return {"ECLASS_USERNAME": _USER.username, "ECLASS_PASSWORD": _USER.password}

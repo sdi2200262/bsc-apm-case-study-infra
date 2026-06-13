@@ -3,7 +3,7 @@
 """Baseline protocol assertions (P.1.x / C.2.x).
 
 Each function tests one rubric row against a freshly-spawned MCP server
-as the ``student_courses`` principal and returns the shared ``RowResult``
+as the ``student_courses`` user and returns the shared ``RowResult``
 six-tuple (see ``._support`` for the tuple contract and the leak-verdict
 call ordering ``leak_after`` documents).
 """
@@ -37,20 +37,20 @@ from ._support import (
     leak_after,
 )
 
-# Two-principal seed; baseline suite runs as student_courses.
-_PRINCIPAL = user(SEED, "student_courses")
+# Two-user seed; baseline suite runs as student_courses.
+_USER = user(SEED, "student_courses")
 _COURSES = enrolled_courses(SEED, "student_courses")
 
-LOGIN_SUCCESS = login_success(_PRINCIPAL.username)
-LOGIN_ALREADY = f"Already logged in as {_PRINCIPAL.username}"
+LOGIN_SUCCESS = login_success(_USER.username)
+LOGIN_ALREADY = f"Already logged in as {_USER.username}"
 LOGIN_MISSING_CREDS = (
     "Error: Username and password must be provided in the .env file. "
     "Please set ECLASS_USERNAME and ECLASS_PASSWORD in your .env file."
 )
 LOGIN_MISSING_CREDS_DOCUMENTED = "Error: Username and password must be provided in the .env file"
-LOGOUT_SUCCESS = f"Successfully logged out user {_PRINCIPAL.username}."
+LOGOUT_SUCCESS = f"Successfully logged out user {_USER.username}."
 LOGOUT_NO_OP = "Not logged in, nothing to do."
-AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {_PRINCIPAL.username}"
+AUTHSTATUS_LOGGED_IN = f"Status: Logged in as {_USER.username}"
 AUTHSTATUS_NOT_LOGGED_IN = "Status: Not logged in"
 
 
@@ -537,5 +537,5 @@ def check_logout_no_op(
 
 
 def _creds() -> dict[str, str]:
-    """Return credential env_overrides for the student_courses principal."""
-    return {"ECLASS_USERNAME": _PRINCIPAL.username, "ECLASS_PASSWORD": _PRINCIPAL.password}
+    """Return credential env_overrides for the student_courses user."""
+    return {"ECLASS_USERNAME": _USER.username, "ECLASS_PASSWORD": _USER.password}

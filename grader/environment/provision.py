@@ -11,11 +11,11 @@ avoids a ``git apply --check`` collision with a pre-created
 runs. The ``ECLASS_*`` env-var surface parses the same ``.env``
 (``grader.environment.env_file``), so both config surfaces carry
 identical values by construction. When a behavioural scenario
-switches principal, the principal is written to both surfaces
+switches user, the user is written to both surfaces
 together (``set_dotenv_credentials`` for the on-disk ``.env``,
 env-var overrides for the other), so that invariant holds across
 the switch and a server reading either surface authenticates as
-the scenario's principal.
+the scenario's user.
 """
 
 from __future__ import annotations
@@ -148,13 +148,13 @@ def blank_dotenv_credentials(eclass_root: Path) -> None:
 
 
 def set_dotenv_credentials(eclass_root: Path, username: str, password: str) -> None:
-    """Write a principal to the checkout's ``.env`` credentials, in place.
+    """Write a user to the checkout's ``.env`` credentials, in place.
 
     Rewrites only the two ``CREDENTIAL_KEYS`` lines to the given
-    principal; every other line (comments, ordering, all
+    user; every other line (comments, ordering, all
     non-credential keys) is preserved verbatim, so the dotenv
     surface stays otherwise valid. A server that reads only the
-    on-disk ``.env`` then authenticates as the same principal the
+    on-disk ``.env`` then authenticates as the same user the
     env-var surface carries, so the behavioural suites test
     behaviour rather than the participant's credential-surface
     choice.
@@ -167,7 +167,7 @@ def set_dotenv_credentials(eclass_root: Path, username: str, password: str) -> N
     Raises:
         FileNotFoundError: When the checkout has no ``.env``. The
             verbatim ``.env`` is written by ``provision`` before
-            any principal is written, so a missing file is a real
+            any user is written, so a missing file is a real
             precondition failure surfaced loudly, not a silent
             fallback.
     """

@@ -47,8 +47,8 @@ TLS_TRUST_ENV_KEYS = (
     "PYTHONHTTPSVERIFY",
 )
 
-_PRINCIPAL = user(SEED, "student_courses")
-LOGIN_SUCCESS = login_success(_PRINCIPAL.username)
+_USER = user(SEED, "student_courses")
+LOGIN_SUCCESS = login_success(_USER.username)
 
 IMPL = "c"
 
