@@ -7,16 +7,10 @@ the score summary, the review and warning notices) goes through this
 module; JSON is the only file artefact. The module owns the level
 vocabulary, the bracket-token rendering, the stdout/stderr split, the
 debug gate, and the structural separators, so output is uniform across
-every layer that imports it.
-
-Each level emits ``[LEVEL] message`` with the bracket token left-padded
-to a common width and ANSI colour applied to the token only, and only
-when the destination stream is a TTY. ``error`` writes to stderr; every
-other level writes to stdout. ``debug`` emits only when the environment
-variable named by ``DEBUG_ENV_VAR`` is set (the ``--debug`` flag turns
-it on via ``enable_debug``). ``line`` and ``blank`` are structural:
-``line`` is the only separator rule, replacing raw banner constants,
-and ``blank`` is an empty line. There are no emojis.
+every layer that imports it. Each line is ``[LEVEL] message`` with the
+token left-padded to a common width and coloured (token only) on a TTY;
+the per-level functions below own each level's destination and gate.
+There are no emojis.
 """
 
 from __future__ import annotations

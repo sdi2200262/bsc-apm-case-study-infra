@@ -3,24 +3,18 @@
 """Hand-written annotations attached to grader results.
 
 The grader produces a per-submission ``grader_results.json`` that scores
-every rubric row and carries the per-test message the assertion
-emitted. Sometimes a row's outcome needs a free-prose note that
-records the cause behind the score in a way the structured
-message cannot: a code path that traces leak-free under
-valgrind because the participant's handler short-circuits before
-allocating, a strict match that passes because the participant
-matched a peripheral seed value rather than the intended
-contract, an infrastructure row that fails for a reason
-upstream of the participant's work.
+every rubric row and carries the per-test message the assertion emitted.
+Sometimes a row's outcome needs a free-prose note that records the cause
+behind the score in a way the structured message cannot: a code path that
+traces leak-free under valgrind because the participant's handler short-
+circuits before allocating, a strict match that passes because the
+participant matched a peripheral seed value rather than the intended
+contract, an infrastructure row that fails for a reason upstream of the
+participant's work.
 
-Notes live in a YAML sidecar named ``results_notes.yaml`` in
-the same directory as ``grader_results.json``. The grader never reads
-or writes the sidecar; re-running the grader does not perturb
-it. The pipeline's ``combine`` stage embeds the sidecar's
-contents in ``combined.json`` under the ``results_notes`` key
-when the file is present, and records the sidecar's checksum in
-the manifest so a downstream reader can detect edits between
-combine runs.
+Notes live in a YAML sidecar named ``results_notes.yaml`` in the same
+directory as ``grader_results.json``. The grader never reads or writes the
+sidecar; re-running the grader does not perturb it.
 
 Sidecar shape::
 
@@ -35,26 +29,16 @@ Sidecar shape::
           A submission-level observation, not tied to any rubric
           row.
 
-The ``test_ids`` field is optional and, when present, lists one
-or more rubric rows that share a single root cause. The ``add``
-subcommand validates every listed ID against the ``tests`` block
-in the current ``grader_results.json``. When absent, the note is a
-submission-level observation about the submission as a whole.
+The ``test_ids`` field is optional and, when present, lists one or more
+rubric rows that share a single root cause; the ``add`` subcommand
+validates every listed ID against the ``tests`` block in the current
+``grader_results.json``. When absent, the note is a submission-level
+observation about the submission as a whole.
 
 The CLI is invoked as
-``python -m grader.notes <subcommand> <results_dir> [...]``
-where ``results_dir`` is the directory holding ``grader_results.json``.
-Subcommands:
-
-* ``add --note "<prose>" [--test-id <id> ...]``: append one
-  entry. ``--test-id`` may be repeated; every ID must address an
-  entry in the current ``grader_results.json``'s ``tests`` block, and
-  the listed rows all share the one root cause the note states.
-* ``list``: print every note with its index plus a freshness
-  indicator (a ``test_ids`` entry naming a row that has
-  disappeared from ``grader_results.json`` after a re-run is flagged
-  ``stale``).
-* ``remove --index <N>``: delete the entry at the given index.
+``python -m grader.notes <subcommand> <results_dir> [...]`` where
+``results_dir`` holds ``grader_results.json``. See ``_build_parser`` for
+the subcommand surface and the ``_cmd_*`` handlers for their behaviour.
 """
 
 from __future__ import annotations

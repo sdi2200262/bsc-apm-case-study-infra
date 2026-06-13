@@ -2,16 +2,12 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Exception hierarchy for the grader package.
 
-Each grader module raises the appropriate ``GraderError`` subclass on
-failure; the CLI entry point (``python -m grader``) catches the base
-``GraderError`` and reports a structured error to stderr before a
-non-zero exit code. Two subclasses live with the code that raises them,
-``provision.ProvisioningError`` and ``calibration.CalibrationError``;
-the rest are defined below.
-
-Every exception message includes the failing component, the path or URL
-involved when applicable, and the operator action that typically
-resolves the failure.
+The CLI catches the base ``GraderError`` and reports a structured error
+before a non-zero exit. Each raised message names the failing component,
+the path or URL involved when applicable, and the operator action that
+typically resolves it. Two subclasses live with the code that raises them,
+``provision.ProvisioningError`` and ``calibration.CalibrationError``; the
+rest are defined below.
 """
 
 from __future__ import annotations

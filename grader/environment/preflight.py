@@ -2,17 +2,12 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Pre-flight HTTP probes against the grading environment.
 
-The grader runs against a separately-installed grading environment
-that provides the openeclass instance and the mock CAS service.
-Before any protocol test runs, the pre-flight check verifies that
-both services respond on their localhost ports. The probes are
-idempotent and read-only; they do not mutate any state on either
-service.
-
-A failed probe raises ``PreflightError`` with a message naming the
-failing service and pointing the operator at the testing
-environment's lifecycle scripts. The grader's caller catches the
-error and exits without running tests.
+The grader runs against a separately-installed grading environment that
+provides the openeclass instance and the mock CAS service. Before any
+protocol test runs, the pre-flight check verifies that both services
+respond on their localhost ports. The probes are idempotent and read-
+only; they do not mutate state on either service. A failed probe raises
+``PreflightError`` and the grader exits without running tests.
 """
 
 from __future__ import annotations

@@ -3,19 +3,16 @@
 """Python build verification for the eclass-mcp-server checkout.
 
 The grader runs ``uv sync`` against the participant's checkout to
-install the Python implementation's dependencies. A successful
-return indicates the dependencies resolved and the package is
-importable inside the checkout's environment; the actual server
-spawn happens during the protocol tests.
+install the Python implementation's dependencies. A successful return
+indicates the dependencies resolved and the package is importable inside
+the checkout's environment; the actual server spawn happens during the
+protocol tests.
 
-A failed ``uv sync`` is consequential: the orchestrator records every
-Python rubric row as failed, so one transient package-index or network
-blip would zero the whole Python half non-deterministically. To stop
-that, the build is retried with backoff, but only on a transient
-signature: a network, DNS, TLS, connection, rate-limit, or 5xx index
-condition, or a resource-kill signal. A genuine lockfile or resolution
-error carries none of these, so it fails on the first attempt and a
-retry never masks it.
+A failed ``uv sync`` is consequential: every Python rubric row is then
+recorded as failed, so one transient blip would zero the whole Python
+half non-deterministically. To stop that the build is retried with
+backoff, but only on a transient signature; ``_is_transient_failure``
+owns what counts as transient and why.
 """
 
 from __future__ import annotations
@@ -29,16 +26,15 @@ BUILD_TIMEOUT_SECONDS = 120
 MAX_BUILD_ATTEMPTS = 3
 RETRY_BACKOFF_BASE_SECONDS = 2.0
 
-# Transient-failure signatures in ``uv sync`` output. uv exits 1 for both
-# a genuine resolution/lockfile error and a transient network/index
-# outage, so the exit code cannot tell them apart; the combined output is
-# matched instead. The patterns name the self-clearing network, DNS, TLS,
-# connection, rate-limit, and 5xx conditions. A resolution or lockfile
-# error matches none, so it is not retried. The fetch/download arm omits
-# the word "resolve" on purpose: uv's dependency-resolution failures
-# carry it and must stay deterministic, while host-resolution DNS
-# failures are caught by the explicit phrases below. The numeric os-error
-# codes are uv's common transient HTTP errnos.
+# Transient-failure signatures in ``uv sync`` output, matched by
+# ``_is_transient_failure`` (which owns the retry decision). uv exits 1
+# for both a genuine resolution/lockfile error and a transient network/
+# index outage, so the exit code cannot tell them apart; the combined
+# output is matched instead. The fetch/download arm omits the word
+# "resolve" on purpose: uv's dependency-resolution failures carry it and
+# must stay deterministic, while host-resolution DNS failures are caught
+# by the explicit phrases below. The numeric os-error codes are uv's
+# common transient HTTP errnos.
 _TRANSIENT_FAILURE = re.compile(
     r"error sending request"
     r"|failed to (?:fetch|download)"
