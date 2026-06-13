@@ -1,57 +1,45 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Author-curated annotations attached to metric paths.
+"""Author-curated annotations attached to artifact paths.
 
-The parser produces a clean ``metrics.json`` for each submission. A
-metric value can occasionally need a free-prose annotation that
-records why a number reads the way it does: a participant pasting a
-handoff document after the worker refused to read the bus file, a
-session whose cost is a known lower bound because of compaction, a
-turn whose duration is dominated by waiting on a slow tool. The
-parser does not synthesise such notes; they are the author's
-judgement and are written by hand through this module's CLI.
+The parser emits clean data and metrics artifacts for each
+submission. A value can occasionally need a free-prose annotation
+that records why a number reads the way it does: a participant
+pasting a handoff document after the worker refused to read the bus
+file, a session whose cost is a known lower bound because of
+compaction, a turn whose duration is dominated by waiting on a slow
+tool. The parser does not synthesise such notes; they are the
+author's judgement and are written by hand through this module's
+CLI, invoked as ``python -m parser.notes``.
 
 Notes live in a YAML sidecar named ``metrics_notes.yaml`` in the
-same directory as ``metrics.json``. The parser never reads or writes
-the sidecar; running ``--metrics`` again does not perturb it. The
-pipeline's ``combine`` stage embeds the sidecar's contents in
-``combined.json`` under the ``metrics_notes`` key when the file is
-present, and records the sidecar's checksum in the manifest.
+same directory as the emitted artifacts and travel with them. The
+parser never reads or writes the sidecar; running ``--metrics``
+again does not perturb it.
 
 Sidecar shape::
 
     notes:
-      - path: session.process.user_input.turn_prompts_magnitude_by_bucket.standard
+      - path: scopes.session.cost_usd
         note: |
-          Free prose describing why this metric reads the way it
+          Free prose describing why this value reads the way it
           does. Multi-line content is supported via YAML's block
           scalar; trailing whitespace is stripped on save.
 
-A path is a dotted address into ``metrics.json``. Object keys use
-``.``; array elements use ``[N]``. A path can point to any node:
-a leaf scalar, a leaf wrapper (``{value, label, constructed}``), a
-metric block, or even the whole session scope. The CLI's ``add``
-subcommand validates that the path resolves against the current
-``metrics.json`` before writing.
-
-The CLI is invoked as ``python -m parser.notes <subcommand>
-<metrics_dir> [...]`` where ``metrics_dir`` is the directory holding
-``metrics.json``. Subcommands:
-
-* ``add --path <dotted> --note "<prose>"``: append one entry. The
-  path must resolve against the current ``metrics.json``.
-* ``list``: print every note with its index and a path-resolution
-  status (a path that no longer addresses an existing node after a
-  re-parse is flagged ``stale`` so the author can decide whether to
-  remove or rewrite the entry).
-* ``remove --index <N>``: delete the entry at the given index (as
-  shown by ``list``).
+A path is a dotted address into ``parser_metrics.json`` or, when it
+does not resolve there, ``parser_data.json``. Object keys use ``.``;
+array elements use ``[N]``. A path can point to any node: a leaf
+scalar, a scope block, or a series element. The ``add`` subcommand
+validates that the path resolves against one of the current
+artifacts before writing; ``list`` re-resolves every entry and flags
+paths a re-parse has invalidated as ``stale``.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -60,10 +48,12 @@ from typing import Any
 import yaml
 
 from . import log
+from .data.jsonl import read_json
 from .errors import ParserError
 
 NOTES_FILENAME = "metrics_notes.yaml"
-METRICS_FILENAME = "metrics.json"
+METRICS_FILENAME = "parser_metrics.json"
+DATA_FILENAME = "parser_data.json"
 
 _PATH_TOKEN = re.compile(r"\[(\d+)\]|\.?([^.\[\]]+)")
 
@@ -77,7 +67,7 @@ def parse_metric_path(dotted: str) -> list[str | int]:
 
     Args:
         dotted: A path string such as
-            ``session.economic.cost_usd.value`` or
+            ``scopes.session.cost_usd`` or
             ``turns[3].duration_seconds``.
 
     Returns:
@@ -105,7 +95,7 @@ def resolve_metric_path(metrics: Any, tokens: list[str | int]) -> Any:
     """Walk a tokenised metric path through a metrics payload.
 
     Args:
-        metrics: The parsed ``metrics.json`` payload.
+        metrics: A parsed artifact payload.
         tokens: A token list from ``parse_metric_path``.
 
     Returns:
@@ -144,8 +134,8 @@ def load_notes(directory: Path) -> list[dict[str, str]]:
     """Read the notes sidecar in ``directory``, returning the entry list.
 
     Args:
-        directory: Directory holding ``metrics.json`` and (optionally)
-            ``metrics_notes.yaml``.
+        directory: Directory holding the emitted artifacts and
+            (optionally) ``metrics_notes.yaml``.
 
     Returns:
         The parsed list of ``{path, note}`` dicts. An empty list when
@@ -194,7 +184,7 @@ def save_notes(directory: Path, notes: list[dict[str, str]]) -> None:
     plain editor.
 
     Args:
-        directory: Directory holding ``metrics.json``.
+        directory: Directory holding the emitted artifacts.
         notes: The entry list to persist.
     """
     path = directory / NOTES_FILENAME
@@ -244,18 +234,56 @@ def _render_token(token: str | int) -> str:
     return token
 
 
-def _read_metrics(directory: Path) -> Any:
-    """Load ``metrics.json`` from ``directory`` for path validation."""
-    path = directory / METRICS_FILENAME
-    if not path.is_file():
-        raise NotesError(f"{METRICS_FILENAME} not found in {directory}; run the parser first")
-    import json
+def _read_artifacts(directory: Path) -> dict[str, Any]:
+    """Load the emitted artifacts from ``directory`` for path validation.
 
-    with path.open("r", encoding="utf-8") as source:
+    Args:
+        directory: Directory holding ``parser_metrics.json`` and
+            ``parser_data.json``.
+
+    Returns:
+        Mapping of artifact filename to parsed payload, metrics first
+        (the order ``resolve_in_artifacts`` walks).
+
+    Raises:
+        NotesError: When an artifact is absent or not valid JSON.
+    """
+    artifacts: dict[str, Any] = {}
+    for filename in (METRICS_FILENAME, DATA_FILENAME):
+        path = directory / filename
+        if not path.is_file():
+            raise NotesError(f"{filename} not found in {directory}; run the parser first")
         try:
-            return json.load(source)
+            artifacts[filename] = read_json(path)
         except json.JSONDecodeError as error:
             raise NotesError(f"{path} is not valid JSON: {error}") from error
+    return artifacts
+
+
+def resolve_in_artifacts(artifacts: dict[str, Any], tokens: list[str | int]) -> str:
+    """Resolve a tokenised path against the artifacts in order.
+
+    Args:
+        artifacts: Mapping of artifact filename to parsed payload, in
+            resolution order.
+        tokens: A token list from ``parse_metric_path``.
+
+    Returns:
+        The filename of the first artifact the path resolves in.
+
+    Raises:
+        NotesError: When the path resolves in none of the artifacts;
+            the message carries each artifact's resolution failure.
+    """
+    failures: list[str] = []
+    for filename, payload in artifacts.items():
+        try:
+            resolve_metric_path(payload, tokens)
+        except NotesError as error:
+            failures.append(f"{filename}: {error}")
+            continue
+        return filename
+    raise NotesError("; ".join(failures))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -291,7 +319,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m parser.notes",
         description=(
             "Manage author-curated annotations on metric paths. "
-            "Notes live in metrics_notes.yaml beside metrics.json."
+            "Notes live in metrics_notes.yaml beside the emitted artifacts."
         ),
     )
     sub = parser.add_subparsers(dest="subcommand")
@@ -302,12 +330,12 @@ def _build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument(
         "metrics_dir",
         type=Path,
-        help="directory holding metrics.json",
+        help="directory holding the emitted artifacts",
     )
     add_parser.add_argument(
         "--path",
         required=True,
-        help=("dotted metric path (e.g. session.economic.cost_usd or turns[3].duration_seconds)"),
+        help=("dotted artifact path (e.g. scopes.session.cost_usd or turns[3].duration_seconds)"),
     )
     add_parser.add_argument(
         "--note",
@@ -321,7 +349,7 @@ def _build_parser() -> argparse.ArgumentParser:
     list_parser.add_argument(
         "metrics_dir",
         type=Path,
-        help="directory holding metrics.json",
+        help="directory holding the emitted artifacts",
     )
     remove_parser = sub.add_parser(
         "remove",
@@ -330,7 +358,7 @@ def _build_parser() -> argparse.ArgumentParser:
     remove_parser.add_argument(
         "metrics_dir",
         type=Path,
-        help="directory holding metrics.json",
+        help="directory holding the emitted artifacts",
     )
     remove_parser.add_argument(
         "--index",
@@ -349,13 +377,13 @@ def _cmd_add(args: argparse.Namespace) -> int:
         log.error("note text cannot be empty")
         return 1
 
-    metrics = _read_metrics(directory)
+    artifacts = _read_artifacts(directory)
     tokens = parse_metric_path(args.path)
-    resolve_metric_path(metrics, tokens)
+    resolved_in = resolve_in_artifacts(artifacts, tokens)
     notes = load_notes(directory)
     notes.append({"path": args.path, "note": note_text})
     save_notes(directory, notes)
-    log.info(f"added note at {args.path} (now {len(notes)} note(s))")
+    log.info(f"added note at {args.path} (resolves in {resolved_in}; now {len(notes)} note(s))")
     return 0
 
 
@@ -366,12 +394,12 @@ def _cmd_list(args: argparse.Namespace) -> int:
     if not notes:
         log.info(f"no notes in {directory / NOTES_FILENAME}")
         return 0
-    metrics = _read_metrics(directory)
+    artifacts = _read_artifacts(directory)
     for index, entry in enumerate(notes):
         try:
             tokens = parse_metric_path(entry["path"])
-            resolve_metric_path(metrics, tokens)
-            status = "ok"
+            resolved_in = resolve_in_artifacts(artifacts, tokens)
+            status = f"ok ({resolved_in})"
         except NotesError as error:
             status = f"stale ({error})"
         log.info(f"[{index}] path={entry['path']}  status={status}")
