@@ -69,6 +69,7 @@ import yaml
 
 from . import log
 from .errors import GraderError
+from .json_io import read_json
 
 NOTES_FILENAME = "results_notes.yaml"
 RESULTS_FILENAME = "grader_results.json"
@@ -229,11 +230,10 @@ def _read_results(directory: Path) -> dict[str, Any]:
     path = directory / RESULTS_FILENAME
     if not path.is_file():
         raise NotesError(f"{RESULTS_FILENAME} not found in {directory}; run the grader first")
-    with path.open("r", encoding="utf-8") as source:
-        try:
-            return json.load(source)
-        except json.JSONDecodeError as error:
-            raise NotesError(f"{path} is not valid JSON: {error}") from error
+    try:
+        return read_json(path)
+    except json.JSONDecodeError as error:
+        raise NotesError(f"{path} is not valid JSON: {error}") from error
 
 
 def _known_test_ids(results: dict[str, Any]) -> set[str]:

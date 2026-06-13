@@ -30,12 +30,13 @@ from pathlib import Path
 from typing import Any
 
 from . import log
+from .json_io import read_json
 
 MESSAGE_TRUNCATE_LIMIT = 200
 OUTPUT_LINE_WRAP = 100
 
 
-def load_results(filepath: Path) -> dict[str, Any]:
+def _load_results(filepath: Path) -> dict[str, Any]:
     """Load and parse a results JSON file.
 
     Args:
@@ -48,11 +49,10 @@ def load_results(filepath: Path) -> dict[str, Any]:
         json.JSONDecodeError: When the file contains invalid JSON.
         FileNotFoundError: When the file does not exist.
     """
-    with open(filepath, encoding="utf-8") as source:
-        return json.load(source)
+    return read_json(filepath)
 
 
-def print_header(text: str) -> None:
+def _print_header(text: str) -> None:
     """Print a section header framed by separator rules.
 
     Args:
@@ -64,7 +64,7 @@ def print_header(text: str) -> None:
     log.line()
 
 
-def truncate(text: str, limit: int = MESSAGE_TRUNCATE_LIMIT) -> str:
+def _truncate(text: str, limit: int = MESSAGE_TRUNCATE_LIMIT) -> str:
     """Return ``text`` truncated to ``limit`` characters with an ellipsis suffix.
 
     Args:
@@ -80,7 +80,7 @@ def truncate(text: str, limit: int = MESSAGE_TRUNCATE_LIMIT) -> str:
     return text[: limit - 3] + "..."
 
 
-def format_status(verdict: str) -> str:
+def _format_status(verdict: str) -> str:
     """Return the short status label for a row's ``verdict``.
 
     Args:
@@ -98,17 +98,17 @@ def format_status(verdict: str) -> str:
     return "FAIL"
 
 
-def format_number(value: float) -> str:
+def _format_number(value: float) -> str:
     """Return ``value`` as an integer string when whole, else two decimals."""
     return str(int(value)) if float(value).is_integer() else f"{value:.2f}"
 
 
-def format_points(earned: float, total: float) -> str:
+def _format_points(earned: float, total: float) -> str:
     """Return points as an ``"earned/total"`` string, decimals only when fractional."""
-    return f"{format_number(earned)}/{format_number(total)}"
+    return f"{_format_number(earned)}/{_format_number(total)}"
 
 
-def get_categories(tests: dict[str, dict[str, Any]]) -> list[str]:
+def _get_categories(tests: dict[str, dict[str, Any]]) -> list[str]:
     """Return the sorted list of unique categories across all tests.
 
     Args:
@@ -124,12 +124,12 @@ def get_categories(tests: dict[str, dict[str, Any]]) -> list[str]:
     return sorted(categories)
 
 
-def node_points(node: dict[str, Any]) -> str:
+def _node_points(node: dict[str, Any]) -> str:
     """Return a score node's credited total over its maximum as ``"total/max"``."""
-    return format_points(node.get("total", 0), node.get("max", 0))
+    return _format_points(node.get("total", 0), node.get("max", 0))
 
 
-def category_breakdown(tests: dict[str, dict[str, Any]]) -> dict[str, dict[str, list[float]]]:
+def _category_breakdown(tests: dict[str, dict[str, Any]]) -> dict[str, dict[str, list[float]]]:
     """Recompute the per-target, per-category score view from the test rows.
 
     The grader no longer persists a ``category_breakdown`` block, so
@@ -153,7 +153,7 @@ def category_breakdown(tests: dict[str, dict[str, Any]]) -> dict[str, dict[str, 
     return breakdown
 
 
-def print_summary(data: dict[str, Any]) -> None:
+def _print_summary(data: dict[str, Any]) -> None:
     """Print the score summary including the recomputed category breakdown.
 
     Args:
@@ -164,38 +164,38 @@ def print_summary(data: dict[str, Any]) -> None:
     scores = data.get("scores", {})
     tests = data.get("tests", {})
 
-    print_header(f"RESULTS: {meta.get('patch_name', 'Unknown')}")
+    _print_header(f"RESULTS: {meta.get('patch_name', 'Unknown')}")
     log.info(f"Timestamp: {meta.get('timestamp', 'N/A')}")
 
-    print_header("SCORES")
+    _print_header("SCORES")
 
     py = scores.get("python", {})
     py_base = py.get("baseline", {})
     py_feat = py.get("feature", {})
     c = scores.get("c", {})
 
-    log.info(f"Python Baseline:  {node_points(py_base)}")
-    log.info(f"Python Feature:   {node_points(py_feat)}")
-    log.info(f"Python Total:     {node_points(py)}")
-    log.info(f"C Replica:        {node_points(c)}")
+    log.info(f"Python Baseline:  {_node_points(py_base)}")
+    log.info(f"Python Feature:   {_node_points(py_feat)}")
+    log.info(f"Python Total:     {_node_points(py)}")
+    log.info(f"C Replica:        {_node_points(c)}")
     log.line()
-    log.info(f"GRAND TOTAL:      {node_points(scores)}")
+    log.info(f"GRAND TOTAL:      {_node_points(scores)}")
     strict = scores.get("total_strict", 0)
     partial = scores.get("total_partial", 0)
-    log.info(f"  strict {format_number(strict)}, partial {format_number(partial)}")
+    log.info(f"  strict {_format_number(strict)}, partial {_format_number(partial)}")
 
-    print_header("CATEGORY BREAKDOWN")
-    breakdown = category_breakdown(tests)
+    _print_header("CATEGORY BREAKDOWN")
+    breakdown = _category_breakdown(tests)
     for target in ("python", "c"):
         cats = breakdown.get(target, {})
         if not cats:
             continue
         log.info(f"{target.upper()}:")
         for cat, (earned, cat_max) in sorted(cats.items()):
-            log.info(f"  {cat:15s} {format_points(earned, cat_max)}")
+            log.info(f"  {cat:15s} {_format_points(earned, cat_max)}")
 
 
-def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False) -> None:
+def _print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False) -> None:
     """Print details for a single test.
 
     Args:
@@ -213,8 +213,8 @@ def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False)
     description = test_data.get("description", "No description")
     message = test_data.get("message", "")
 
-    status = format_status(verdict)
-    points = format_points(points_earned, points_total)
+    status = _format_status(verdict)
+    points = _format_points(points_earned, points_total)
 
     log.blank()
     log.info(f"{test_id} {status} ({points} pts) - {category}")
@@ -222,7 +222,7 @@ def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False)
     similarity = test_data.get("similarity")
     if similarity is not None:
         log.info(f"Similarity: {similarity:.3f} (partial credit)")
-    log.info(f"Message: {truncate(message)}")
+    log.info(f"Message: {_truncate(message)}")
 
     if show_full:
         full_output = test_data.get("full_output", "")
@@ -236,7 +236,7 @@ def print_test(test_id: str, test_data: dict[str, Any], show_full: bool = False)
             log.info(f"  {output_line}")
 
 
-def print_tests_list(
+def _print_tests_list(
     tests: dict[str, dict[str, Any]],
     filter_passed: bool | None = None,
     filter_category: str | None = None,
@@ -260,8 +260,8 @@ def print_tests_list(
         ):
             continue
 
-        status = format_status(test_data.get("verdict", "failed"))
-        points = format_points(
+        status = _format_status(test_data.get("verdict", "failed"))
+        points = _format_points(
             test_data.get("points_earned", 0),
             test_data.get("points", 0),
         )
@@ -290,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        data = load_results(args.results_file)
+        data = _load_results(args.results_file)
     except json.JSONDecodeError as error:
         log.error(f"Invalid JSON: {error}")
         return 1
@@ -302,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list_categories:
         # Raw, one-per-line output for scripting; not decorated.
-        for cat in get_categories(tests):
+        for cat in _get_categories(tests):
             print(cat)
         return 0
 
@@ -322,26 +322,26 @@ def main(argv: list[str] | None = None) -> int:
             log.error(f"Test '{test_id}' not found")
             log.error(f"Available tests: {', '.join(tests.keys())}")
             return 1
-        print_test(test_id, tests[test_id], show_full=True)
+        _print_test(test_id, tests[test_id], show_full=True)
         return 0
 
     if args.failed:
-        print_header("FAILED TESTS")
-        print_tests_list(tests, filter_passed=False)
+        _print_header("FAILED TESTS")
+        _print_tests_list(tests, filter_passed=False)
         return 0
 
     if args.passed:
-        print_header("PASSED TESTS")
-        print_tests_list(tests, filter_passed=True)
+        _print_header("PASSED TESTS")
+        _print_tests_list(tests, filter_passed=True)
         return 0
 
     if args.category:
-        print_header(f"TESTS IN CATEGORY: {args.category.upper()}")
-        print_tests_list(tests, filter_category=args.category)
+        _print_header(f"TESTS IN CATEGORY: {args.category.upper()}")
+        _print_tests_list(tests, filter_category=args.category)
         return 0
 
     # Default and explicit --summary: the one-shot score summary.
-    print_summary(data)
+    _print_summary(data)
     return 0
 
 

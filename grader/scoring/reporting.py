@@ -17,12 +17,12 @@ budget groups the scorer enforces.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from .. import log
+from ..json_io import write_json
 from .notices import collect_notices
 from .rubric import (
     C_BASELINE_TESTS,
@@ -99,7 +99,7 @@ def report_paths(workspace_root: Path, patch_name: str, compact: bool = False) -
     )
 
 
-def write_json(
+def write_report(
     paths: ReportPaths,
     scorer: Scorer,
     metadata: dict | None = None,
@@ -124,7 +124,7 @@ def write_json(
         },
         **scorer.to_dict(),
     }
-    paths.json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_json(payload, paths.json_path)
     return paths.json_path
 
 
