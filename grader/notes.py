@@ -68,12 +68,13 @@ from typing import Any
 import yaml
 
 from . import log
+from .errors import GraderError
 
 NOTES_FILENAME = "results_notes.yaml"
 RESULTS_FILENAME = "grader_results.json"
 
 
-class NotesError(Exception):
+class NotesError(GraderError):
     """Raised when a notes operation fails for a recoverable reason."""
 
 

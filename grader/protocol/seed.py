@@ -54,6 +54,8 @@ from typing import Any
 
 import yaml
 
+from ..errors import GraderError
+
 # Flat-day stand-in for openeclass's calendar-month general-view
 # floor (``DATE_SUB(CURDATE(), INTERVAL 1 MONTH)``, 28 to 31 days).
 # Exact for this seed only; see the module docstring for the
@@ -68,7 +70,7 @@ _GRADER_ENV_SEED = (
 )
 
 
-class SeedError(Exception):
+class SeedError(GraderError):
     """Raised when the seed file is missing, malformed, or incomplete."""
 
 
