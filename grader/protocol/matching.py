@@ -21,14 +21,12 @@ strictness mode:
   space and one rendered with a plain space are the same answer.
 
 The two-form rows instead record which of two accepted forms matched,
-evaluated in order through ``_try_forms``: each matcher supplies its own
-per-form predicates while the dispatch (try in order, label the first match)
-lives in one place. Each pair has a faithful first form and a lenient second
-form; the lenient forms are collected in ``LENIENT_MODES``, which
-``grader.scoring.notices`` imports to warn a human, at end of grading, of
-every row accepted only via a lenient form. The announcement two-form
-matcher lives in ``announcement_matching``, which imports the mode constants
-and the shared dispatch from this module.
+evaluated in order through ``_try_forms``. Each pair has a faithful first
+form and a lenient second form; the lenient forms are collected in
+``LENIENT_MODES``. This module is the owner of the lenient-form notice: a
+row accepted only via a lenient form is warned for human review at end of
+grading. The announcement two-form matcher lives in ``announcement_matching``,
+which imports the mode constants and the shared dispatch from this module.
 """
 
 from __future__ import annotations
@@ -185,8 +183,7 @@ def match_get_courses(
     recorded diagnostic is the matched layout: ``GET_COURSES_FAITHFUL``
     for the openeclass-formatted layout, ``GET_COURSES_DOCUMENTED``
     for the documented-clean layout. The documented-clean layout is a
-    lenient acceptance and is warned for human review at end of
-    grading (see ``grader.scoring.notices``).
+    lenient form (see the module docstring).
 
     Args:
         text: The tool's response text.
@@ -228,9 +225,9 @@ def match_missing_credentials(
     the reference doc documents a one-sentence form. Both are
     legitimate readings of the published task material, so both are
     candidates, with the documented form gated to the C replica and
-    flagged for human review. Each candidate is compared byte for
-    byte; this row carries no rendered text whose whitespace family
-    could differ.
+    a lenient form (see the module docstring). Each candidate is
+    compared byte for byte; this row carries no rendered text whose
+    whitespace family could differ.
 
     Args:
         text: The tool's response text.
@@ -261,9 +258,8 @@ def match_initialize(actual_result: dict) -> str | None:
     (what the SDK serialises for a tools-only server) yields
     ``CAP_FAITHFUL``; the documented form (what the wire-protocol
     reference literally specifies) yields ``CAP_DOCUMENTED``. The
-    documented form is a lenient acceptance and is warned for human
-    review at end of grading (see ``grader.scoring.notices``). Only
-    these three fields are the contract; an ``initialize`` result
+    documented form is a lenient form (see the module docstring).
+    Only these three fields are the contract; an ``initialize`` result
     may carry further fields (an ``instructions`` string, SDK
     metadata) and those are outside the row's contract and ignored.
     The expected values are constructed; nothing here is captured

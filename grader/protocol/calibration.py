@@ -4,18 +4,14 @@
 """Per-run seed-instant calibration.
 
 The grader's openeclass instance anchors every announcement date to
-``NOW() - days_ago days`` at seed-apply time. The maximum stored
-announcement date is the seed-apply instant (the day-0 row); the
-expected date strings are constructed from it. The value is read as
-the literal stored ``DATETIME`` and parsed without a timezone
-conversion, because the server renders that same stored wall-clock;
-converting it to an absolute timestamp and back would shift it by any
-offset between the database and the host.
+``NOW() - days_ago days`` at seed-apply time, and the expected date
+strings are constructed from the seed-apply instant (the maximum stored
+announcement date, the day-0 row).
 
-This module owns the single call that reads the seed instant from the
-grading environment's MariaDB container. The instant is read once per
-aggregator run and threaded into every row that constructs an
-announcement date string.
+This module owns the single call that reads that instant from the grading
+environment's MariaDB container. It is read once per aggregator run and
+threaded into every row that constructs an announcement date string; see
+``seed_instant`` for why the value is parsed without a timezone conversion.
 """
 
 from __future__ import annotations

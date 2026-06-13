@@ -2,15 +2,12 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Subprocess invocation of the grading environment's reset script.
 
-The grader calls ``<mock-root>/scripts/reset`` once at the start
-of each grading run to guarantee a deterministic starting state:
-fresh database volume, cleared mock CAS in-memory state, dropped
-PHP opcache and session storage. The grader invokes it
-unparameterised; it is the environment's all-or-nothing reset.
-
-A non-zero exit from the reset script raises ``ResetError`` with
-the captured output tail so the operator sees the failing step
-without further introspection.
+The grader calls ``<mock-root>/scripts/reset`` once at the start of each
+grading run to guarantee a deterministic starting state: fresh database
+volume, cleared mock CAS in-memory state, dropped PHP opcache and session
+storage. The grader invokes it unparameterised; it is the environment's
+all-or-nothing reset. Failures surface as ``ResetError`` (see its
+definition in ``errors`` for the contract).
 """
 
 from __future__ import annotations

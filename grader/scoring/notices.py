@@ -12,13 +12,10 @@ grading run. Two tags are in use:
 - ``WARNING``: objectively abnormal conditions that need no judgment
   to classify but that the analyst must be aware of.
 
-``collect_notices`` is the sole aggregator. It reads the populated
-``Scorer`` and returns a tuple of notices in the canonical order: all
-REVIEW notices first, then all WARNING notices, each group in
-recording order (the order the rows were run and recorded). The shared
-rendering of that tuple to the terminal lives in the logging module
-(``grader.log.notice_block``); this module owns the notice content,
-not its presentation.
+``collect_notices`` is the sole aggregator; its docstring documents
+the canonical ordering it produces. Rendering the notice tuple to the
+terminal lives in the logging module (``grader.log.notice_block``);
+this module owns the notice content, not its presentation.
 """
 
 from __future__ import annotations

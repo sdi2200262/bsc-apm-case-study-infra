@@ -19,18 +19,8 @@ JSON-RPC stdio. The public surface (``__all__``):
 - ``CLIENT_NAME``, ``CLIENT_VERSION``, ``PROTOCOL_VERSION``: the
   constructed client identity constants.
 
-On a credential-bearing spawn (``env_overrides`` carrying a non-empty
-``ECLASS_USERNAME`` and ``ECLASS_PASSWORD``) ``spawn_server`` also
-writes that principal to the checkout's on-disk ``.env`` for the
-duration of the spawn and restores the provisioned ``.env``
-afterward, so both documented configuration surfaces carry the
-scenario's principal. An all-empty credential override (the
-missing-credentials deprivation probe) is not written; the caller's
-own ``.env`` deprivation stays in force.
-
-When ``memcheck=True`` and ``impl="c"``, ``spawn_server`` wraps the
-binary under valgrind; after the context manager exits the caller
-may call ``server.leak_verdict()`` on the still-live reference. The
+``spawn_server`` owns the credential-write-and-restore protocol around a
+spawn and the valgrind wrapping under memcheck; see its docstring. The
 valgrind leak parsers live in ``_memcheck`` and the spawned-server
 environment block in ``server_env``.
 """

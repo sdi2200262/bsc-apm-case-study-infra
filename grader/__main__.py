@@ -2,20 +2,16 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Grader CLI entry point: grade one participant patch end to end.
 
-Parses arguments, resolves the grading-environment and eclass paths,
-runs the preflight and reset, applies the participant's patch (or skips
-it in baseline mode), sequences the Python and C group modules, writes
-the JSON report beside the eclass-mcp-server checkout, and prints the
-console summary. The per-group ordering and the C compile gate live with
-the group runners ``_run_python_groups`` and ``_run_c_groups``.
+Drives the full sequence (config, preflight, reset, patch, the Python and
+C group modules, the JSON report, the console summary); the per-group
+ordering and the C compile gate live with ``_run_python_groups`` and
+``_run_c_groups``.
 
-Exit codes: ``0`` on a clean run (test failures are recorded in the
-report and do not change the exit code); ``1`` on a configuration,
-preflight, reset, provisioning, or patch-application failure; ``2`` on an
-argument error or a missing patch file.
+Exit codes: ``0`` on a clean run (recorded test failures do not change
+it); ``1`` on a configuration, preflight, reset, provisioning, or patch-
+application failure; ``2`` on an argument error or a missing patch file.
 
-Invoke as ``python -m grader`` from a working directory with the
-``grader`` package on ``sys.path``.
+Invoke as ``python -m grader``.
 """
 
 from __future__ import annotations

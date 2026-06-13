@@ -2,18 +2,11 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Course-announcements protocol assertions (P.2.x / C.3.x).
 
-Each function tests one rubric row against a freshly-spawned MCP server.
-Principal: ``student_courses``. Return shape is always a 6-tuple
-``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)``; ``leak_tuple`` is
-``None`` when ``memcheck=False`` and ``mode`` is the ``matching``
-mode the row was accepted under (``None`` for a failed match).
-A non-passing announcement row carries the edit-distance similarity against
-its expected ordered form in the ``similarity`` slot (``None`` when no
-expected form applies or the row passes).
-
-Leak-verdict pattern: functional result is saved inside the ``with``
-block; ``leak_after`` is called after the block exits so
-``stop()`` has set ``_proc_exit_code`` before ``leak_verdict`` reads it.
+Each function tests one rubric row against a freshly-spawned MCP server
+as the ``student_courses`` principal and returns the shared ``RowResult``
+six-tuple (see ``._support`` for the tuple contract and the leak-verdict
+call ordering ``leak_after`` documents). A non-passing announcement row
+carries the edit-distance similarity against its expected ordered form.
 """
 
 from __future__ import annotations

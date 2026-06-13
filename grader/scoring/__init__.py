@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Scoring and output layer.
-
-Submodules:
+"""Scoring and output layer: rubric, score aggregation, and reporting.
 
 - ``rubric``: the test definitions and their per-group groupings.
 - ``scoring``: the ``Scorer`` aggregator and the point-budget guard.

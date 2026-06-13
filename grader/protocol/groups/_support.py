@@ -50,6 +50,12 @@ TOOL_FAIL: tuple[bool, str, str] = (
 def leak_after(server: object, memcheck: bool) -> LeakTuple | None:
     """Return the valgrind leak verdict when one was requested.
 
+    Call this AFTER the ``spawn_server`` ``with`` block has exited, with
+    the functional verdict already captured inside the block. The block
+    exit runs ``stop()``, which sets ``_proc_exit_code`` before
+    ``leak_verdict`` reads it; calling earlier reads a stale exit code.
+    Every check suite that requests ``memcheck`` follows this ordering.
+
     Args:
         server: The ``ServerProcess`` returned from ``spawn_server``,
             or ``None`` when the server failed to start.

@@ -2,20 +2,13 @@
 # Copyright (C) BSc APM Case Study 2025-2026
 """Grader configuration: paths and the ``grader.yaml`` loader.
 
-The grader requires two external paths to function:
-- the eclass root: the eclass-mcp-server clone the patch applies to.
-- the mock root: the grading environment install whose endpoints the
-  grader probes and whose reset script it runs between grading runs.
-
-Each path can be supplied via a CLI flag or a ``grader.yaml`` file
-colocated with the invocation. Resolution order: CLI flag wins over the
-``grader.yaml`` value, which wins over absent. A consumer that needs an
-absent path raises ``GraderConfigError`` at use time via
-``require_path``; the resolver itself does not raise on absence, so a
-caller that does not need a path can run without it.
-
-The partial-credit floor follows the same idiom: a CLI flag wins over
-the ``grader.yaml`` value, which wins over a built-in default.
+The grader needs two external paths to function: the eclass root (the
+eclass-mcp-server clone the patch applies to) and the mock root (the
+grading environment install whose endpoints the grader probes and whose
+reset script it runs between grading runs). Each, plus the partial-credit
+floor, can come from a CLI flag or a ``grader.yaml`` file; ``resolve_config``
+owns the precedence (CLI over YAML over absent/default) and ``require_path``
+turns a still-absent required path into a ``GraderConfigError`` at use time.
 
 The YAML's top-level shape:
 

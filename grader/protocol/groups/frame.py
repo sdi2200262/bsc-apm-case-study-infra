@@ -5,10 +5,8 @@
 Owns the two rows that assert a raw protocol frame rather than a tool
 response: the ``tools/list`` advertisement and the C-replica
 hand-written ``initialize`` frame. Both run against a freshly-spawned
-MCP server as the ``student_courses`` principal and return the same
-six-tuple as the other baseline rows
-(``(ok, msg, detail, leak_tuple|None, mode|None, similarity|None)``;
-see ``grader.protocol.groups.baseline`` for the tuple contract). These
+MCP server as the ``student_courses`` principal and return the shared
+``RowResult`` six-tuple (see ``._support`` for the tuple contract). These
 two rows assert a structured frame, not a single response string, so
 they carry no similarity and never earn partial credit. The
 form-acceptance policy lives in ``..matching``; this module owns only

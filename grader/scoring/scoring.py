@@ -4,27 +4,14 @@
 
 ``Scorer`` accumulates per-test results and computes the aggregate
 scores the report writer consumes. The rubric rows themselves live in
-``rubric`` (90 rows summing to 100: 30 Python, 70 C; see SCORING.md
-for the full table); this module imports them and turns recorded
-results into the report payload.
+``rubric`` (the row count and point split are documented there); this
+module imports them and turns recorded results into the report payload.
 
-The JSON shape returned by ``Scorer.to_dict`` is consumed by the
-``inspect`` results browser and the pipeline's grade and combine
-stages. Every score node carries the same four fields inline,
-``{total, total_strict, total_partial, max}``, and nests its child
-nodes as extra keys: ``scores`` is the whole-submission node and
-nests ``python`` and ``c``; ``python`` nests ``baseline`` and
-``feature``. ``total`` sums every row's ``points_earned``;
-``total_strict`` sums ``points`` over the ``"passed"`` rows;
-``total_partial`` is their difference (the fractional credit from
-partial rows, zero when none are present). Each per-test record reports
-a three-state ``verdict``: ``"passed"`` (full points), ``"partial"`` (a
-near-miss credited ``points * similarity``, with its ratio recorded), or
-``"failed"`` (zero). The verdict is resolved at ``record`` time against
-the ``Scorer``'s floor; a matcher pass is always ``"passed"``, so strict
-grades are untouched. A record may also carry an optional unscored
-``diagnostic`` string: the ``matching`` mode the row was accepted under
-(``byte-exact`` or ``whitespace-normalized``), ``None`` elsewhere.
+The per-record three-state verdict and how it is resolved against the
+scorer's partial-credit floor are documented on ``Scorer.record``; the
+JSON shape (the four-field score nodes and their nesting) is documented
+on ``Scorer.to_dict`` and ``_node``. ``TestResult`` owns the per-row
+field contract.
 """
 
 from __future__ import annotations
@@ -161,7 +148,7 @@ class Scorer:
         return self._sum_for(ALL_TESTS)
 
     def to_dict(self) -> dict:
-        """Return the JSON shape consumed by the inspect tool and the pipeline.
+        """Return the JSON shape consumed by the inspect tool.
 
         Every score node carries ``{total, total_strict, total_partial,
         max}`` inline and nests its children as extra keys: ``scores``
@@ -275,18 +262,16 @@ def _test_entry(
     definition = defs.get(test_id)
     points = definition.points if definition else 0
     entry: dict[str, Any] = {
-        # ``verdict`` is three-state: ``"passed"`` (full points), ``"partial"``
-        # (a near-miss credited fractionally), or ``"failed"`` (zero).
-        # ``points_earned`` is kept distinct from ``points`` (the row maximum)
-        # so a partial row can report a value strictly between zero and it.
+        # ``verdict`` semantics: see ``Scorer.record``. ``points_earned``
+        # is kept distinct from ``points`` (the row maximum) so a partial
+        # row can report a value strictly between zero and it.
         "verdict": result.verdict,
         "points": points,
         "points_earned": _earned(result, points) if definition else 0,
     }
-    # ``similarity`` is recorded on any string row that ran the partial
-    # check (``"partial"`` or ``"failed"``), between ``points_earned`` and the
-    # descriptive fields, so the JSON carries the full ratio distribution, not
-    # only the awarded partials.
+    # ``similarity`` (see ``TestResult``) is placed between ``points_earned``
+    # and the descriptive fields so the JSON carries the full ratio
+    # distribution, not only the awarded partials.
     if result.similarity is not None:
         entry["similarity"] = result.similarity
     entry.update(
