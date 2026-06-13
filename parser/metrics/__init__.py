@@ -15,3 +15,5 @@ Submodules:
 - ``user_input``: bucket shares and per-bucket mean magnitudes.
 - ``reliability``: tool-call success rate.
 """
+
+from __future__ import annotations

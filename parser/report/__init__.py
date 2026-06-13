@@ -14,3 +14,5 @@ Submodules:
 - ``render``: the ``--inspect`` / ``--economic`` / ``--process`` views.
 - ``notices``: session-attention ``Notice`` collection and rendering.
 """
+
+from __future__ import annotations

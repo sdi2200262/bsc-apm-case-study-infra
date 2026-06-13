@@ -13,3 +13,5 @@ Submodules:
 - ``counts``: every count (requests, subagents, tools, turns, steers) and
   the per-input bucket-and-length series the user-input metric folds.
 """
+
+from __future__ import annotations

@@ -23,3 +23,5 @@ Submodules:
 - ``session``: ``Session`` assembly and the session identity facts.
 - ``aggregate``: per-scope data aggregation and the granular series.
 """
+
+from __future__ import annotations
