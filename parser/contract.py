@@ -55,7 +55,10 @@ _TOKEN_POPULATIONS: tuple[str, ...] = ("main", "delegated", "total")
 _TOKEN_CATEGORIES: tuple[str, ...] = ("input", "output", "cache_read", "cache_5m", "cache_1h")
 
 _TOKEN_SUM_SPECS: dict[str, FieldSpec] = {
-    f"{population}_{category}_tokens": FieldSpec(kind="data", label="secondary")
+    f"{population}_{category}_tokens": FieldSpec(
+        kind="data",
+        label="secondary" if population == "total" else "supplementary",
+    )
     for population in _TOKEN_POPULATIONS
     for category in _TOKEN_CATEGORIES
 }
@@ -63,7 +66,7 @@ _TOKEN_SUM_SPECS: dict[str, FieldSpec] = {
 CONTRACT: dict[str, FieldSpec] = {
     **_TOKEN_SUM_SPECS,
     "total_prompt_tokens": FieldSpec(kind="data", label="secondary"),
-    "model_token_distribution": FieldSpec(kind="data", label="secondary"),
+    "model_token_distribution": FieldSpec(kind="data", label="supplementary"),
     "cost_usd": FieldSpec(
         kind="metric",
         label="primary",
@@ -79,12 +82,12 @@ CONTRACT: dict[str, FieldSpec] = {
         label="primary",
         formula="cost_usd with each bracketed dispatch priced at its upper-bound model",
     ),
-    "request_count": FieldSpec(kind="data", label="primary"),
-    "delegated_request_count": FieldSpec(kind="data", label="secondary"),
-    "requests_with_tool_use_count": FieldSpec(kind="data", label="secondary"),
+    "request_count": FieldSpec(kind="data", label="supplementary"),
+    "delegated_request_count": FieldSpec(kind="data", label="supplementary"),
+    "requests_with_tool_use_count": FieldSpec(kind="data", label="supplementary"),
     "duration": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="primary",
         formula="turn_time + inter_turn_time (session: latest minus earliest real record)",
     ),
     "turn_time": FieldSpec(
@@ -98,22 +101,22 @@ CONTRACT: dict[str, FieldSpec] = {
     "turn_time_concurrent": FieldSpec(
         kind="metric", label="secondary", formula="union time at active-turn count >= 2"
     ),
-    "inter_turn_time": FieldSpec(kind="metric", label="primary", formula="duration - turn_time"),
+    "inter_turn_time": FieldSpec(kind="metric", label="secondary", formula="duration - turn_time"),
     "turn_count": FieldSpec(kind="data", label="primary"),
     "mean_turn_duration": FieldSpec(
-        kind="metric", label="primary", formula="mean of per-turn durations"
+        kind="metric", label="supplementary", formula="mean of per-turn durations"
     ),
     "turn_duration_p50": FieldSpec(
-        kind="metric", label="secondary", formula="median of per-turn durations"
+        kind="metric", label="supplementary", formula="median of per-turn durations"
     ),
     "turn_duration_p95": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="supplementary",
         formula="linearly interpolated 95th percentile of per-turn durations",
     ),
     "turn_duration_stdev": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="supplementary",
         formula="population standard deviation of per-turn durations",
     ),
     "turn_prompt_count": FieldSpec(kind="data", label="primary"),
@@ -122,12 +125,12 @@ CONTRACT: dict[str, FieldSpec] = {
     "steer_abandoned_count": FieldSpec(kind="data", label="secondary"),
     "turn_prompts_bucket_shares": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="primary",
         formula="count per bucket over the turn-prompt population",
     ),
     "steer_delivered_bucket_shares": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="primary",
         formula="count per bucket over the delivered-steer population",
     ),
     "all_inputs_bucket_shares": FieldSpec(
@@ -137,12 +140,12 @@ CONTRACT: dict[str, FieldSpec] = {
     ),
     "turn_prompts_magnitude_by_bucket": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="primary",
         formula="mean character length per bucket over the turn-prompt population",
     ),
     "steer_delivered_magnitude_by_bucket": FieldSpec(
         kind="metric",
-        label="secondary",
+        label="primary",
         formula="mean character length per bucket over the delivered-steer population",
     ),
     "tool_success_rate": FieldSpec(
