@@ -62,6 +62,7 @@ from ..data.session import (
     latest_real_timestamp,
     session_start_timestamp,
 )
+from ..data.subagent_usage import SubagentDispatchIndex
 from ..data.turns import Turn
 from ..metrics.cost import CostMetrics, compute_cost_for_records
 from ..metrics.reliability import tool_success_rate
@@ -105,7 +106,7 @@ def build_artifacts(
     """
     identity = build_identity(session)
     metadata = _build_metadata(session, rate_table, short_threshold)
-    subagent_models = merge_subagent_indices(session)
+    subagent_index = merge_subagent_indices(session)
     session_start_dt = session_start_timestamp(session)
     session_end_dt = latest_real_timestamp(session)
 
@@ -113,7 +114,7 @@ def build_artifacts(
         session,
         session.turns,
         rate_table,
-        subagent_models,
+        subagent_index,
         short_threshold,
         scope_kind="session",
         scope_start=session_start_dt,
@@ -126,7 +127,7 @@ def build_artifacts(
             session,
             tuple(turns_in_phase(session, phase)),
             rate_table,
-            subagent_models,
+            subagent_index,
             short_threshold,
             scope_kind="phase",
             phase_label=phase,
@@ -147,7 +148,7 @@ def build_artifacts(
                 session,
                 tuple(turns_in_role(session, view.role)),
                 rate_table,
-                subagent_models,
+                subagent_index,
                 short_threshold,
                 scope_kind="role",
                 role_view=view,
@@ -207,7 +208,7 @@ def _build_scope_blocks(
     session: Session,
     turns: tuple[Turn, ...],
     rate_table: RateTable,
-    subagent_models: dict[str, str],
+    subagent_index: SubagentDispatchIndex,
     short_threshold: int,
     scope_kind: str,
     phase_label: str | None = None,
@@ -231,7 +232,7 @@ def _build_scope_blocks(
     """
     steer_events = _steer_events_in_scope(session, scope_kind, role_view, turns)
     scope_turn_count = turn_count(turns)
-    token_data, cost = _compute_economic_for_scope(session, turns, rate_table, subagent_models)
+    token_data, cost = _compute_economic_for_scope(session, turns, rate_table, subagent_index)
     time_metrics = compute_time_metrics(
         turns, scope_start, scope_end, session=session, phase_label=phase_label
     )
@@ -324,14 +325,14 @@ def _compute_economic_for_scope(
     session: Session,
     turns: tuple[Turn, ...],
     rate_table: RateTable,
-    subagent_models: dict[str, str],
+    subagent_index: SubagentDispatchIndex,
 ) -> tuple[TokenData | None, CostMetrics | None]:
     """Compute a scope's token data and cost, or ``(None, None)`` for an empty scope.
 
     Session scope prices every record across every conversation; a phase
-    or role scope prices the records of its turns. The subagent-model map
-    is the session-wide merge for every scope, so a dispatch resolves to
-    the same model regardless of which scope prices it.
+    or role scope prices the records of its turns. The subagent index is
+    the session-wide merge for every scope, so a dispatch resolves to the
+    same model and token bag regardless of which scope prices it.
     """
     if turns is session.turns:
         records = [record for view in session.views for record in view.conversation.records]
@@ -341,6 +342,6 @@ def _compute_economic_for_scope(
         records = []
         for turn in turns:
             records.extend(turn.records)
-    token_data = compute_token_data_for_records(records, subagent_models)
-    cost = compute_cost_for_records(records, rate_table, subagent_models)
+    token_data = compute_token_data_for_records(records, subagent_index)
+    cost = compute_cost_for_records(records, rate_table, subagent_index)
     return token_data, cost

@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...rates import (
     CATEGORY_CACHE_1H,
@@ -42,6 +42,10 @@ from ..schema import (
 )
 from ..session import Session
 from ..subagent_models import resolve_unindexed_subagent_model
+from ..token_usage import token_sums_dict_from_usage
+
+if TYPE_CHECKING:
+    from ..subagent_usage import SubagentDispatchIndex
 
 _MODEL_COMMAND_NAME = "model"
 
@@ -238,12 +242,17 @@ def iter_resolved_main_calls(records: Iterable[Record]) -> Iterator[ResolvedMain
 
 def iter_resolved_dispatches(
     records: list[Record],
-    subagent_models_by_agent_id: dict[str, str],
+    subagent_index: SubagentDispatchIndex,
 ) -> Iterator[ResolvedDispatch]:
     """Yield resolved model and token bag for each Agent dispatch.
 
-    Uses the subagent-model index when the dispatch's ``agentId`` is present;
-    falls back to the unindexed resolver otherwise.
+    When the dispatch's ``agentId`` is indexed, prices the subagent's own
+    model and its true token bag (summed from the subagent transcript by
+    ``subagent_usage``) in place of the parent ``toolUseResult.usage``
+    roll-up, which under-represents the bag (notably ``cache_5m = 0``). The
+    indexed bag replaces the roll-up, so a dispatch is never counted twice.
+    Falls back to the roll-up bag and the unindexed resolver only when no
+    subagent file shipped for the ``agentId``.
     """
     contexts = _build_dispatch_contexts(records)
     for record in records:
@@ -259,12 +268,12 @@ def iter_resolved_dispatches(
         if matched_tool_use_id is None:
             continue
         agent_id = tool_use_result.get("agentId")
-        token_bag = token_sums_dict_from_usage(usage)
-        if isinstance(agent_id, str) and agent_id in subagent_models_by_agent_id:
+        roll_up_bag = token_sums_dict_from_usage(usage)
+        if isinstance(agent_id, str) and agent_id in subagent_index.model_by_agent_id:
             yield ResolvedDispatch(
-                point_model=subagent_models_by_agent_id[agent_id],
+                point_model=subagent_index.model_by_agent_id[agent_id],
                 bracket=None,
-                token_bag=token_bag,
+                token_bag=subagent_index.usage_by_agent_id.get(agent_id, roll_up_bag),
                 resolved_without_index=False,
             )
             continue
@@ -277,7 +286,7 @@ def iter_resolved_dispatches(
         yield ResolvedDispatch(
             point_model=resolved.canonical_model,
             bracket=resolved.bracket,
-            token_bag=token_bag,
+            token_bag=roll_up_bag,
             resolved_without_index=True,
         )
 
@@ -470,29 +479,3 @@ def _matched_dispatch_tool_use_id(
         if isinstance(tool_use_id, str) and tool_use_id in contexts:
             return tool_use_id
     return None
-
-
-def token_sums_dict_from_usage(usage: dict[str, Any]) -> dict[str, int]:
-    """Extract the five-category token bag from a ``message.usage`` block.
-
-    Returns a dict keyed by ``rates.CATEGORY_*`` constants; missing fields contribute zero.
-    """
-    cache_creation = usage.get("cache_creation")
-    if isinstance(cache_creation, dict):
-        cache_5m = _int_or_zero(cache_creation.get("ephemeral_5m_input_tokens"))
-        cache_1h = _int_or_zero(cache_creation.get("ephemeral_1h_input_tokens"))
-    else:
-        cache_5m = 0
-        cache_1h = 0
-    return {
-        CATEGORY_INPUT: _int_or_zero(usage.get("input_tokens")),
-        CATEGORY_OUTPUT: _int_or_zero(usage.get("output_tokens")),
-        CATEGORY_CACHE_READ: _int_or_zero(usage.get("cache_read_input_tokens")),
-        CATEGORY_CACHE_5M: cache_5m,
-        CATEGORY_CACHE_1H: cache_1h,
-    }
-
-
-def _int_or_zero(value: Any) -> int:
-    """Return ``value`` when it is an int, otherwise ``0``."""
-    return value if isinstance(value, int) else 0

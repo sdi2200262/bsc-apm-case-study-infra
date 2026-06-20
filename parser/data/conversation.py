@@ -7,9 +7,10 @@ A submission can be a single JSONL file or a directory of one or more
 ``~/.claude/projects/<dashed-cwd>/``. For a directory, only top-level
 ``*.jsonl`` files load as main conversations; the sibling
 ``<sessionId>/subagents/`` directory adjacent to each main file is read
-separately to populate the per-conversation ``SubagentModelIndex`` (so
-delegated dispatches price against the subagent's model, not the
-parent's), and ``<sessionId>/tool-results/`` directories are ignored.
+separately to populate the per-conversation ``SubagentDispatchIndex`` (so
+delegated dispatches price against the subagent's own model and true
+token usage, not the parent's lossy roll-up), and
+``<sessionId>/tool-results/`` directories are ignored.
 Conversations are ordered by earliest record timestamp, not filename.
 
 The loader does three orthogonal jobs over a single-pass walk of a file's
@@ -53,7 +54,7 @@ from .schema import (
     parse_record,
     queue_operation,
 )
-from .subagent_models import SubagentModelIndex, build_subagent_model_index
+from .subagent_usage import SubagentDispatchIndex, build_subagent_dispatch_index
 
 CONVERSATION_FILE_GLOB = "*.jsonl"
 
@@ -153,9 +154,10 @@ class Conversation:
         records: Every parsed record from the file in document order.
         usage_index: Deduplicated ``message.usage`` values keyed by
             ``requestId``.
-        subagent_model_index: ``agentId``-keyed map of canonical model
-            ids built from the sibling ``<sessionId>/subagents/``
-            directory. Empty when that directory is absent.
+        subagent_dispatch_index: ``agentId``-keyed map of canonical
+            model ids and true token usage built from the sibling
+            ``<sessionId>/subagents/`` directory. Empty when that
+            directory is absent.
         steer_events: Classified user-authored enqueues with their
             delivery or abandonment outcome.
         compaction_events: ``compact_boundary`` events observed in the
@@ -170,7 +172,7 @@ class Conversation:
     session_id: str | None
     records: tuple[Record, ...]
     usage_index: RequestUsageIndex
-    subagent_model_index: SubagentModelIndex
+    subagent_dispatch_index: SubagentDispatchIndex
     steer_events: tuple[SteerEvent, ...]
     compaction_events: tuple[CompactionEvent, ...]
     queue_lifecycle_warnings: tuple[str, ...]
@@ -254,7 +256,7 @@ def build_conversation(path: Path, records: tuple[Record, ...]) -> Conversation:
     resolved = Path(path).resolve()
     session_id = _resolve_session_id(records)
     usage_index = _build_usage_index(records, str(resolved))
-    subagent_model_index = build_subagent_model_index(resolved)
+    subagent_dispatch_index = build_subagent_dispatch_index(resolved)
     steer_events, queue_warnings = _replay_queue_lifecycle(records)
     compaction_events = tuple(_extract_compaction_events(records))
     return Conversation(
@@ -262,7 +264,7 @@ def build_conversation(path: Path, records: tuple[Record, ...]) -> Conversation:
         session_id=session_id,
         records=records,
         usage_index=usage_index,
-        subagent_model_index=subagent_model_index,
+        subagent_dispatch_index=subagent_dispatch_index,
         steer_events=steer_events,
         compaction_events=compaction_events,
         queue_lifecycle_warnings=queue_warnings,

@@ -478,8 +478,8 @@ def turns_with_missing_uuid_count(session: Session) -> int:
 
 def subagent_file_counts(session: Session) -> tuple[int, int]:
     """Return ``(files_seen, files_without_model)`` across every conversation."""
-    files_seen = sum(view.conversation.subagent_model_index.files_seen for view in session.views)
+    files_seen = sum(view.conversation.subagent_dispatch_index.files_seen for view in session.views)
     files_without_model = sum(
-        view.conversation.subagent_model_index.files_without_model for view in session.views
+        view.conversation.subagent_dispatch_index.files_without_model for view in session.views
     )
     return files_seen, files_without_model

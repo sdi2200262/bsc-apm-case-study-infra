@@ -1,25 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Subagent-model attribution: indexed lookup plus the documented fallback resolver.
+"""Subagent-model attribution: the documented fallback resolver and its shared helpers.
 
-This module resolves which model a delegated subagent dispatch ran on, so
-the cost layer can price the dispatch against that model's rates rather
-than the parent's, and owns the two paths that do it.
+This module owns the fallback that resolves which model a delegated
+subagent dispatch ran on when no sibling subagent transcript was shipped,
+plus the filename constants and helpers the canonical indexed path
+(``subagent_usage.build_subagent_dispatch_index``) shares. The indexed
+path reads the subagent's actual ``message.model`` (and its true token
+usage) straight from the sibling
+``<sessionId>/subagents/agent-<agentId>.jsonl`` file; this module's
+resolver covers only submissions that arrived without those files.
 
-The canonical path, ``build_subagent_model_index``, reads the sibling
-``<sessionId>/subagents/agent-<agentId>.jsonl`` files Claude Code ships
-next to every main session JSONL: each carries the subagent's actual
-``message.model`` in its first non-synthetic assistant record (the
-parent's ``toolUseResult.usage`` rolls up the token totals but does not
-name the model). It returns an ``agentId -> canonical model id`` map and
-produces a deterministic single cost.
-
-The fallback path, ``resolve_unindexed_subagent_model``, handles
-submissions that arrived without those sibling files by applying Claude
-Code's documented model-resolution precedence against the registries
-declared at module level. The precedence rules and the bracketing of
-unknown subagent types are documented on that function; the registries it
-reads carry their sourcing in inline comments.
+The fallback, ``resolve_unindexed_subagent_model``, applies Claude Code's
+documented model-resolution precedence against the registries declared at
+module level. The precedence rules and the bracketing of unknown subagent
+types are documented on that function; the registries it reads carry their
+sourcing in inline comments.
 
 Date-suffixed model ids Claude Code writes on subagent records
 (e.g. ``claude-haiku-4-5-20251001``) are normalised through
@@ -29,12 +25,9 @@ Date-suffixed model ids Claude Code writes on subagent records
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
 
 from ..rates import canonical_model_id
-from .schema import SYNTHETIC_MODEL_MARKER
 
 SUBAGENTS_SUBDIR_NAME = "subagents"
 SUBAGENT_FILENAME_PREFIX = "agent-"
@@ -84,33 +77,6 @@ UNKNOWN_BRACKET_BOUNDS: tuple[str, str] = ("haiku", "opus")
 
 
 @dataclass(frozen=True)
-class SubagentModelIndex:
-    """Map from subagent ``agentId`` to the canonical model the subagent ran on.
-
-    Attributes:
-        by_agent_id: ``agentId`` to canonical (family-keyed,
-            date-suffix-stripped, alias-resolved) model id, sourced
-            from the first non-synthetic assistant record of each
-            sibling ``agent-*.jsonl`` file.
-        files_seen: Count of ``agent-*.jsonl`` files inspected next
-            to the main session JSONL.
-        files_without_model: Count of files whose first non-synthetic
-            assistant record did not carry a usable ``message.model``
-            (zero on well-formed Claude Code data; surfaced for
-            diagnostics).
-    """
-
-    by_agent_id: dict[str, str]
-    files_seen: int
-    files_without_model: int
-
-    @classmethod
-    def empty(cls) -> SubagentModelIndex:
-        """Return an index with no entries and zero counts."""
-        return cls(by_agent_id={}, files_seen=0, files_without_model=0)
-
-
-@dataclass(frozen=True)
 class ResolvedSubagentModel:
     """Outcome of resolving a delegated dispatch when no subagent file was shipped.
 
@@ -131,54 +97,6 @@ class ResolvedSubagentModel:
     canonical_model: str
     bracket: tuple[str, str] | None
     rationale: str
-
-
-def build_subagent_model_index(main_jsonl_path: Path) -> SubagentModelIndex:
-    """Build the subagent-model index for one main session JSONL.
-
-    Looks for the sibling directory
-    ``<main_jsonl_path.parent>/<main_jsonl_path.stem>/subagents/``
-    and reads each ``agent-<agentId>.jsonl`` file inside. The first
-    non-synthetic assistant record's ``message.model`` is taken as
-    the subagent's model and normalised through
-    ``rates.canonical_model_id``. Files that contain no qualifying
-    record are tallied as ``files_without_model`` and contribute no
-    entry.
-
-    Args:
-        main_jsonl_path: Absolute path to a main session JSONL.
-            The function is robust to a non-existent sibling
-            directory (returns an empty index without raising).
-
-    Returns:
-        A populated ``SubagentModelIndex``. When the sibling
-        ``subagents/`` directory does not exist, the index is empty
-        and both counts are zero.
-    """
-    session_id = main_jsonl_path.stem
-    subagents_dir = main_jsonl_path.parent / session_id / SUBAGENTS_SUBDIR_NAME
-    if not subagents_dir.is_dir():
-        return SubagentModelIndex.empty()
-    by_agent_id: dict[str, str] = {}
-    files_seen = 0
-    files_without_model = 0
-    for path in sorted(
-        subagents_dir.glob(f"{SUBAGENT_FILENAME_PREFIX}*{SUBAGENT_FILENAME_SUFFIX}")
-    ):
-        files_seen += 1
-        agent_id = _agent_id_from_filename(path.name)
-        if agent_id is None:
-            continue
-        model = _first_non_synthetic_assistant_model(path)
-        if model is None:
-            files_without_model += 1
-            continue
-        by_agent_id[agent_id] = canonical_model_id(model)
-    return SubagentModelIndex(
-        by_agent_id=by_agent_id,
-        files_seen=files_seen,
-        files_without_model=files_without_model,
-    )
 
 
 def resolve_unindexed_subagent_model(
@@ -260,7 +178,7 @@ def resolve_unindexed_subagent_model(
     )
 
 
-def _agent_id_from_filename(filename: str) -> str | None:
+def agent_id_from_filename(filename: str) -> str | None:
     """Return the ``agentId`` carried in a subagent filename, or ``None`` if malformed.
 
     Subagent files are written as ``agent-<agentId>.jsonl``; the
@@ -274,44 +192,3 @@ def _agent_id_from_filename(filename: str) -> str | None:
         return None
     middle = filename[len(SUBAGENT_FILENAME_PREFIX) : -len(SUBAGENT_FILENAME_SUFFIX)]
     return middle or None
-
-
-def _first_non_synthetic_assistant_model(path: Path) -> str | None:
-    """Return the ``message.model`` of the first non-synthetic assistant record.
-
-    Walks the JSONL line by line until a record matching the
-    selection rule is found. Lines that fail to parse as JSON are
-    skipped silently; this matches the loader's tolerance of
-    pre-record garbage and lets the function operate before the
-    full loader pass runs.
-
-    Args:
-        path: Absolute path to an ``agent-*.jsonl`` file.
-
-    Returns:
-        The string value of ``message.model`` on the first
-        non-synthetic assistant record encountered, or ``None`` if
-        no such record exists in the file.
-    """
-    with path.open("r", encoding="utf-8") as source:
-        for line in source:
-            if not line.strip():
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(record, dict):
-                continue
-            if record.get("type") != "assistant":
-                continue
-            message = record.get("message")
-            if not isinstance(message, dict):
-                continue
-            model = message.get("model")
-            if not isinstance(model, str) or not model:
-                continue
-            if model == SYNTHETIC_MODEL_MARKER:
-                continue
-            return model
-    return None

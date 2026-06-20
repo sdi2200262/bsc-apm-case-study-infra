@@ -24,6 +24,7 @@ from ..data.aggregate.call_records import (
     iter_resolved_main_calls,
 )
 from ..data.schema import Record
+from ..data.subagent_usage import SubagentDispatchIndex
 from ..rates import RateTable, cost_in_usd
 
 
@@ -50,7 +51,7 @@ class CostMetrics:
 def compute_cost_for_records(
     records: list[Record],
     rate_table: RateTable,
-    subagent_models_by_agent_id: dict[str, str],
+    subagent_index: SubagentDispatchIndex,
 ) -> CostMetrics:
     """Fold the rate table over a record subset's resolved call series.
 
@@ -65,9 +66,10 @@ def compute_cost_for_records(
     Args:
         records: The records to price.
         rate_table: The rate table to compute cost against.
-        subagent_models_by_agent_id: Merged ``agentId``-keyed subagent
-            model map, used by the data layer to resolve each dispatch's
-            model.
+        subagent_index: Merged ``agentId``-keyed subagent
+            model-and-usage index, used by the data layer to resolve each
+            dispatch's model and to price its true token bag in place of
+            the parent roll-up.
 
     Returns:
         A populated ``CostMetrics`` with either a single ``cost_usd`` or
@@ -84,7 +86,7 @@ def compute_cost_for_records(
     cost_lower = 0.0
     cost_upper = 0.0
     any_bracketed = False
-    for dispatch in iter_resolved_dispatches(records, subagent_models_by_agent_id):
+    for dispatch in iter_resolved_dispatches(records, subagent_index):
         point_cost = cost_in_usd(rate_table, dispatch.point_model, dispatch.token_bag)
         cost_point += point_cost
         if dispatch.bracket is None:

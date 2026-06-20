@@ -14,10 +14,16 @@ Two disjoint populations are summed. Main usage is the per-``requestId``
 deduplicated usage of a conversation's main agent: every record of one
 streaming response carries an identical ``message.usage``, so summing per
 record would multiply each call's tokens by its content-block count.
-Delegated usage is the rolled-up ``toolUseResult.usage`` of each Agent
-dispatch; dispatches whose result lacked populated usage contribute zero
-and are surfaced in the dispatch counts so the complete-to-incomplete
-ratio is visible.
+Delegated usage is each Agent dispatch's true token bag: the subagent's
+own deduplicated usage summed from its nested transcript (via
+``subagent_usage``) when that transcript shipped, falling back to the
+rolled-up ``toolUseResult.usage`` otherwise. The roll-up under-represents
+the bag (notably ``cache_5m = 0``, since subagents write the five-minute
+cache while the main conversation writes the one-hour cache), so pricing
+from the subagent transcript recovers the five-minute cache-creation
+tokens the roll-up drops. Dispatches whose result lacked populated usage
+contribute zero and are surfaced in the dispatch counts so the
+complete-to-incomplete ratio is visible.
 """
 
 from __future__ import annotations
@@ -43,11 +49,12 @@ from ..schema import (
     iter_agent_dispatch_blocks,
 )
 from ..session import Session
+from ..subagent_usage import SubagentDispatchIndex
+from ..token_usage import token_sums_dict_from_usage
 from .call_records import (
     iter_main_request_records,
     iter_resolved_dispatches,
     iter_resolved_main_calls,
-    token_sums_dict_from_usage,
 )
 
 
@@ -101,7 +108,9 @@ class TokenData:
 
     Attributes:
         main: Main-call deduplicated token totals.
-        delegated: Subagent-dispatch rolled-up token totals.
+        delegated: Subagent-dispatch true token totals (the subagent's
+            own summed usage where its transcript shipped, else the
+            parent roll-up).
         total: Per-category sum of ``main`` and ``delegated``.
         total_prompt_tokens: ``input + cache_read + cache_5m + cache_1h``
             of ``total`` (the full input volume; output is disjoint).
@@ -114,7 +123,7 @@ class TokenData:
             the five categories. For bracketed dispatches the
             point-estimate model is recorded.
         dispatches_resolved_without_index: Dispatches whose ``agentId``
-            was not in the subagent-model index and which were resolved
+            was not in the subagent dispatch index and which were resolved
             via the fallback resolver.
         dispatches_bracketed: Subset of the above that hit the bracket
             path.
@@ -140,8 +149,8 @@ def compute_session_token_data(session: Session) -> TokenData:
 
     Returns:
         A populated ``TokenData`` over every record across every
-        conversation, with model resolution against the session's merged
-        subagent-model index.
+        conversation, with model and usage resolution against the
+        session's merged subagent dispatch index.
     """
     all_records = [record for view in session.views for record in view.conversation.records]
     return compute_token_data_for_records(all_records, merge_subagent_indices(session))
@@ -149,7 +158,7 @@ def compute_session_token_data(session: Session) -> TokenData:
 
 def compute_token_data_for_records(
     records: list[Record],
-    subagent_models_by_agent_id: dict[str, str],
+    subagent_index: SubagentDispatchIndex,
 ) -> TokenData:
     """Compute token data over an arbitrary record subset.
 
@@ -159,15 +168,18 @@ def compute_token_data_for_records(
 
     Args:
         records: The records to aggregate over.
-        subagent_models_by_agent_id: Merged ``agentId``-keyed subagent
-            model map for the session, used to resolve which model billed
-            each dispatch.
+        subagent_index: Merged ``agentId``-keyed subagent model-and-usage
+            index for the session, used to resolve which model billed
+            each dispatch and to price its true token usage in place of
+            the parent roll-up.
 
     Returns:
         A populated ``TokenData``.
     """
     main_total = _sum_main_from_records(records)
-    delegated_total, dispatches_total, dispatches_with_usage = _sum_delegated_from_records(records)
+    delegated_total, dispatches_total, dispatches_with_usage = _sum_delegated_from_records(
+        records, subagent_index
+    )
     total = main_total.add(delegated_total)
     total_prompt = total.input + total.cache_read + total.cache_5m + total.cache_1h
     distribution: dict[str, int] = {}
@@ -177,7 +189,7 @@ def compute_token_data_for_records(
         )
     dispatches_resolved = 0
     dispatches_bracketed = 0
-    for dispatch in iter_resolved_dispatches(records, subagent_models_by_agent_id):
+    for dispatch in iter_resolved_dispatches(records, subagent_index):
         distribution[dispatch.point_model] = distribution.get(dispatch.point_model, 0) + sum(
             dispatch.token_bag.values()
         )
@@ -199,20 +211,35 @@ def compute_token_data_for_records(
     )
 
 
-def merge_subagent_indices(session: Session) -> dict[str, str]:
-    """Merge per-conversation subagent-model indices into one session-scope map.
+def merge_subagent_indices(session: Session) -> SubagentDispatchIndex:
+    """Merge per-conversation subagent dispatch indices into one session-scope index.
 
     ``agentId`` values are globally unique across Claude Code, so a flat
-    ``dict.update`` per conversation produces a session-scope index
-    without collisions. When two conversations happen to re-use an id
-    (which Claude Code is not expected to do), the later conversation's
-    value wins; this is acceptable as a fall-through and is not surfaced
-    separately.
+    ``dict.update`` per conversation produces session-scope model and
+    usage maps without collisions. When two conversations happen to
+    re-use an id (which Claude Code is not expected to do), the later
+    conversation's value wins; this is acceptable as a fall-through and
+    is not surfaced separately. The per-conversation diagnostic counts
+    (``files_seen``, ``files_without_model``) are summed; ``report``
+    reads those off the individual conversations, so the merged counts
+    serve only callers of the merged index.
     """
-    merged: dict[str, str] = {}
+    model_by_agent_id: dict[str, str] = {}
+    usage_by_agent_id: dict[str, dict[str, int]] = {}
+    files_seen = 0
+    files_without_model = 0
     for view in session.views:
-        merged.update(view.conversation.subagent_model_index.by_agent_id)
-    return merged
+        index = view.conversation.subagent_dispatch_index
+        model_by_agent_id.update(index.model_by_agent_id)
+        usage_by_agent_id.update(index.usage_by_agent_id)
+        files_seen += index.files_seen
+        files_without_model += index.files_without_model
+    return SubagentDispatchIndex(
+        model_by_agent_id=model_by_agent_id,
+        usage_by_agent_id=usage_by_agent_id,
+        files_seen=files_seen,
+        files_without_model=files_without_model,
+    )
 
 
 def _modal_main_model_from_records(records: list[Record]) -> str:
@@ -257,6 +284,7 @@ def _sum_main_from_records(records: list[Record]) -> TokenSums:
 
 def _sum_delegated_from_records(
     records: list[Record],
+    subagent_index: SubagentDispatchIndex,
 ) -> tuple[TokenSums, int, int]:
     """Sum subagent-dispatch tokens across a record subset and report dispatch counts.
 
@@ -265,6 +293,13 @@ def _sum_delegated_from_records(
     the assistant records of the subset and ``dispatches_with_usage``
     counts how many of those dispatches had populated
     ``toolUseResult.usage`` on a matching user record in the same subset.
+
+    For a dispatch whose ``agentId`` is in ``subagent_index``, the
+    subagent's own true token bag is summed in place of the parent
+    ``toolUseResult.usage`` roll-up, which under-represents it (notably
+    ``cache_5m = 0``; see ``subagent_usage``). The roll-up is summed only
+    when no subagent file shipped for the ``agentId``. The bag is summed
+    once per dispatch, so the two sources are never double-counted.
     """
     agent_tool_use_ids = _agent_tool_use_id_index(records)
     dispatches_total = len(agent_tool_use_ids)
@@ -281,7 +316,14 @@ def _sum_delegated_from_records(
             continue
         if not _matches_agent_dispatch(record, agent_tool_use_ids):
             continue
-        delegated = delegated.add(_token_sums_from_usage(usage))
+        agent_id = tool_use_result.get("agentId")
+        indexed = (
+            subagent_index.usage_by_agent_id.get(agent_id) if isinstance(agent_id, str) else None
+        )
+        if indexed is not None:
+            delegated = delegated.add(_token_sums_from_dict(indexed))
+        else:
+            delegated = delegated.add(_token_sums_from_usage(usage))
         dispatches_with_usage += 1
     return delegated, dispatches_total, dispatches_with_usage
 
@@ -322,7 +364,7 @@ def _token_sums_from_usage(usage: dict[str, Any]) -> TokenSums:
     """Extract the five-category ``TokenSums`` from one ``message.usage`` block.
 
     Repackages the category-keyed dict from
-    ``call_records.token_sums_dict_from_usage`` into the typed
+    ``token_usage.token_sums_dict_from_usage`` into the typed
     ``TokenSums`` dataclass.
 
     Args:
@@ -331,7 +373,15 @@ def _token_sums_from_usage(usage: dict[str, Any]) -> TokenSums:
     Returns:
         A ``TokenSums`` carrying the five per-category totals.
     """
-    sums = token_sums_dict_from_usage(usage)
+    return _token_sums_from_dict(token_sums_dict_from_usage(usage))
+
+
+def _token_sums_from_dict(sums: dict[str, int]) -> TokenSums:
+    """Pack a ``rates.CATEGORY_*``-keyed token bag into a ``TokenSums``.
+
+    Used for the subagent index's pre-summed bags, which are already in
+    the five-category dict shape.
+    """
     return TokenSums(
         input=sums[CATEGORY_INPUT],
         output=sums[CATEGORY_OUTPUT],
