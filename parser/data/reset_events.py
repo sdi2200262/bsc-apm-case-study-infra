@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from .commands import APM_HANDOFF_COMMANDS, extract_command_names
+from .commands import APM_HANDOFF_COMMANDS, APM_RECOVER_COMMAND, extract_command_names
 from .conversation import Conversation
 from .prompts import is_user_authored_prompt
 from .schema import user_prompt_text
@@ -69,23 +69,90 @@ def _handoff_entries(role_key: str, conversation: Conversation) -> list[dict[str
     return entries
 
 
+def _recovery_entries(
+    role_key: str, conversation: Conversation
+) -> tuple[list[dict[str, Any]], int]:
+    """Return recovery entries and a count of anomalous recoveries for a conversation.
+
+    A genuine recovery is an ``apm-9-recover`` invocation that follows a
+    compaction boundary in the same conversation. A recovery with no preceding
+    compaction is anomalous and counted separately rather than included in entries.
+
+    Single pass: ``boundary_ids`` marks the ``id()`` of each
+    ``CompactionEvent.boundary_record`` (the same object that sits in
+    ``conversation.records``), so identity comparison correctly detects when the
+    boundary record has been passed.
+
+    Args:
+        role_key: Role label of the conversation being scanned.
+        conversation: The conversation to scan.
+
+    Returns:
+        A ``(entries, anomalous_count)`` pair. ``entries`` is one dict per
+        genuine recovery invocation in record order. ``anomalous_count`` is the
+        count of ``apm-9-recover`` invocations that had no preceding compaction.
+    """
+    boundary_ids: frozenset[int] = frozenset(
+        id(event.boundary_record) for event in conversation.compaction_events
+    )
+    entries: list[dict[str, Any]] = []
+    anomalous_count = 0
+    seen_compaction = False
+    for record in conversation.records:
+        if id(record) in boundary_ids:
+            seen_compaction = True
+        if not is_user_authored_prompt(record):
+            continue
+        for command in extract_command_names(user_prompt_text(record)):
+            if command == APM_RECOVER_COMMAND:
+                if seen_compaction:
+                    entries.append({"role_key": role_key, "command": command})
+                else:
+                    anomalous_count += 1
+    return entries, anomalous_count
+
+
+def count_anomalous_recoveries(
+    role_conversations: Iterable[tuple[str, Conversation]],
+) -> int:
+    """Return the total count of ``apm-9-recover`` invocations with no preceding compaction.
+
+    Counts across all conversations; a recover that follows no compaction in
+    its conversation is anomalous.
+
+    Args:
+        role_conversations: The session's ``(role_key, conversation)`` pairs.
+
+    Returns:
+        The sum of anomalous recover counts across all conversations.
+    """
+    return sum(
+        _recovery_entries(role_key, conversation)[1]
+        for role_key, conversation in role_conversations
+    )
+
+
 def reset_event_blocks(
     role_conversations: Iterable[tuple[str, Conversation]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Return the compaction and handoff blocks for a session's conversations.
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return the compaction, handoff, and recovery blocks for a session's conversations.
 
     Args:
         role_conversations: The session's ``(role_key, conversation)`` pairs in
             session order.
 
     Returns:
-        A ``(compaction_events, handoffs)`` pair, each a flat list across all
-        conversations in the given order; either is empty when no such reset
-        occurred.
+        A ``(compaction_events, handoffs, recoveries)`` triple, each a flat list
+        across all conversations in the given order; either is empty when no such
+        reset occurred. ``recoveries`` contains only genuine recoveries (those
+        following a compaction); anomalous recoveries are counted separately via
+        ``count_anomalous_recoveries``.
     """
     compaction_events: list[dict[str, Any]] = []
     handoffs: list[dict[str, Any]] = []
+    recoveries: list[dict[str, Any]] = []
     for role_key, conversation in role_conversations:
         compaction_events.extend(_compaction_entries(role_key, conversation))
         handoffs.extend(_handoff_entries(role_key, conversation))
-    return compaction_events, handoffs
+        recoveries.extend(_recovery_entries(role_key, conversation)[0])
+    return compaction_events, handoffs, recoveries

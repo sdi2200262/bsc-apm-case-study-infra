@@ -27,6 +27,7 @@ from ..data.prompts import (
     is_slash_command_rendered_body,
     is_user_authored_prompt,
 )
+from ..data.reset_events import count_anomalous_recoveries
 from ..data.schema import (
     CONTENT_BLOCK_TOOL_RESULT,
     RECORD_TYPE_USER,
@@ -255,6 +256,19 @@ def collect_notices(session: Session) -> tuple[Notice, ...]:
                     f"event{'s' if compaction_total != 1 else ''} observed"
                 ),
                 detail="cost excludes compaction synthesis; the figure is a lower bound",
+            )
+        )
+
+    # REVIEW: recover before compaction
+    anomalous = count_anomalous_recoveries((view.role, view.conversation) for view in session.views)
+    if anomalous > 0:
+        _inv = "invocation" if anomalous == 1 else "invocations"
+        review_notices.append(
+            Notice(
+                tag=TAG_REVIEW,
+                label="recover before compaction",
+                summary=f"{anomalous} ``apm-9-recover`` {_inv} had no preceding compaction",
+                detail="a recover with no prior compaction is anomalous; confirm misuse vs timing",
             )
         )
 

@@ -336,7 +336,7 @@ def build_identity(session: Session) -> dict[str, Any]:
         }
         for view in session.views
     ]
-    compaction_events, handoffs = reset_event_blocks(
+    compaction_events, handoffs, recoveries = reset_event_blocks(
         (view.role, view.conversation) for view in session.views
     )
     return {
@@ -347,6 +347,7 @@ def build_identity(session: Session) -> dict[str, Any]:
         "conversations": conversations,
         "compaction_events": compaction_events,
         "handoffs": handoffs,
+        "recoveries": recoveries,
     }
 
 

@@ -77,6 +77,7 @@ APM_KNOWN_COMMANDS: frozenset[str] = frozenset(
 )
 
 APM_HANDOFF_COMMANDS: frozenset[str] = frozenset({"apm-6-handoff-manager", "apm-7-handoff-worker"})
+APM_RECOVER_COMMAND: str = "apm-9-recover"
 
 APM_ROLE_BY_INITIATE_COMMAND: dict[str, str] = {
     "apm-1-initiate-planner": ROLE_PLANNER,
