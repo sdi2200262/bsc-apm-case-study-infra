@@ -52,6 +52,7 @@ from .conversation import (
     parse_conversation_records,
 )
 from .prompts import is_user_authored_prompt
+from .reset_events import reset_event_blocks
 from .schema import (
     RECORD_TYPE_ASSISTANT,
     SYNTHETIC_MODEL_MARKER,
@@ -335,12 +336,17 @@ def build_identity(session: Session) -> dict[str, Any]:
         }
         for view in session.views
     ]
+    compaction_events, handoffs = reset_event_blocks(
+        (view.role, view.conversation) for view in session.views
+    )
     return {
         "model": pinned_model,
         "cc_version": _modal_string_field(session, "version"),
         "session_start": iso_or_none(session_start_timestamp(session)),
         "session_end": _latest_real_timestamp_iso(session),
         "conversations": conversations,
+        "compaction_events": compaction_events,
+        "handoffs": handoffs,
     }
 
 
