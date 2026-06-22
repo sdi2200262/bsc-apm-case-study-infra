@@ -62,7 +62,7 @@ def has_framework_command(text: str) -> bool:
 
     Membership in the parser's known-command tables is not
     required: any marker whose name begins with ``apm-`` or
-    ``speckit.`` puts the input in the protocol bucket, including
+    ``speckit-`` puts the input in the protocol bucket, including
     framework commands the parser does not yet have a phase or role
     mapping for. This matches the bucket's intent as a measure of
     framework participation rather than of command-table coverage;
