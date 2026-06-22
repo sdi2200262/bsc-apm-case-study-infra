@@ -148,6 +148,8 @@ def check_initialize_frame(
                 detail = json.dumps(raw)
                 if result is None:
                     ok, msg = False, "initialize: no result field"
+                elif not isinstance(result, dict):
+                    ok, msg = False, "initialize: invalid result field"
                 else:
                     mode = match_initialize(result)
                     ok = mode is not None

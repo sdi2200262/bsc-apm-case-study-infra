@@ -561,7 +561,10 @@ def extract_text(response: dict | None) -> str:
     """Return the first text-content block of a ``tools/call`` response."""
     if not response or "result" not in response:
         return ""
-    content = response["result"].get("content", [])
-    if not content:
+    result = response["result"]
+    if not isinstance(result, dict):
+        return ""
+    content = result.get("content", [])
+    if not content or not isinstance(content[0], dict):
         return ""
     return content[0].get("text", "")
