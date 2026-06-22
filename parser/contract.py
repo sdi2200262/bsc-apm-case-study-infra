@@ -95,7 +95,6 @@ CONTRACT: dict[str, FieldSpec] = {
         kind="metric", label="secondary", formula="union time at active-turn count >= 2"
     ),
     "inter_turn_time": FieldSpec(kind="metric", label="secondary", formula="duration - turn_time"),
-    "turn_count": FieldSpec(kind="data", label="primary"),
     "mean_turn_duration": FieldSpec(
         kind="metric", label="supplementary", formula="mean of per-turn durations"
     ),

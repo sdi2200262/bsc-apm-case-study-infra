@@ -19,8 +19,8 @@ Naming convention. Every artifact key is snake_case. Per-conversation
 identity is collected into a single ``conversations`` array under
 ``identity``, so downstream consumers iterate one array regardless of
 framework. The ``other`` phase and other empty scopes render zeroed values
-for a uniform per-scope shape; consumers filter them by ``turn_count == 0``
-rather than by missing keys.
+for a uniform per-scope shape; consumers filter them by
+``turn_prompt_count == 0`` rather than by missing keys.
 """
 
 from __future__ import annotations
@@ -246,7 +246,6 @@ def _build_scope_blocks(
     data_block: dict[str, Any] = {
         **token_leaves(token_data),
         **model_token_distribution_leaves(token_data),
-        "turn_count": scope_turn_count,
         **request_count_leaves(request_counts),
         **user_input_count_leaves(user_input_counts),
         **supplementary_data_leaves(subagent_counts),

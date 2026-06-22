@@ -173,8 +173,6 @@ def cost_leaves(cost: CostMetrics | None) -> dict[str, float]:
 def time_leaves(metrics: TimeMetrics) -> dict[str, float]:
     """Render a session-or-phase time metric block.
 
-    ``turn_count`` is data and is emitted by the data artifact, not here.
-
     Args:
         metrics: The scope's time metrics.
 
@@ -201,7 +199,7 @@ def time_leaves_role(metrics: TimeMetrics, turn_count: int) -> dict[str, float]:
     union of intervals: within a single conversation file the participant
     cannot drive two overlapping prompts, so the two coincide, and the sum
     form surfaces if a future role rollup ever folds in turns from multiple
-    files. ``turn_count`` is data and is emitted by the data artifact.
+    files.
 
     Args:
         metrics: The role's time metrics.

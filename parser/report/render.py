@@ -18,7 +18,6 @@ from .. import log
 from ..data.aggregate.counts import (
     compute_tool_counts,
     compute_user_input_counts,
-    turn_count,
 )
 from ..data.aggregate.tokens import TokenData
 from ..data.buckets import BUCKETS
@@ -107,7 +106,6 @@ def print_process(session: Session, short_threshold: int) -> None:
     all_steers = tuple(event for view in session.views for event in view.conversation.steer_events)
     all_records = [record for view in session.views for record in view.conversation.records]
     time_metrics = compute_time_metrics(session.turns)
-    scope_turn_count = turn_count(session.turns)
     user_input_counts = compute_user_input_counts(session.turns, all_steers, short_threshold)
     user_input_shares = compute_user_input_shares(user_input_counts)
     success_rate = tool_success_rate(compute_tool_counts(all_records))
@@ -119,7 +117,6 @@ def print_process(session: Session, short_threshold: int) -> None:
     log.info(f"    turn_time_solo:          {time_metrics.turn_time_solo:14.2f} sec")
     log.info(f"    turn_time_concurrent:    {time_metrics.turn_time_concurrent:14.2f} sec")
     log.info(f"    inter_turn_time:         {time_metrics.inter_turn_time:14.2f} sec")
-    log.info(f"    turn_count:              {scope_turn_count:14d}")
     log.info(f"    mean_turn_duration:      {time_metrics.mean_turn_duration:14.2f} sec")
     log.info(f"    turn_duration_p50:       {time_metrics.turn_duration_p50:14.2f} sec")
     log.info(f"    turn_duration_p95:       {time_metrics.turn_duration_p95:14.2f} sec")
