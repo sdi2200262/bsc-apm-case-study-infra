@@ -10,9 +10,6 @@ formula for the metrics, lives here and nowhere else. ``--schema`` writes
 this map once to ``parser_schema.json``; the per-session artifacts do not
 repeat it.
 
-The map below is the authoritative seed; ``construct`` is ``None`` until the
-literature-grounding pass fills it.
-
 This module is a root leaf: it imports nothing from the ``data``,
 ``metrics``, or ``report`` layers, so the layers and the report assembler
 may read it without creating a cycle.
@@ -40,15 +37,11 @@ class FieldSpec:
             ``"supplementary"`` for a descriptive value that is not tested.
         formula: One-line description of the metric's computation, set for
             metrics and ``None`` for data leaves.
-        construct: Reserved for the literature-grounding pass; ``None``
-            until a published construct is attached to a study-defined
-            metric.
     """
 
     kind: Kind
     label: Label
     formula: str | None = None
-    construct: str | None = None
 
 
 _TOKEN_POPULATIONS: tuple[str, ...] = ("main", "delegated", "total")
@@ -165,8 +158,7 @@ def schema_document() -> dict[str, Any]:
     """Serialize the contract to the schema-artifact mapping.
 
     Each field maps to its ``kind`` and ``label``; a metric also carries
-    its ``formula`` and, once the literature-grounding pass fills it, its
-    ``construct``. Keys whose value is ``None`` are omitted so the schema
+    its ``formula``. A ``formula`` of ``None`` is omitted so the schema
     stays minimal.
 
     Returns:
@@ -178,7 +170,5 @@ def schema_document() -> dict[str, Any]:
         entry: dict[str, Any] = {"kind": spec.kind, "label": spec.label}
         if spec.formula is not None:
             entry["formula"] = spec.formula
-        if spec.construct is not None:
-            entry["construct"] = spec.construct
         document[name] = entry
     return document
