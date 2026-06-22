@@ -53,7 +53,7 @@ python -m parser --help
 
 `<submission-path>` is a single `*.jsonl` file (development convenience)
 or a directory of them; sibling `<sessionId>/subagents/` and
-`<sessionId>/tool-results/` subdirectories are tolerated and ignored.
+`<sessionId>/tool-results/` subdirectories handled accordingly.
 `--framework` is required for every mode and never inferred from file
 content, so a non-protocol opening prompt cannot silently mis-classify a
 session.
