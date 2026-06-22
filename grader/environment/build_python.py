@@ -22,6 +22,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from ..errors import EnvironmentToolError
+
 BUILD_TIMEOUT_SECONDS = 120
 MAX_BUILD_ATTEMPTS = 3
 RETRY_BACKOFF_BASE_SECONDS = 2.0
@@ -90,7 +92,7 @@ def build(eclass_root: Path) -> tuple[bool, str, str]:
                 timeout=BUILD_TIMEOUT_SECONDS,
             )
         except FileNotFoundError:
-            return False, "uv not found on PATH", "uv not found on PATH"
+            raise EnvironmentToolError("uv not found on PATH") from None
         except subprocess.TimeoutExpired:
             # A whole-invocation timeout is not a fast-clearing blip, and
             # retrying would multiply the wall-clock cost, so report as-is.

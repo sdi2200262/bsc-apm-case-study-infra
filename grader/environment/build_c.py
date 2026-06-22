@@ -29,6 +29,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from ..errors import EnvironmentToolError
+
 BUILD_TIMEOUT_SECONDS = 120
 CLEAN_TIMEOUT_SECONDS = 30
 LDD_TIMEOUT_SECONDS = 10
@@ -110,7 +112,7 @@ def compile_c_replica(eclass_root: Path) -> tuple[bool, str, str]:
                 timeout=BUILD_TIMEOUT_SECONDS,
             )
         except FileNotFoundError:
-            return False, "make command not found", "make command not found in PATH"
+            raise EnvironmentToolError("make not found on PATH") from None
         except subprocess.TimeoutExpired:
             return (
                 False,
@@ -206,8 +208,7 @@ def verify_stack(eclass_root: Path) -> dict[str, tuple[bool, str, str]]:
             timeout=LDD_TIMEOUT_SECONDS,
         )
     except FileNotFoundError:
-        fail = (False, "ldd not on PATH", "ldd not on PATH")
-        return {"C.1.2": fail, "C.1.3": fail, "C.1.4": fail}
+        raise EnvironmentToolError("ldd not found on PATH") from None
     except subprocess.TimeoutExpired:
         msg = f"ldd timed out after {LDD_TIMEOUT_SECONDS} seconds"
         fail = (False, f"ldd timed out ({LDD_TIMEOUT_SECONDS}s)", msg)

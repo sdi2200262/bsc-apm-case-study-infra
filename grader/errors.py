@@ -43,3 +43,13 @@ class ResetError(GraderError):
     The reset is required between grading runs to guarantee
     determinism.
     """
+
+
+class EnvironmentToolError(GraderError):
+    """Raised when a required build or analysis tool is absent from PATH.
+
+    A tool the grading environment must provide (``uv``, ``make``,
+    ``ldd``, or ``valgrind``) was not found. Its absence is an
+    environment fault, not a participant failure, so the grader stops
+    rather than scoring the affected rows as failures.
+    """

@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ...errors import EnvironmentToolError
 from .._jsonrpc_io import dump_message
 from .._memcheck import (
     VALGRIND_STDERR_TAIL_LINES,
@@ -170,11 +171,7 @@ def run_scenario(
     try:
         subprocess.run(["valgrind", "--version"], capture_output=True, check=True)
     except FileNotFoundError:
-        return (
-            False,
-            f"{scenario.scenario_id}: valgrind not found on PATH",
-            "valgrind not found on PATH",
-        )
+        raise EnvironmentToolError("valgrind not found on PATH") from None
     except subprocess.CalledProcessError as error:
         return (
             False,

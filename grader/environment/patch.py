@@ -123,8 +123,8 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
     repo_path = Path(repo_path).resolve()
     actions: list[str] = []
 
-    ok, _ = _git(repo_path, "checkout", PATCH_BASELINE_PIN)
-    if ok:
+    restored, _ = _git(repo_path, "checkout", PATCH_BASELINE_PIN)
+    if restored:
         actions.append(f"checked out patch baseline pin {PATCH_BASELINE_PIN}")
 
     branches_ok, branches_out = _git(repo_path, "branch", "--list", f"{TEST_BRANCH_PREFIX}*")
@@ -140,7 +140,7 @@ def cleanup(repo_path: Path) -> tuple[bool, str]:
     _git(repo_path, "checkout", "--", ".")
     _git(repo_path, "clean", "-fdx")
 
-    return True, "; ".join(actions) if actions else "nothing to clean"
+    return restored, "; ".join(actions) if actions else "nothing to clean"
 
 
 def _prepare_clean_checkout(repo_path: Path) -> None:
