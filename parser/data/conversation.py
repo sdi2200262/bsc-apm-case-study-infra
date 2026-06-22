@@ -188,8 +188,8 @@ def discover_conversation_files(path: Path) -> list[Path]:
     Returns:
         A list of absolute paths in filesystem order. Top-level only when
         ``path`` is a directory; nested subdirectories are not descended.
-        The ``SubagentModelIndex`` is built separately by
-        ``load_conversation``. Sealing every file a submission ships
+        The ``SubagentDispatchIndex`` is built separately by
+        ``build_conversation``. Sealing every file a submission ships
         is a separate concern owned by ``parser.sanitize``.
 
     Raises:

@@ -199,9 +199,8 @@ def _collect_events(
                         continue
                     events.append((record, _EVENT_KIND_SKILL, skill_name))
                     # A Skill tool_use is the last content block of its
-                    # streaming response (verified against the cohort
-                    # before this code landed); one Skill event per
-                    # assistant record is the expected shape.
+                    # streaming response; one Skill event per assistant
+                    # record is the expected shape.
                     break
         for event in conversation.steer_events:
             if not event.is_user_authored or event.fate != STEER_FATE_DELIVERED:

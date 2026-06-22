@@ -81,9 +81,8 @@ class Config:
     def require_user(self, username: str) -> User:
         """Return the user with this username.
 
-        Used by the validation endpoints, where a ticket is only ever
-        minted for a user that exists in this config, so absence is an
-        invariant breach rather than a recoverable state.
+        A ticket is only minted for a user present in this config, so
+        absence is an invariant breach, not a recoverable state.
 
         Args:
             username: The username bound into a previously minted ticket.

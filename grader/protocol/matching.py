@@ -60,7 +60,7 @@ CAP_DOCUMENTED = "capabilities-documented"
 # accepted FORM as the diagnostic, not a strictness mode: the PRD
 # does not mandate a presentation order, so the matcher accepts the
 # openeclass-derived ordered form OR an order-insensitive form, and
-# which one matched is the fact a reviewer acts on. The existing
+# which one matched is the fact a reviewer acts on. The
 # non-breaking-space normalisation is applied within each form
 # unconditionally (the PRD whitespace rule), so a separate strictness
 # mode would add no decision and is not surfaced for these rows.

@@ -59,7 +59,7 @@ class MockCASHandler(BaseHTTPRequestHandler):
         """Override the stdlib server-string to the mock's identifying value."""
         return "bsc-apm-mock-cas"
 
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002 (stdlib signature)
         """Route stdlib log messages through the package logger."""
         logger.info("%s - %s", self.address_string(), format % args)
 

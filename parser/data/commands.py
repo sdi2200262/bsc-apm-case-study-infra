@@ -130,8 +130,8 @@ SPECKIT_KNOWN_COMMANDS: frozenset[str] = frozenset(
 # Claude Code built-in slash commands. Source:
 # https://code.claude.com/docs/en/commands. The built-ins are split
 # into two disjoint sets by whether invoking the command issues a model
-# request. The names ``vim`` and ``pr-comments`` are kept for transcripts
-# captured against Claude Code versions that still shipped them.
+# request. ``vim`` and ``pr-comments`` are included for transcripts that
+# contain them.
 
 # Local-only built-ins act on the CLI, session, UI, or configuration and
 # send no payload to the model. A queued one is not a steer.

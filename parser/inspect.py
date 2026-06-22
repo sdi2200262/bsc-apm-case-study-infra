@@ -12,8 +12,7 @@ leaves, and a per-call and per-turn summary.
 
 Leaves are bare ``name: value``; the kind, label, and formula of each
 measurement live in the schema artifact, emitted by ``parser --schema``.
-Pass it with ``--schema`` to annotate each leaf with its kind and label,
-the interpretive companion the grader's inspector joins the same way.
+Pass it with ``--schema`` to annotate each leaf with its kind and label.
 
 Invoked as ``python -m parser.inspect <parser_data.json>
 [<parser_metrics.json>] [--schema <parser_schema.json>]``; the arguments

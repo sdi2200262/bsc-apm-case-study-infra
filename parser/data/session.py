@@ -18,8 +18,8 @@ and the framework role and phase computation:
    participant-supplied identifier. Worker identifiers are typed by hand
    on ``/apm-3-initiate-worker <id>``, so keying on the id would split one
    semantic worker into two on a re-invocation typo. The verbatim first
-   command of each conversation is preserved so a reviewer can spot and
-   merge typo-different role-keys.
+   command is preserved so a reviewer can spot and merge typo-different
+   role-keys.
 
 2. Partition each framework assigner's per-record phase output back per
    conversation file and attach it to the view; no phase computation of

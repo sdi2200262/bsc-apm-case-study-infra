@@ -37,9 +37,8 @@ DEFAULT_CONFIG_FILENAME = "grader.yaml"
 
 # Similarity floor at or above which a non-passing string row is
 # credited as ``partial`` rather than ``failed``. Sits in the wide gap
-# the cohort forensic shows between near-misses (around 0.85) and
-# genuine errors (around 0.18). Overridable via ``grader.yaml`` or the
-# ``--partial-floor`` CLI flag.
+# between near-misses (around 0.85) and genuine errors (around 0.18).
+# Overridable via ``grader.yaml`` or the ``--partial-floor`` CLI flag.
 DEFAULT_PARTIAL_FLOOR = 0.45
 
 KEY_PATHS = "paths"

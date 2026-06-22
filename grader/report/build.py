@@ -32,8 +32,8 @@ class ReportPaths:
             into. The grader uses the parent of the eclass-mcp-server
             checkout so the reports sit beside the patched tree.
         patch_name: The patch's stem, carried into the report's
-            ``metadata`` block; the filename is fixed and no longer
-            derived from it.
+            ``metadata`` block; the filename is fixed and independent of
+            it.
         json_path: Full path to the JSON report written for the run:
             the fixed canonical ``grader_results.json``, or the fixed
             ``grader_results_compact_serialization.json`` for a compact run.
@@ -50,7 +50,7 @@ def report_paths(workspace_root: Path, patch_name: str, compact: bool = False) -
     Args:
         workspace_root: Directory the report is written into.
         patch_name: The patch's stem, recorded in the report
-            ``metadata``; it no longer shapes the filename.
+            ``metadata``; it does not shape the filename.
         compact: When ``True``, target the secondary
             ``grader_results_compact_serialization.json`` instead of the
             canonical report.

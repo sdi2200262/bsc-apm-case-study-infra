@@ -11,14 +11,13 @@ a synthesised JSON-RPC response shaped like the SDK's
 validation-error response (returned to the caller in place of a real
 ``tools/call`` round-trip). A malformed advertised schema, which the
 grader does not control, causes the gate to no-op (``None``) and the
-call passes through; the documented total behaviour for an untrusted
-participant schema.
+call passes through.
 
 This gate applies to the C replica only and mirrors what an
 SDK-compliant client experiences against the Python reference. A
 participant whose advertised schema is stricter than the PRD (a
-``days_back`` schema with ``minimum: 0``, for instance) has stopped
-being a drop-in replacement for the Python reference: the negative-
+``days_back`` schema with ``minimum: 0``, for instance) is not a
+drop-in replacement for the Python reference: the negative-
 ``days_back`` rows hit this gate before the participant's tool body
 runs, the caller receives the synthesised validation error in place
 of the PRD-mandated error string, and the row correctly bills the
