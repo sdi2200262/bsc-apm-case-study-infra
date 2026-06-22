@@ -239,11 +239,8 @@ def _tag_skill_request_group(
         phase_by_uuid: Output mapping mutated in place.
     """
     request_id = assistant_request_id(record)
-    group_uuids = (
-        requestid_to_uuids.get((str(record.source_file), request_id), [])
-        if request_id is not None
-        else [record.uuid]
-    )
+    assert request_id is not None, "skill events carry a non-null requestId"
+    group_uuids = requestid_to_uuids.get((str(record.source_file), request_id), [])
     for uuid in group_uuids:
         if uuid is not None:
             phase_by_uuid[uuid] = event_phase
