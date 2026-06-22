@@ -152,5 +152,6 @@ def print_process(session: Session, short_threshold: int) -> None:
         )
     log.blank()
     log.info("  supplementary:")
-    log.info(f"    tool_success_rate:       {success_rate:.4f}")
+    rate_text = f"{success_rate:.4f}" if success_rate is not None else "n/a (no tool results)"
+    log.info(f"    tool_success_rate:       {rate_text}")
     log.notice_block((n.tag, n.label, n.summary, n.detail) for n in collect_notices(session))

@@ -144,7 +144,8 @@ CONTRACT: dict[str, FieldSpec] = {
     "tool_success_rate": FieldSpec(
         kind="metric",
         label="supplementary",
-        formula="(tool_result_count - tool_error_count) / tool_result_count",
+        formula="(tool_result_count - tool_error_count) / tool_result_count, "
+        "or null when there are no tool results",
     ),
     "subagent_count": FieldSpec(kind="data", label="supplementary"),
     "subagent_tool_count": FieldSpec(kind="data", label="supplementary"),

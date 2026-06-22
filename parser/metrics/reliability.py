@@ -21,7 +21,7 @@ from __future__ import annotations
 from ..data.aggregate.counts import ToolCounts
 
 
-def tool_success_rate(tool_counts: ToolCounts) -> float:
+def tool_success_rate(tool_counts: ToolCounts) -> float | None:
     """Return the tool-call success rate for a scope.
 
     Args:
@@ -29,9 +29,9 @@ def tool_success_rate(tool_counts: ToolCounts) -> float:
 
     Returns:
         The share of tool results in ``[0.0, 1.0]`` that did not carry
-        ``is_error: true``. Reported as ``0.0`` when the scope contains
-        zero tool results, to keep the rate defined on every scope.
+        ``is_error: true``, or ``None`` when the scope contains zero tool
+        results and the rate is undefined.
     """
     total = tool_counts.tool_result_count
     errors = tool_counts.tool_error_count
-    return (total - errors) / total if total > 0 else 0.0
+    return (total - errors) / total if total > 0 else None
