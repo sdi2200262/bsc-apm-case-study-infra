@@ -41,6 +41,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import pairwise
 from statistics import median, pstdev
 
 from ..data.aggregate.turn_series import phase_of_turn
@@ -164,44 +165,124 @@ def compute_time_metrics(
     )
 
 
+def _merge_active_intervals(
+    intervals: list[tuple[datetime, datetime]],
+) -> list[tuple[datetime, datetime]]:
+    """Merge overlapping turn intervals into disjoint active spans.
+
+    Emits one span per maximal stretch during which at least one turn is
+    active, so overlapping turns from different conversations collapse into
+    a single span and the complement of the result is the idle time.
+
+    Args:
+        intervals: ``(start, end)`` pairs for every turn; order is
+            irrelevant and zero-length pairs are admitted.
+
+    Returns:
+        Disjoint ``(start, end)`` spans in ascending order. Empty when
+        ``intervals`` is empty.
+    """
+    if not intervals:
+        return []
+    events: list[tuple[datetime, int]] = []
+    for start, end in intervals:
+        events.append((start, +1))
+        events.append((end, -1))
+    events.sort(key=lambda event: (event[0], -event[1]))
+    merged: list[tuple[datetime, datetime]] = []
+    active = 0
+    span_start: datetime | None = None
+    for time_point, delta in events:
+        if active == 0 and delta > 0:
+            span_start = time_point
+        active += delta
+        if active == 0 and span_start is not None:
+            merged.append((span_start, time_point))
+            span_start = None
+    return merged
+
+
+def _turn_ending_at(turns: tuple[Turn, ...], boundary: datetime) -> Turn | None:
+    """Return a turn whose end coincides with an active span's right edge.
+
+    The idle interval beginning at that edge is attributed to this turn's
+    phase. Several turns ending together share a phase, so the first match
+    suffices.
+
+    Args:
+        turns: The session turns.
+        boundary: The active span's right edge to match.
+
+    Returns:
+        The matching turn, or ``None`` if no turn ends at ``boundary``.
+    """
+    # Linear scan per boundary, O(turns x gaps). Fine for a single session's
+    # turn list; build an end-timestamp index if it ever matters.
+    for turn in turns:
+        if turn.end_timestamp == boundary:
+            return turn
+    return None
+
+
 def _calculate_partitioned_inter_turn_time(
     session: Session,
     phase_label: str,
     scope_start: datetime,
     scope_end: datetime,
 ) -> float:
-    """Return the total inter-turn time attributed to a specific phase.
+    """Return the session's idle time attributed to one phase.
 
-    Partitions the session's wall-clock gaps by assigning each gap to the
-    phase of the turn that preceded it. This ensures that phase durations
-    are disjoint and their sum matches the total session duration.
+    Idle time is every instant in ``[scope_start, scope_end]`` covered by
+    no turn of any conversation: the complement of the merged active spans,
+    plus the leading and trailing gaps. Each idle interval is attributed to
+    the phase of the turn closing the span on its left, the leading gap to
+    the earliest-starting turn. The intervals partition the session idle,
+    so the per-phase totals sum to the session ``inter_turn_time``.
+
+    Args:
+        session: The full session; its start-sorted ``turns`` supply the
+            intervals and the phase attribution.
+        phase_label: The phase whose idle share to total.
+        scope_start: Start of the session wall-clock interval.
+        scope_end: End of the session wall-clock interval.
+
+    Returns:
+        Idle seconds attributed to ``phase_label``; ``0.0`` when the
+        session has no turns or no active span.
     """
-    total_inter_turn = 0.0
     all_turns = session.turns
     if not all_turns:
         return 0.0
+    active_spans = _merge_active_intervals(
+        [(turn.start_timestamp, turn.end_timestamp) for turn in all_turns]
+    )
+    if not active_spans:
+        return 0.0
 
-    # Gap before first turn: assigned to first turn's phase
-    if (
-        phase_of_turn(session, all_turns[0]) == phase_label
-        and all_turns[0].start_timestamp > scope_start
-    ):
-        total_inter_turn += (all_turns[0].start_timestamp - scope_start).total_seconds()
+    total_idle = 0.0
 
-    # Gaps between turns
-    for i in range(len(all_turns) - 1):
-        if phase_of_turn(session, all_turns[i]) == phase_label:
-            gap = (all_turns[i + 1].start_timestamp - all_turns[i].end_timestamp).total_seconds()
-            total_inter_turn += max(0.0, gap)
+    # Leading gap: scope_start to the first active instant, owned by the
+    # earliest-starting turn's phase (the start-sorted first turn).
+    first_span_start = active_spans[0][0]
+    if first_span_start > scope_start and phase_of_turn(session, all_turns[0]) == phase_label:
+        total_idle += (first_span_start - scope_start).total_seconds()
 
-    # Gap after last turn
-    if (
-        phase_of_turn(session, all_turns[-1]) == phase_label
-        and scope_end > all_turns[-1].end_timestamp
-    ):
-        total_inter_turn += (scope_end - all_turns[-1].end_timestamp).total_seconds()
+    # Inter-span gaps: each idle interval runs from one active span's end to
+    # the next span's start, owned by the turn closing the span on its left.
+    for current_span, next_span in pairwise(active_spans):
+        owner = _turn_ending_at(all_turns, current_span[1])
+        if owner is not None and phase_of_turn(session, owner) == phase_label:
+            total_idle += (next_span[0] - current_span[1]).total_seconds()
 
-    return total_inter_turn
+    # Trailing gap: last active instant to scope_end, owned by the turn that
+    # closed the final span.
+    last_span_end = active_spans[-1][1]
+    if scope_end > last_span_end:
+        owner = _turn_ending_at(all_turns, last_span_end)
+        if owner is not None and phase_of_turn(session, owner) == phase_label:
+            total_idle += (scope_end - last_span_end).total_seconds()
+
+    return total_idle
 
 
 def _decompose_intervals(
