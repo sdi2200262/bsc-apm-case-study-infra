@@ -20,8 +20,9 @@ from ...rates import (
     CATEGORY_INPUT,
     CATEGORY_OUTPUT,
 )
+from ..buckets import classify_bucket
 from ..commands import PHASE_OTHER
-from ..schema import assistant_request_id
+from ..schema import assistant_request_id, user_prompt_text
 from ..session import Session, iso_or_none
 from ..turns import Turn
 from .call_records import iter_main_call_entries, iter_main_request_records
@@ -29,7 +30,7 @@ from .call_records import iter_main_call_entries, iter_main_request_records
 PHASE_KEYS: tuple[str, ...] = ("planning", "implementation", "other")
 
 
-def build_turn_records(session: Session) -> list[dict[str, Any]]:
+def build_turn_records(session: Session, short_threshold: int) -> list[dict[str, Any]]:
     """Render the per-turn record-level output array.
 
     Each turn carries a ``phase_request_share`` dict with the three
@@ -43,8 +44,19 @@ def build_turn_records(session: Session) -> list[dict[str, Any]]:
     derived from the assigner output. The turn-level ``phase`` field
     still carries the phase of the turn's starting prompt.
 
+    Each turn also carries a ``prompt_bucket`` (``protocol``,
+    ``short``, or ``standard``): the behavioural bucket of the turn's
+    starting prompt, classified by the same text-and-threshold path
+    that the user-input dimension uses to compute
+    ``turn_prompts_bucket_shares`` (see
+    ``data.aggregate.counts.compute_user_input_counts``), so the
+    per-turn labels aggregate exactly to those shares within a scope.
+
     Args:
         session: The session whose turns are being rendered.
+        short_threshold: Upper bound (exclusive) on prompt length for
+            the ``short`` bucket, in characters; the same value the
+            user-input counts use.
 
     Returns:
         One dict per turn in ``session.turns``.
@@ -59,6 +71,7 @@ def build_turn_records(session: Session) -> list[dict[str, Any]]:
                 "conversation_id": _conversation_session_id(session, turn.conversation_path),
                 "role_key": role_of_turn(session, turn),
                 "phase": phase_of_turn(session, turn),
+                "prompt_bucket": _prompt_bucket_of_turn(turn, short_threshold),
                 "start_timestamp": iso_or_none(turn.start_timestamp),
                 "end_timestamp": iso_or_none(turn.end_timestamp),
                 "duration_seconds": (turn.end_timestamp - turn.start_timestamp).total_seconds(),
@@ -207,6 +220,21 @@ def _phase_request_share(
         if phase in buckets:
             buckets[phase] += 1
     return buckets
+
+
+def _prompt_bucket_of_turn(turn: Turn, short_threshold: int) -> str:
+    """Return the behavioural bucket of a turn's starting prompt.
+
+    Reuses the user-input dimension's classification path exactly: the
+    starting-prompt text comes from ``user_prompt_text`` and is fed to
+    ``classify_bucket`` with the same threshold, so the per-turn label
+    matches the input the ``turn_prompts_bucket_shares`` aggregate
+    counts for this turn. The classifier is framework-agnostic (it
+    keys on ``apm-*``/``speckit-*`` command markers in the text), so a
+    non-protocol opener lands in ``short`` or ``standard`` by length
+    rather than being mistaken for a protocol input.
+    """
+    return classify_bucket(user_prompt_text(turn.starting_prompt), short_threshold)
 
 
 def _count_turn_requests(turn: Turn) -> int:

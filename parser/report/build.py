@@ -163,7 +163,7 @@ def build_artifacts(
         "metadata": metadata,
         "scopes": data_scopes,
         "calls": build_call_series(session),
-        "turns": build_turn_records(session),
+        "turns": build_turn_records(session, short_threshold),
     }
     metrics_artifact: dict[str, Any] = {
         "identity": identity,
