@@ -14,11 +14,14 @@ from collections.abc import Iterable
 from typing import Any
 
 from ...rates import (
+    CATEGORIES,
     CATEGORY_CACHE_1H,
     CATEGORY_CACHE_5M,
     CATEGORY_CACHE_READ,
     CATEGORY_INPUT,
     CATEGORY_OUTPUT,
+    RateTable,
+    cost_in_usd,
 )
 from ..buckets import classify_bucket
 from ..commands import PHASE_OTHER
@@ -83,7 +86,7 @@ def build_turn_records(session: Session, short_threshold: int) -> list[dict[str,
     return records
 
 
-def build_call_series(session: Session) -> list[dict[str, Any]]:
+def build_call_series(session: Session, rate_table: RateTable) -> list[dict[str, Any]]:
     """Render the per-call canonical series for the data artifact.
 
     Walks the session's turns in order and, for each turn, emits one entry
@@ -91,9 +94,11 @@ def build_call_series(session: Session) -> list[dict[str, Any]]:
     ``request_count`` counts, via ``call_records.iter_main_call_entries``).
     Each entry carries the call's join key (``request_id``), resolved
     model, ISO timestamp, the five-category token bag spread to flat keys,
-    and its turn, phase, and role membership. A call's phase is the phase
-    recorded for its ``requestId`` in the per-conversation phase index; its
-    role is the role of the turn it belongs to.
+    a parallel ``*_cost_usd`` field per category (that category's tokens
+    priced against the call's model in isolation), and its turn, phase, and
+    role membership. A call's phase is the phase recorded for its
+    ``requestId`` in the per-conversation phase index; its role is the role
+    of the turn it belongs to.
 
     A main call that precedes the first turn-starting prompt belongs to no
     turn and is therefore not in the series; the series' per-turn count
@@ -101,6 +106,7 @@ def build_call_series(session: Session) -> list[dict[str, Any]]:
 
     Args:
         session: The session whose calls are being rendered.
+        rate_table: The rate table each category's tokens are priced against.
 
     Returns:
         One dict per main call, in turn order then record order within a
@@ -113,21 +119,26 @@ def build_call_series(session: Session) -> list[dict[str, Any]]:
         role_key = role_of_turn(session, turn)
         turn_id = turn.starting_prompt.uuid
         for entry in iter_main_call_entries(turn.records):
-            series.append(
-                {
-                    "request_id": entry.request_id,
-                    "model": entry.canonical_model,
-                    "timestamp": iso_or_none(entry.timestamp),
-                    "input": entry.token_bag[CATEGORY_INPUT],
-                    "output": entry.token_bag[CATEGORY_OUTPUT],
-                    "cache_read": entry.token_bag[CATEGORY_CACHE_READ],
-                    "cache_5m": entry.token_bag[CATEGORY_CACHE_5M],
-                    "cache_1h": entry.token_bag[CATEGORY_CACHE_1H],
-                    "turn": turn_id,
-                    "phase": request_phase_index.get(entry.request_id, PHASE_OTHER),
-                    "role": role_key,
-                }
-            )
+            row: dict[str, Any] = {
+                "request_id": entry.request_id,
+                "model": entry.canonical_model,
+                "timestamp": iso_or_none(entry.timestamp),
+                "input": entry.token_bag[CATEGORY_INPUT],
+                "output": entry.token_bag[CATEGORY_OUTPUT],
+                "cache_read": entry.token_bag[CATEGORY_CACHE_READ],
+                "cache_5m": entry.token_bag[CATEGORY_CACHE_5M],
+                "cache_1h": entry.token_bag[CATEGORY_CACHE_1H],
+                "turn": turn_id,
+                "phase": request_phase_index.get(entry.request_id, PHASE_OTHER),
+                "role": role_key,
+            }
+            for category in CATEGORIES:
+                row[f"{category}_cost_usd"] = cost_in_usd(
+                    rate_table,
+                    entry.canonical_model,
+                    {category: entry.token_bag[category]},
+                )
+            series.append(row)
     return series
 
 

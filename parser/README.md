@@ -10,7 +10,8 @@ The package reads one or more `<sessionId>.jsonl` files (copied from
 `~/.claude/projects/<dashed-cwd>/`), computes per-scope values (session,
 phase, and role for APM submissions), and writes two artifacts.
 `parser_data.json` holds what the data layer read, the token sums,
-counts, session identity facts, and the per-call and per-turn series.
+counts, session identity facts, and the per-call, per-turn,
+per-context-window, and per-dispatch series.
 `parser_metrics.json` holds the derived metrics, the cost, time
 statistics, bucket distributions, and success rate. A one-time
 `--schema` mode writes `parser_schema.json`, the field contract giving

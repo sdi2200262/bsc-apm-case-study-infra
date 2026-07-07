@@ -53,7 +53,9 @@ from ..data.commands import (
     PHASE_OTHER,
     PHASE_PLANNING,
 )
+from ..data.context_segments import build_context_segments
 from ..data.conversation import SteerEvent
+from ..data.dispatch_calls import build_dispatch_calls
 from ..data.schema import Record
 from ..data.session import (
     ConversationView,
@@ -162,8 +164,10 @@ def build_artifacts(
         "identity": identity,
         "metadata": metadata,
         "scopes": data_scopes,
-        "calls": build_call_series(session),
+        "calls": build_call_series(session, rate_table),
         "turns": build_turn_records(session, short_threshold),
+        "context_segments": build_context_segments(session),
+        "dispatch_calls": build_dispatch_calls(session, subagent_index, rate_table),
     }
     metrics_artifact: dict[str, Any] = {
         "identity": identity,
