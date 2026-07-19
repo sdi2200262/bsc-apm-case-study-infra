@@ -86,7 +86,10 @@ CONTRACT: dict[str, FieldSpec] = {
     "turn_time": FieldSpec(
         kind="metric",
         label="secondary",
-        formula="union of turn intervals (role scope: sum of per-turn durations)",
+        formula=(
+            "union of turn intervals (phase scope: of phase segments; "
+            "role scope: sum of per-turn durations)"
+        ),
     ),
     "turn_time_solo": FieldSpec(
         kind="metric", label="secondary", formula="union time at active-turn count == 1"
@@ -94,22 +97,36 @@ CONTRACT: dict[str, FieldSpec] = {
     "turn_time_concurrent": FieldSpec(
         kind="metric", label="secondary", formula="union time at active-turn count >= 2"
     ),
-    "inter_turn_time": FieldSpec(kind="metric", label="secondary", formula="duration - turn_time"),
+    "inter_turn_time": FieldSpec(
+        kind="metric",
+        label="secondary",
+        formula="duration - turn_time (phase scope: partitioned share of session idle)",
+    ),
     "mean_turn_duration": FieldSpec(
-        kind="metric", label="supplementary", formula="mean of per-turn durations"
+        kind="metric",
+        label="supplementary",
+        formula="mean of per-turn durations (phase scope: of segment durations)",
     ),
     "turn_duration_p50": FieldSpec(
-        kind="metric", label="supplementary", formula="median of per-turn durations"
+        kind="metric",
+        label="supplementary",
+        formula="median of per-turn durations (phase scope: of segment durations)",
     ),
     "turn_duration_p95": FieldSpec(
         kind="metric",
         label="supplementary",
-        formula="linearly interpolated 95th percentile of per-turn durations",
+        formula=(
+            "linearly interpolated 95th percentile of per-turn durations "
+            "(phase scope: of segment durations)"
+        ),
     ),
     "turn_duration_stdev": FieldSpec(
         kind="metric",
         label="supplementary",
-        formula="population standard deviation of per-turn durations",
+        formula=(
+            "population standard deviation of per-turn durations "
+            "(phase scope: of segment durations)"
+        ),
     ),
     "turn_prompt_count": FieldSpec(kind="data", label="primary"),
     "steer_delivered_count": FieldSpec(kind="data", label="primary"),
