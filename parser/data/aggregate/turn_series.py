@@ -1,16 +1,24 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Turn-level record assembly and phase-share computation for the canonical artifact.
+"""Turn-level record assembly and phase membership for the canonical artifact.
 
 This module owns the ``turns`` array of the metrics artifact and the
 helpers that resolve each turn's primary phase, role, and per-phase
-request distribution. The artifact-wide assembly lives in
-``report``; this module is the per-turn renderer it calls into.
+request distribution. The artifact-wide assembly lives in ``report``;
+this module is the per-turn renderer it calls into.
+
+It also owns phase membership at record granularity: the running-phase
+walk, the records each phase scope aggregates, and the per-turn segments
+a phase scope's wall-clock is measured over. Extensive measures follow
+the phase in force at each record; point-in-time measures follow the
+turn's starting prompt.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from ...rates import (
@@ -25,12 +33,31 @@ from ...rates import (
 )
 from ..buckets import classify_bucket
 from ..commands import PHASE_OTHER
-from ..schema import assistant_request_id, user_prompt_text
-from ..session import Session, iso_or_none
+from ..schema import Record, assistant_request_id, user_prompt_text
+from ..session import ConversationView, Session, iso_or_none
 from ..turns import Turn
 from .call_records import iter_main_call_entries, iter_main_request_records
 
 PHASE_KEYS: tuple[str, ...] = ("planning", "implementation", "other")
+
+
+@dataclass(frozen=True)
+class PhaseSegment:
+    """One contiguous stretch of a turn spent in a single phase.
+
+    Attributes:
+        phase: The stretch's phase label.
+        start: The turn's start for a turn's first segment, otherwise the
+            timestamp of the first call of this phase.
+        end: The turn's end for a turn's last segment, otherwise the next
+            segment's start.
+        turn: The turn the stretch is part of.
+    """
+
+    phase: str
+    start: datetime
+    end: datetime
+    turn: Turn
 
 
 def build_turn_records(session: Session, short_threshold: int) -> list[dict[str, Any]]:
@@ -179,38 +206,188 @@ def role_of_turn(session: Session, turn: Turn) -> str:
     return ""
 
 
+def iter_record_phases(view: ConversationView) -> Iterator[tuple[Record, str]]:
+    """Yield each of a conversation's records paired with the phase in force at it.
+
+    Walks records in document order tracking a running phase, bumped
+    whenever a record's uuid appears in the view's ``phase_by_record_uuid``
+    map (user prompts and steer enqueues set the prompt's phase;
+    Skill-tagged request groups override every same-``requestId`` assistant
+    record). The running phase starts at ``other``, so records preceding
+    the conversation's first phase-setting prompt are yielded as ``other``.
+
+    For APM each user prompt sets the role phase, so every record inherits
+    it. For Spec-kit the most recent prompt or steer holds until a Skill
+    request group rewrites it.
+
+    Args:
+        view: The conversation view to walk.
+
+    Yields:
+        ``(record, phase)`` pairs in document order.
+    """
+    current_phase: str = PHASE_OTHER
+    for record in view.conversation.records:
+        if record.uuid is not None:
+            tagged = view.phase_by_record_uuid.get(record.uuid)
+            if tagged is not None:
+                current_phase = tagged
+        yield record, current_phase
+
+
 def _build_request_phase_index(session: Session) -> dict[str, dict[str, str]]:
     """Build a per-conversation ``requestId -> phase`` index.
 
-    For each conversation file the function walks records in document
-    order and tracks a running phase: it is bumped whenever a record's
-    uuid appears in the conversation view's ``phase_by_record_uuid``
-    map (user prompts and steer enqueues set the prompt's phase;
-    Skill-tagged request groups override every same-``requestId``
-    assistant record). The phase observed at a request's first
-    assistant record becomes that request's phase. For APM the
-    running phase is set by each user prompt to the role phase, so
-    every request inherits the role's phase. For Spec-kit the phase
-    is set by the most recent prompt or steer until a Skill request
-    group rewrites it.
+    The phase observed at a request's first assistant record, per the
+    record-level walk in ``iter_record_phases``, becomes that request's
+    phase.
     """
     index: dict[str, dict[str, str]] = {}
     for view in session.views:
         per_request: dict[str, str] = {}
-        current_phase: str = PHASE_OTHER
-        for record in view.conversation.records:
-            if record.uuid is not None:
-                tagged = view.phase_by_record_uuid.get(record.uuid)
-                if tagged is not None:
-                    current_phase = tagged
+        for record, phase in iter_record_phases(view):
             request_id = assistant_request_id(record)
             if request_id is None:
                 continue
             if request_id in per_request:
                 continue
-            per_request[request_id] = current_phase
+            per_request[request_id] = phase
         index[view.conversation.path] = per_request
     return index
+
+
+def records_in_phase(session: Session, phase: str) -> list[Record]:
+    """Return the session's records belonging to ``phase``.
+
+    Every record carries a phase, so the three phase selections partition
+    the session's records exactly.
+
+    Args:
+        session: The session to select from.
+        phase: The phase label to select.
+
+    Returns:
+        The phase's records, in view order then document order.
+    """
+    return [
+        record
+        for view in session.views
+        for record, record_phase in iter_record_phases(view)
+        if record_phase == phase
+    ]
+
+
+def build_phase_segments(session: Session) -> tuple[PhaseSegment, ...]:
+    """Split every turn of the session into its per-phase segments.
+
+    A turn's segments tile its interval, so the session's segments tile
+    the same wall-clock its turns do.
+
+    Args:
+        session: The session whose turns to split.
+
+    Returns:
+        Segments in turn order, then phase order within a turn.
+    """
+    phase_by_record: dict[int, str] = {}
+    for view in session.views:
+        for record, phase in iter_record_phases(view):
+            phase_by_record[id(record)] = phase
+    segments: list[PhaseSegment] = []
+    for turn in session.turns:
+        segments.extend(_segments_of_turn(session, turn, phase_by_record))
+    return tuple(segments)
+
+
+def segments_in_phase(
+    segments: tuple[PhaseSegment, ...],
+    phase: str,
+) -> list[tuple[datetime, datetime]]:
+    """Return the ``(start, end)`` intervals of the segments belonging to ``phase``."""
+    return [(segment.start, segment.end) for segment in segments if segment.phase == phase]
+
+
+def closing_phase_by_turn(segments: tuple[PhaseSegment, ...]) -> dict[int, str]:
+    """Map each turn's identity to the phase of its last segment.
+
+    Args:
+        segments: The session's segments, in turn order.
+
+    Returns:
+        ``id(turn) -> phase`` for every turn covered by ``segments``.
+    """
+    return {id(segment.turn): segment.phase for segment in segments}
+
+
+def opening_phase_by_turn(segments: tuple[PhaseSegment, ...]) -> dict[int, str]:
+    """Map each turn's identity to the phase of its first segment.
+
+    Args:
+        segments: The session's segments, in turn order.
+
+    Returns:
+        ``id(turn) -> phase`` for every turn covered by ``segments``.
+    """
+    opening: dict[int, str] = {}
+    for segment in segments:
+        opening.setdefault(id(segment.turn), segment.phase)
+    return opening
+
+
+def _segments_of_turn(
+    session: Session,
+    turn: Turn,
+    phase_by_record: dict[int, str],
+) -> list[PhaseSegment]:
+    """Split one turn into its per-phase segments.
+
+    The turn opens in its starting prompt's phase, so a turn whose calls
+    stay in that phase yields one segment covering the whole turn. Each
+    call whose phase differs from the running one closes the open segment
+    at that call's timestamp and opens the next there.
+
+    A call without a timestamp cannot position a boundary, so it leaves the
+    running phase alone and the transition stays pending for the next
+    timestamped call of that phase to place.
+
+    The two clamps are not symmetric. A boundary at or before the open
+    segment's start means the phase already held there, so it takes the
+    open segment over. A boundary at or after the turn's end means the new
+    phase occupies no wall-clock inside the turn, so it is dropped and the
+    open segment keeps the phase it had.
+
+    Args:
+        session: The session the turn belongs to.
+        turn: The turn to split.
+        phase_by_record: Session-wide record-identity to phase map.
+
+    Returns:
+        The turn's segments in order; always at least one.
+    """
+    opening_phase = phase_of_turn(session, turn)
+    boundaries: list[tuple[str, datetime]] = []
+    running_phase = opening_phase
+    for record in iter_main_request_records(turn.records):
+        phase = phase_by_record.get(id(record), running_phase)
+        if phase == running_phase or record.timestamp is None:
+            continue
+        running_phase = phase
+        boundaries.append((phase, record.timestamp))
+
+    segments: list[PhaseSegment] = []
+    segment_start = turn.start_timestamp
+    segment_phase = opening_phase
+    for phase, boundary in boundaries:
+        if boundary >= turn.end_timestamp:
+            continue
+        if boundary <= segment_start:
+            segment_phase = phase
+            continue
+        segments.append(PhaseSegment(segment_phase, segment_start, boundary, turn))
+        segment_start = boundary
+        segment_phase = phase
+    segments.append(PhaseSegment(segment_phase, segment_start, turn.end_timestamp, turn))
+    return segments
 
 
 def _phase_request_share(

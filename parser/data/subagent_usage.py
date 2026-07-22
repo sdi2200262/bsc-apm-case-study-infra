@@ -79,6 +79,12 @@ class SubagentDispatchIndex:
             records. The pricing call sites use this bag in place of the
             parent roll-up whenever the dispatch's ``agentId`` is
             present here.
+        requests_by_agent_id: ``agentId`` to the count of distinct
+            ``requestId`` values in that subagent file's deduplicated,
+            non-synthetic, non-errored assistant records, the same
+            population the token bag sums over. A dispatch whose subagent
+            transcript did not ship is absent here and contributes nothing
+            to a scope's subagent request count.
         files_seen: Count of ``agent-*.jsonl`` files inspected next to
             the main session JSONL.
         files_without_model: Count of files whose first non-synthetic
@@ -88,6 +94,7 @@ class SubagentDispatchIndex:
 
     model_by_agent_id: dict[str, str] = field(default_factory=dict)
     usage_by_agent_id: dict[str, dict[str, int]] = field(default_factory=dict)
+    requests_by_agent_id: dict[str, int] = field(default_factory=dict)
     files_seen: int = 0
     files_without_model: int = 0
 
@@ -123,6 +130,7 @@ def build_subagent_dispatch_index(main_jsonl_path: Path) -> SubagentDispatchInde
         return SubagentDispatchIndex.empty()
     model_by_agent_id: dict[str, str] = {}
     usage_by_agent_id: dict[str, dict[str, int]] = {}
+    requests_by_agent_id: dict[str, int] = {}
     files_seen = 0
     files_without_model = 0
     for path in sorted(
@@ -132,8 +140,9 @@ def build_subagent_dispatch_index(main_jsonl_path: Path) -> SubagentDispatchInde
         agent_id = agent_id_from_filename(path.name)
         if agent_id is None:
             continue
-        model, token_bag = _model_and_usage_from_subagent_file(path)
+        model, token_bag, request_count = _model_and_usage_from_subagent_file(path)
         usage_by_agent_id[agent_id] = token_bag
+        requests_by_agent_id[agent_id] = request_count
         if model is None:
             files_without_model += 1
             continue
@@ -141,13 +150,14 @@ def build_subagent_dispatch_index(main_jsonl_path: Path) -> SubagentDispatchInde
     return SubagentDispatchIndex(
         model_by_agent_id=model_by_agent_id,
         usage_by_agent_id=usage_by_agent_id,
+        requests_by_agent_id=requests_by_agent_id,
         files_seen=files_seen,
         files_without_model=files_without_model,
     )
 
 
-def _model_and_usage_from_subagent_file(path: Path) -> tuple[str | None, dict[str, int]]:
-    """Return the subagent's model and summed token bag from one ``agent-*.jsonl`` file.
+def _model_and_usage_from_subagent_file(path: Path) -> tuple[str | None, dict[str, int], int]:
+    """Return the subagent's model, summed token bag, and request count from one file.
 
     Walks the file once. The model is the ``message.model`` of the first
     non-synthetic assistant record (or ``None`` when none exists). The
@@ -156,7 +166,8 @@ def _model_and_usage_from_subagent_file(path: Path) -> tuple[str | None, dict[st
     API-error records, so a streaming response's repeated usage is counted
     once and a failed (unbilled) request contributes nothing. This matches
     the main-call population's selection rule, since the subagent's records
-    are ordinary main-agent API calls inside its own transcript.
+    are ordinary main-agent API calls inside its own transcript. The request
+    count is the size of that same deduplicated population.
 
     Lines that do not parse as JSON are skipped silently, matching the
     loader's tolerance and letting this run before the full loader pass.
@@ -165,10 +176,11 @@ def _model_and_usage_from_subagent_file(path: Path) -> tuple[str | None, dict[st
         path: Absolute path to an ``agent-*.jsonl`` file.
 
     Returns:
-        A ``(model, token_bag)`` pair. ``model`` is ``None`` when the file
-        holds no usable non-synthetic assistant record; ``token_bag`` is
-        keyed by ``rates.CATEGORY_*`` and is all-zero when no record
-        contributed usage.
+        A ``(model, token_bag, request_count)`` triple. ``model`` is
+        ``None`` when the file holds no usable non-synthetic assistant
+        record; ``token_bag`` is keyed by ``rates.CATEGORY_*`` and is
+        all-zero when no record contributed usage; ``request_count`` is the
+        number of distinct billed ``requestId`` values in the file.
     """
     model: str | None = None
     seen_request_ids: set[str] = set()
@@ -205,7 +217,7 @@ def _model_and_usage_from_subagent_file(path: Path) -> tuple[str | None, dict[st
             if not isinstance(usage, dict):
                 continue
             _accumulate(token_bag, token_sums_dict_from_usage(usage))
-    return model, token_bag
+    return model, token_bag, len(seen_request_ids)
 
 
 def _zero_token_bag() -> dict[str, int]:

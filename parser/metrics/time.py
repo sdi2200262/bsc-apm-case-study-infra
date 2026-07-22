@@ -20,20 +20,30 @@ the duration spent at active-count == 1; concurrent time is the duration
 spent at active-count >= 2. The two sum to the union of every interval
 (turn-time).
 
+A phase scope aggregates the per-phase segments ``data.aggregate.
+turn_series`` derives, not whole turns, so a turn crossing a phase
+boundary mid-flight contributes only its stretch in this phase. Segments
+of one turn tile that turn's interval, so a turn's own wall-clock is
+neither lost nor double-counted. Each phase's union is taken over its own
+segments alone, so where turns of different phases overlap across
+conversations the shared instant is counted once per phase and the
+per-phase turn-times exceed the session's; only a session with no
+cross-phase overlap sums exactly.
+
 A phase scope's inter-turn time is not its own span minus its turn time:
 a phase's turns interleave with other phases across the session, so its
 share of the session's idle gaps is partitioned by assigning each gap to
-the phase of the turn that precedes it. This module owns that partition;
-``compute_time_metrics`` applies it when given the session and a phase
-label, keeping the per-phase inter-turn times disjoint and summing to the
-session total.
+the phase the preceding turn ended in. This module owns that partition;
+``compute_time_metrics`` applies it when given the session, a phase label,
+and the session's segments, keeping the per-phase inter-turn times disjoint
+and summing to the session total.
 
-Per-turn duration distribution metrics (mean, p50, p95, stdev) are
-computed over the per-turn durations directly, with no union-dedup. A turn
-whose interval overlaps another's still counts its full length toward the
-distribution; the deduplication only applies to the wall-clock
-decomposition. The count of turns in scope is data and lives in
-``data/aggregate/counts``.
+Duration distribution metrics (mean, p50, p95, stdev) are computed over
+the scope's own intervals directly, with no union-dedup: per turn for the
+session and role scopes, per segment for a phase scope. An interval that
+overlaps another still counts its full length toward the distribution; the
+deduplication only applies to the wall-clock decomposition. The count of
+turns in scope is data and lives in ``data/aggregate/counts``.
 """
 
 from __future__ import annotations
@@ -44,7 +54,13 @@ from datetime import datetime
 from itertools import pairwise
 from statistics import median, pstdev
 
-from ..data.aggregate.turn_series import phase_of_turn
+from ..data.aggregate.turn_series import (
+    PhaseSegment,
+    closing_phase_by_turn,
+    opening_phase_by_turn,
+    phase_of_turn,
+    segments_in_phase,
+)
 from ..data.session import (
     Session,
     latest_real_timestamp,
@@ -57,22 +73,26 @@ from ..data.turns import Turn
 class TimeMetrics:
     """Time-dimension metric block for a single scope.
 
+    A phase scope's intervals are its segments, not whole turns, so the
+    four distribution fields describe segments there; its
+    ``inter_turn_time`` is the partitioned share rather than a subtraction.
+
     Attributes:
         duration: Wall-clock extent of the scope in seconds.
-        turn_time: Total wall-clock time during which at least one turn
-            was active inside the scope (union of turn intervals).
+        turn_time: Total wall-clock time during which at least one interval
+            was active inside the scope (their union).
         turn_time_solo: Subset of ``turn_time`` during which exactly one
-            turn was active.
+            interval was active.
         turn_time_concurrent: Subset of ``turn_time`` during which two or
-            more turns were active.
-        inter_turn_time: ``duration - turn_time``; time during which no
-            turn was active.
-        mean_turn_duration: Mean of per-turn durations in seconds.
-        turn_duration_p50: Median of per-turn durations in seconds.
-        turn_duration_p95: 95th percentile of per-turn durations via
-            linear interpolation.
-        turn_duration_stdev: Population standard deviation of per-turn
-            durations.
+            more intervals were active.
+        inter_turn_time: Time during which no turn was active;
+            ``duration - turn_time`` outside a phase scope.
+        mean_turn_duration: Mean of the scope's interval durations.
+        turn_duration_p50: Median of the scope's interval durations.
+        turn_duration_p95: 95th percentile of the scope's interval
+            durations via linear interpolation.
+        turn_duration_stdev: Population standard deviation of the scope's
+            interval durations.
     """
 
     duration: float
@@ -93,6 +113,7 @@ def compute_time_metrics(
     *,
     session: Session | None = None,
     phase_label: str | None = None,
+    phase_segments: tuple[PhaseSegment, ...] = (),
 ) -> TimeMetrics:
     """Compute time metrics over a set of turns.
 
@@ -101,12 +122,16 @@ def compute_time_metrics(
     the scope to extend beyond the outermost turn boundaries supply
     explicit ``scope_start`` and ``scope_end``.
 
-    For a phase scope the inter-turn time is partitioned rather than taken
-    as the scope's own span minus its turn time. Passing ``session``
-    together with ``phase_label`` computes the phase's share of the
-    session's idle gaps (see ``_calculate_partitioned_inter_turn_time``);
-    ``duration`` then becomes the sum of the scope's turn time and that
-    partitioned inter-turn time.
+    A phase scope aggregates ``phase_segments`` rather than whole turns,
+    so a turn crossing a phase boundary contributes only its stretch in
+    this phase.
+
+    For a phase scope the inter-turn time is likewise partitioned rather
+    than taken as the scope's own span minus its turn time. Passing
+    ``session`` together with ``phase_label`` computes the phase's share of
+    the session's idle gaps (see
+    ``_calculate_partitioned_inter_turn_time``); ``duration`` then becomes
+    the sum of the scope's turn time and that partitioned inter-turn time.
 
     Args:
         turns: The turns to aggregate over. Order does not matter; empty
@@ -121,14 +146,20 @@ def compute_time_metrics(
         phase_label: The phase whose gaps to partition, supplied with
             ``session`` for a phase scope. ``None`` for session and role
             scopes.
+        phase_segments: The session's phase segments, supplied with
+            ``phase_label`` for a phase scope. Empty for session and role
+            scopes.
 
     Returns:
         A populated ``TimeMetrics``.
     """
-    turn_list = list(turns)
-    if not turn_list:
+    is_phase_scope = phase_label is not None and bool(phase_segments)
+    if is_phase_scope:
+        intervals = segments_in_phase(phase_segments, str(phase_label))
+    else:
+        intervals = [(turn.start_timestamp, turn.end_timestamp) for turn in turns]
+    if not intervals:
         return _zero_metrics()
-    intervals = [(turn.start_timestamp, turn.end_timestamp) for turn in turn_list]
     turn_time, turn_time_solo, turn_time_concurrent = _decompose_intervals(intervals)
 
     inter_turn_override = None
@@ -137,7 +168,7 @@ def compute_time_metrics(
         session_end = latest_real_timestamp(session)
         if session_start is not None and session_end is not None:
             inter_turn_override = _calculate_partitioned_inter_turn_time(
-                session, phase_label, session_start, session_end
+                session, phase_label, session_start, session_end, phase_segments
             )
 
     if inter_turn_override is not None:
@@ -229,15 +260,20 @@ def _calculate_partitioned_inter_turn_time(
     phase_label: str,
     scope_start: datetime,
     scope_end: datetime,
+    phase_segments: tuple[PhaseSegment, ...] = (),
 ) -> float:
     """Return the session's idle time attributed to one phase.
 
     Idle time is every instant in ``[scope_start, scope_end]`` covered by
     no turn of any conversation: the complement of the merged active spans,
     plus the leading and trailing gaps. Each idle interval is attributed to
-    the phase of the turn closing the span on its left, the leading gap to
-    the earliest-starting turn. The intervals partition the session idle,
-    so the per-phase totals sum to the session ``inter_turn_time``.
+    the phase the turn closing the span on its left ended in, the leading
+    gap to the earliest-starting turn's opening phase. The intervals
+    partition the session idle, so the per-phase totals sum to the session
+    ``inter_turn_time``.
+
+    A turn's closing phase is that of its last segment, which for a
+    boundary-spanning turn is not its starting prompt's phase.
 
     Args:
         session: The full session; its start-sorted ``turns`` supply the
@@ -245,6 +281,9 @@ def _calculate_partitioned_inter_turn_time(
         phase_label: The phase whose idle share to total.
         scope_start: Start of the session wall-clock interval.
         scope_end: End of the session wall-clock interval.
+        phase_segments: The session's phase segments, supplying each turn's
+            closing and opening phase. Falls back to the turn's own phase
+            when empty.
 
     Returns:
         Idle seconds attributed to ``phase_label``; ``0.0`` when the
@@ -253,6 +292,12 @@ def _calculate_partitioned_inter_turn_time(
     all_turns = session.turns
     if not all_turns:
         return 0.0
+    closing_phase = closing_phase_by_turn(phase_segments)
+    opening_phase = opening_phase_by_turn(phase_segments)
+
+    def phase_when_closing(turn: Turn) -> str:
+        return closing_phase.get(id(turn), phase_of_turn(session, turn))
+
     active_spans = _merge_active_intervals(
         [(turn.start_timestamp, turn.end_timestamp) for turn in all_turns]
     )
@@ -264,14 +309,16 @@ def _calculate_partitioned_inter_turn_time(
     # Leading gap: scope_start to the first active instant, owned by the
     # earliest-starting turn's phase (the start-sorted first turn).
     first_span_start = active_spans[0][0]
-    if first_span_start > scope_start and phase_of_turn(session, all_turns[0]) == phase_label:
+    first_turn = all_turns[0]
+    leading_phase = opening_phase.get(id(first_turn), phase_of_turn(session, first_turn))
+    if first_span_start > scope_start and leading_phase == phase_label:
         total_idle += (first_span_start - scope_start).total_seconds()
 
     # Inter-span gaps: each idle interval runs from one active span's end to
     # the next span's start, owned by the turn closing the span on its left.
     for current_span, next_span in pairwise(active_spans):
         owner = _turn_ending_at(all_turns, current_span[1])
-        if owner is not None and phase_of_turn(session, owner) == phase_label:
+        if owner is not None and phase_when_closing(owner) == phase_label:
             total_idle += (next_span[0] - current_span[1]).total_seconds()
 
     # Trailing gap: last active instant to scope_end, owned by the turn that
@@ -279,7 +326,7 @@ def _calculate_partitioned_inter_turn_time(
     last_span_end = active_spans[-1][1]
     if scope_end > last_span_end:
         owner = _turn_ending_at(all_turns, last_span_end)
-        if owner is not None and phase_of_turn(session, owner) == phase_label:
+        if owner is not None and phase_when_closing(owner) == phase_label:
             total_idle += (scope_end - last_span_end).total_seconds()
 
     return total_idle
