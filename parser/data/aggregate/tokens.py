@@ -226,17 +226,20 @@ def merge_subagent_indices(session: Session) -> SubagentDispatchIndex:
     """
     model_by_agent_id: dict[str, str] = {}
     usage_by_agent_id: dict[str, dict[str, int]] = {}
+    requests_by_agent_id: dict[str, int] = {}
     files_seen = 0
     files_without_model = 0
     for view in session.views:
         index = view.conversation.subagent_dispatch_index
         model_by_agent_id.update(index.model_by_agent_id)
         usage_by_agent_id.update(index.usage_by_agent_id)
+        requests_by_agent_id.update(index.requests_by_agent_id)
         files_seen += index.files_seen
         files_without_model += index.files_without_model
     return SubagentDispatchIndex(
         model_by_agent_id=model_by_agent_id,
         usage_by_agent_id=usage_by_agent_id,
+        requests_by_agent_id=requests_by_agent_id,
         files_seen=files_seen,
         files_without_model=files_without_model,
     )

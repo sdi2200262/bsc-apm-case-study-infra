@@ -39,6 +39,7 @@ from ..schema import (
     user_content_blocks,
     user_prompt_text,
 )
+from ..subagent_usage import SubagentDispatchIndex
 from ..turns import Turn
 from .call_records import is_main_request_record
 
@@ -71,6 +72,10 @@ class SubagentCounts:
             main agents in scope.
         subagent_tool_count: Sum of ``toolUseResult.totalToolUseCount``
             across user records that returned a populated subagent result.
+        subagent_request_count: Sum of the dispatched subagents' own billed
+            request counts, one dispatch's count added at the scope record
+            that returned its result. A dispatch whose subagent transcript
+            did not ship is not in the index and contributes nothing.
         model_invoked_skill_count: Number of user-side records in scope
             that are platform-rendered Skill bodies the model itself
             caused to be injected via the Skill tool.
@@ -78,6 +83,7 @@ class SubagentCounts:
 
     subagent_count: int
     subagent_tool_count: int
+    subagent_request_count: int
     model_invoked_skill_count: int
 
 
@@ -172,18 +178,29 @@ def compute_request_counts(records: Iterable[Record]) -> RequestCounts:
     )
 
 
-def compute_subagent_counts(records: Iterable[Record]) -> SubagentCounts:
+def compute_subagent_counts(
+    records: Iterable[Record], subagent_index: SubagentDispatchIndex
+) -> SubagentCounts:
     """Compute subagent-activity counts over an arbitrary record subset.
+
+    The dispatch and tool-use counts are read from the scope records
+    themselves; the subagent request count is looked up per returning
+    record from ``subagent_index``, keyed by the dispatch's ``agentId``, so
+    it attributes to the same scope record the tool-use count does.
 
     Args:
         records: The records in scope, in any order.
+        subagent_index: ``agentId``-keyed index carrying each dispatched
+            subagent's own billed request count.
 
     Returns:
-        The Agent dispatch count, the summed subagent tool-use count, and
-        the model-invoked Skill count for the scope.
+        The Agent dispatch count, the summed subagent tool-use count, the
+        summed subagent request count, and the model-invoked Skill count
+        for the scope.
     """
     subagent_count = 0
     subagent_tool_count = 0
+    subagent_request_count = 0
     model_invoked_skill_count = 0
     for record in records:
         if is_synthetic_assistant(record):
@@ -201,11 +218,15 @@ def compute_subagent_counts(records: Iterable[Record]) -> SubagentCounts:
                 total = tool_use_result.get("totalToolUseCount")
                 if isinstance(total, int):
                     subagent_tool_count += total
+                agent_id = tool_use_result.get("agentId")
+                if isinstance(agent_id, str):
+                    subagent_request_count += subagent_index.requests_by_agent_id.get(agent_id, 0)
             if is_model_invoked_skill_rendering(record):
                 model_invoked_skill_count += 1
     return SubagentCounts(
         subagent_count=subagent_count,
         subagent_tool_count=subagent_tool_count,
+        subagent_request_count=subagent_request_count,
         model_invoked_skill_count=model_invoked_skill_count,
     )
 

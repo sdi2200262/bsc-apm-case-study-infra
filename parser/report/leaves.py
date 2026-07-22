@@ -120,12 +120,14 @@ def supplementary_data_leaves(counts: SubagentCounts) -> dict[str, int]:
         counts: The scope's subagent counts.
 
     Returns:
-        The ``subagent_count``, ``subagent_tool_count``, and
-        ``model_invoked_skill_count`` leaves.
+        The ``subagent_count``, ``subagent_tool_count``,
+        ``subagent_request_count``, and ``model_invoked_skill_count``
+        leaves.
     """
     return {
         "subagent_count": counts.subagent_count,
         "subagent_tool_count": counts.subagent_tool_count,
+        "subagent_request_count": counts.subagent_request_count,
         "model_invoked_skill_count": counts.model_invoked_skill_count,
     }
 

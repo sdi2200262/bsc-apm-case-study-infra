@@ -165,6 +165,7 @@ CONTRACT: dict[str, FieldSpec] = {
     ),
     "subagent_count": FieldSpec(kind="data", label="supplementary"),
     "subagent_tool_count": FieldSpec(kind="data", label="supplementary"),
+    "subagent_request_count": FieldSpec(kind="data", label="supplementary"),
     "model_invoked_skill_count": FieldSpec(kind="data", label="supplementary"),
     "tool_result_count": FieldSpec(kind="data", label="supplementary"),
     "tool_error_count": FieldSpec(kind="data", label="supplementary"),

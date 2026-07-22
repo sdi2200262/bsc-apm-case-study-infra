@@ -277,7 +277,7 @@ def _build_scope_blocks(
     user_input_counts = compute_user_input_counts(turns, steer_events, short_threshold)
     user_input_shares = compute_user_input_shares(user_input_counts)
     tool_counts = compute_tool_counts(scope_records)
-    subagent_counts = compute_subagent_counts(scope_records)
+    subagent_counts = compute_subagent_counts(scope_records, subagent_index)
     request_counts = compute_request_counts(scope_records)
 
     data_block: dict[str, Any] = {
