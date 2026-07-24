@@ -21,11 +21,11 @@ records:
 2. Build the ``RequestUsageIndex`` deduplicating ``message.usage`` by
    ``requestId``, the canonical per-call usage for token-sum metrics; the
    dedup rationale is on ``_build_usage_index`` and ``RequestUsageIndex``.
-3. Replay the queue lifecycle to classify each ``queue-operation`` record
-   as a ``delivered`` steer, an ``abandoned`` steer, or (for
-   system-generated enqueues) filtered out, emitting one ``SteerEvent``
-   per resolved user enqueue. Imbalances are recorded as warnings, not
-   errors, so the parser continues and surfaces them in diagnostics.
+3. Replay the queue lifecycle to classify each enqueue as ``delivered`` or
+   ``abandoned``, emitting one ``SteerEvent`` that records whether the enqueue
+   was user-authored or system-generated. Downstream steer metrics count only
+   the user-authored events. Imbalances are recorded as warnings, not errors,
+   so the parser continues and surfaces them in diagnostics.
 
 Steer classification (delivered vs abandoned) is owned here; how a
 delivered steer affects turn boundaries is owned by ``turns``, which
@@ -64,7 +64,7 @@ STEER_FATE_ABANDONED = "abandoned"
 
 @dataclass(frozen=True)
 class SteerEvent:
-    """One classified enqueue and the disposition that resolved it.
+    """One classified enqueue and its observed disposition.
 
     Attributes:
         enqueue_record: The ``queue-operation`` record carrying the
@@ -77,7 +77,8 @@ class SteerEvent:
         fate: ``STEER_FATE_DELIVERED`` when a later ``dequeue`` matched
             this enqueue and the queued content reached the model;
             ``STEER_FATE_ABANDONED`` when a later ``remove`` or
-            ``popAll`` cancelled it before delivery.
+            ``popAll`` cancelled it before delivery, or when it remained
+            unresolved at the end of the conversation file.
         resolution_record: The ``queue-operation`` record that resolved
             this enqueue. ``None`` only when the conversation file ends
             with the enqueue still unresolved.
@@ -366,20 +367,21 @@ def _build_usage_index(
 def _replay_queue_lifecycle(
     records: tuple[Record, ...],
 ) -> tuple[tuple[SteerEvent, ...], tuple[str, ...]]:
-    """Replay the queue lifecycle and emit one ``SteerEvent`` per resolved user enqueue.
+    """Replay the queue lifecycle and emit one ``SteerEvent`` per enqueue.
 
     Claude Code's queue holds both user-authored enqueues (a participant
     steer typed mid-turn) and system-generated enqueues (task
     notifications wrapped in ``<task-notification>...``). The two share one
     ordered queue: ``dequeue`` pops the oldest open enqueue regardless of
     source, ``remove`` pops the most recent, ``popAll`` clears every open
-    enqueue at once. The replay tracks every enqueue by source and emits a
-    ``SteerEvent`` only when the resolved enqueue is user-authored; system
-    enqueues are matched silently so the ordering invariant holds.
+    enqueue at once. The replay tracks every enqueue by source and marks each
+    event as user-authored or system-generated so downstream metrics can filter
+    the population without losing the queue-ordering invariant.
 
     Imbalances (a ``dequeue`` or ``remove`` with no open enqueue, or
     user-authored enqueues still open at end of file) are recorded as
-    warnings; the ``SteerEvent`` list still captures everything resolvable.
+    warnings; the ``SteerEvent`` list still captures every enqueue and
+    classifies an unresolved enqueue as abandoned.
     """
     open_enqueues: list[tuple[Record, bool]] = []
     events: list[SteerEvent] = []

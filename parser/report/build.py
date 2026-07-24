@@ -19,12 +19,12 @@ Scope selection differs by measure. The session and role scopes take a
 conversation-file record stream; a phase scope takes the records and
 wall-clock segments ``data.aggregate.turn_series`` selects for it, so its
 extensive quantities (tokens, cost, request and tool counts) and its
-wall-clock follow the phase in force at each record. The point-in-time
-measures (turn counts, turn-prompt buckets, steer events) are properties of
-the turn's starting prompt and stay turn-attributed in every scope. Every
-record carries a phase, so the three phase scopes partition the session's
-records exactly and their sums reconcile with the session scope; records
-preceding the first turn-starting prompt fall in ``other``.
+wall-clock follow the phase in force at each record. Turn counts and
+turn-prompt buckets follow the turn's starting prompt, while steer events
+follow the turn interval containing their enqueue. Every record carries a
+phase, so the three phase scopes partition the session's records exactly
+and their sums reconcile with the session scope; records preceding the
+first turn-starting prompt fall in ``other``.
 
 Naming convention. Every artifact key is snake_case. Per-conversation
 identity is collected into a single ``conversations`` array under
@@ -83,7 +83,7 @@ from ..data.turns import Turn
 from ..metrics.cost import CostMetrics, compute_cost_for_records
 from ..metrics.reliability import tool_success_rate
 from ..metrics.time import compute_time_metrics
-from ..metrics.user_input import compute_user_input_shares
+from ..metrics.user_input import compute_turn_prompt_buckets
 from ..rates import RateTable
 from .leaves import (
     cost_leaves,
@@ -94,8 +94,8 @@ from .leaves import (
     time_leaves_role,
     token_leaves,
     tool_count_leaves,
+    turn_prompt_bucket_leaves,
     user_input_count_leaves,
-    user_input_share_leaves,
 )
 
 PHASE_KEYS: tuple[str, ...] = (PHASE_PLANNING, PHASE_IMPLEMENTATION, PHASE_OTHER)
@@ -113,8 +113,8 @@ def build_artifacts(
     Args:
         session: An assembled session.
         rate_table: The rate table to compute cost against.
-        short_threshold: Bucket classifier threshold for the user-input
-            dimension.
+        short_threshold: Bucket classifier threshold for the turn-prompt
+            metrics.
 
     Returns:
         The ``(data_artifact, metrics_artifact)`` pair, each a
@@ -275,7 +275,7 @@ def _build_scope_blocks(
         phase_segments=phase_segments,
     )
     user_input_counts = compute_user_input_counts(turns, steer_events, short_threshold)
-    user_input_shares = compute_user_input_shares(user_input_counts)
+    turn_prompt_buckets = compute_turn_prompt_buckets(user_input_counts)
     tool_counts = compute_tool_counts(scope_records)
     subagent_counts = compute_subagent_counts(scope_records, subagent_index)
     request_counts = compute_request_counts(scope_records)
@@ -296,7 +296,7 @@ def _build_scope_blocks(
     metric_block: dict[str, Any] = {
         **cost_leaves(cost),
         **time_block,
-        **user_input_share_leaves(user_input_shares),
+        **turn_prompt_bucket_leaves(turn_prompt_buckets),
         "tool_success_rate": tool_success_rate(tool_counts),
     }
     return data_block, metric_block

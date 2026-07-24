@@ -75,18 +75,20 @@ def build_turn_records(session: Session, short_threshold: int) -> list[dict[str,
     still carries the phase of the turn's starting prompt.
 
     Each turn also carries a ``prompt_bucket`` (``protocol``,
-    ``short``, or ``standard``): the behavioural bucket of the turn's
+    ``short``, or ``standard``): the content bucket of the turn's
     starting prompt, classified by the same text-and-threshold path
-    that the user-input dimension uses to compute
+    that the turn-prompt metric uses to compute
     ``turn_prompts_bucket_shares`` (see
     ``data.aggregate.counts.compute_user_input_counts``), so the
     per-turn labels aggregate exactly to those shares within a scope.
+    Its ``steer_count`` includes only user-authored steers associated
+    with the turn; system-generated queue events remain excluded.
 
     Args:
         session: The session whose turns are being rendered.
         short_threshold: Upper bound (exclusive) on prompt length for
             the ``short`` bucket, in characters; the same value the
-            user-input counts use.
+            turn-prompt metrics use.
 
     Returns:
         One dict per turn in ``session.turns``.
@@ -105,7 +107,7 @@ def build_turn_records(session: Session, short_threshold: int) -> list[dict[str,
                 "start_timestamp": iso_or_none(turn.start_timestamp),
                 "end_timestamp": iso_or_none(turn.end_timestamp),
                 "duration_seconds": (turn.end_timestamp - turn.start_timestamp).total_seconds(),
-                "steer_count": len(turn.steer_events),
+                "steer_count": sum(event.is_user_authored for event in turn.steer_events),
                 "request_count": _count_turn_requests(turn),
                 "phase_request_share": _phase_request_share(turn, request_phase_index),
             }
@@ -411,9 +413,9 @@ def _phase_request_share(
 
 
 def _prompt_bucket_of_turn(turn: Turn, short_threshold: int) -> str:
-    """Return the behavioural bucket of a turn's starting prompt.
+    """Return the content bucket of a turn's starting prompt.
 
-    Reuses the user-input dimension's classification path exactly: the
+    Reuses the turn-prompt metric's classification path exactly: the
     starting-prompt text comes from ``user_prompt_text`` and is fed to
     ``classify_bucket`` with the same threshold, so the per-turn label
     matches the input the ``turn_prompts_bucket_shares`` aggregate

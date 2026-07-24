@@ -13,7 +13,7 @@ phase, and role for APM submissions), and writes two artifacts.
 counts, session identity facts, and the per-call, per-turn,
 per-context-window, and per-dispatch series.
 `parser_metrics.json` holds the derived metrics, the cost, time
-statistics, bucket distributions, and success rate. A one-time
+statistics, turn-prompt bucket distributions, and success rate. A one-time
 `--schema` mode writes `parser_schema.json`, the field contract giving
 each leaf's kind, label, and formula. `python -m parser.inspect` renders
 the artifacts in a human-readable form.

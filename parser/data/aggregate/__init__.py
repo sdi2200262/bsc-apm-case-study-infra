@@ -11,7 +11,7 @@ Submodules:
 - ``tokens``: per-scope token sums, the model-token distribution, and the
   dispatch-resolution provenance.
 - ``counts``: every count (requests, subagents, tools, turns, steers) and
-  the per-input bucket-and-length series the user-input metric folds.
+  the per-prompt bucket-and-length series the turn-prompt metric folds.
 """
 
 from __future__ import annotations
