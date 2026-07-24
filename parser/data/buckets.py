@@ -1,18 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) BSc APM Case Study 2025-2026
-"""Classify a user input into one of three behavioural buckets.
+"""Classify a turn prompt into one of three content buckets.
 
-Every turn-starting user prompt and every delivered steer is
-classified into exactly one of:
+Every turn-starting user prompt is classified into exactly one of:
 
-* ``protocol``: the input invokes a recognised framework slash
+* ``protocol``: the prompt invokes a framework slash
   command (an APM ``apm-*`` or a Spec-kit ``speckit-*`` command)
   inside a ``<command-name>`` marker. Local Claude Code commands
   such as ``/clear`` or ``/exit`` are not framework participation
-  and do not put an input in the protocol bucket.
-* ``short``: not a protocol input, and the text content is shorter
+  and do not put a prompt in the protocol bucket.
+* ``short``: not a protocol prompt, and the text content is shorter
   than the configured threshold in characters.
-* ``standard``: not a protocol input, and the text content meets
+* ``standard``: not a protocol prompt, and the text content meets
   or exceeds the configured threshold.
 
 The default threshold is 50 characters; an alternate value can be
@@ -33,13 +32,11 @@ DEFAULT_SHORT_THRESHOLD = 50
 
 
 def classify_bucket(text: str, short_threshold: int) -> str:
-    """Classify a user input into ``protocol``, ``short``, or ``standard``.
+    """Classify a turn prompt into ``protocol``, ``short``, or ``standard``.
 
     Args:
-        text: The input's full text content. For a turn-starting
-            user prompt, this is the concatenated text of the
-            record's text content blocks. For a delivered steer,
-            this is the queue enqueue's content field.
+        text: The prompt's full text content, formed by concatenating
+            the record's text content blocks.
         short_threshold: Upper bound (exclusive) on text length for
             the ``short`` bucket, in characters.
 

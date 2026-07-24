@@ -329,7 +329,8 @@ def queue_record_content(record: Record) -> str | None:
 def is_user_authored_enqueue(record: Record) -> bool:
     """Return ``True`` for enqueue records whose content is a user-typed steer.
 
-    A steer is a user prompt queued mid-turn that reaches the model.
+    A steer is a user prompt queued mid-turn. Its queue lifecycle determines
+    whether it reaches the model.
     Two enqueue populations are excluded:
 
     - System-generated enqueues wrapped in ``<task-notification>``

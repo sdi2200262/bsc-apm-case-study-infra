@@ -25,7 +25,7 @@ from ..data.session import Session
 from ..metrics.cost import CostMetrics
 from ..metrics.reliability import tool_success_rate
 from ..metrics.time import compute_time_metrics
-from ..metrics.user_input import compute_user_input_shares
+from ..metrics.user_input import compute_turn_prompt_buckets
 from ..rates import (
     CATEGORY_CACHE_1H,
     CATEGORY_CACHE_5M,
@@ -107,7 +107,7 @@ def print_process(session: Session, short_threshold: int) -> None:
     all_records = [record for view in session.views for record in view.conversation.records]
     time_metrics = compute_time_metrics(session.turns)
     user_input_counts = compute_user_input_counts(session.turns, all_steers, short_threshold)
-    user_input_shares = compute_user_input_shares(user_input_counts)
+    turn_prompt_buckets = compute_turn_prompt_buckets(user_input_counts)
     success_rate = tool_success_rate(compute_tool_counts(all_records))
     log.info("process dimension (session scope):")
     log.blank()
@@ -127,25 +127,13 @@ def print_process(session: Session, short_threshold: int) -> None:
     log.info(f"    turn_prompt_count:       {user_input_counts.turn_prompt_count}")
     log.info(f"    steer_delivered_count:   {user_input_counts.steer_delivered_count}")
     log.info(f"    steer_abandoned_count:   {user_input_counts.steer_abandoned_count}")
-    log.info(f"    steer_attempted_count:   {user_input_counts.steer_attempted_count}")
     log.info("    turn_prompts_bucket_shares:")
     for bucket in BUCKETS:
-        log.info(f"      {bucket:10} {user_input_shares.turn_prompts_bucket_shares[bucket]:.4f}")
-    log.info("    steer_delivered_bucket_shares:")
-    for bucket in BUCKETS:
-        log.info(f"      {bucket:10} {user_input_shares.steer_delivered_bucket_shares[bucket]:.4f}")
-    log.info("    all_inputs_bucket_shares:")
-    for bucket in BUCKETS:
-        log.info(f"      {bucket:10} {user_input_shares.all_inputs_bucket_shares[bucket]:.4f}")
+        log.info(f"      {bucket:10} {turn_prompt_buckets.turn_prompts_bucket_shares[bucket]:.4f}")
     log.info("    turn_prompts_magnitude_by_bucket (mean chars):")
     for bucket in BUCKETS:
         log.info(
-            f"      {bucket:10} {user_input_shares.turn_prompts_magnitude_by_bucket[bucket]:.1f}"
-        )
-    log.info("    steer_delivered_magnitude_by_bucket (mean chars):")
-    for bucket in BUCKETS:
-        log.info(
-            f"      {bucket:10} {user_input_shares.steer_delivered_magnitude_by_bucket[bucket]:.1f}"
+            f"      {bucket:10} {turn_prompt_buckets.turn_prompts_magnitude_by_bucket[bucket]:.1f}"
         )
     log.blank()
     log.info("  supplementary:")

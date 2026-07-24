@@ -12,7 +12,7 @@ Submodules:
 - ``cost``: per-call API-equivalent cost against the rate table.
 - ``time``: turn-time decomposition, inter-turn time, duration, and the
   per-turn duration distribution statistics.
-- ``user_input``: bucket shares and per-bucket mean magnitudes.
+- ``user_input``: turn-prompt bucket shares and per-bucket mean magnitudes.
 - ``reliability``: tool-call success rate.
 """
 

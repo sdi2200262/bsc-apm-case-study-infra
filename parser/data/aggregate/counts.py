@@ -7,8 +7,8 @@ transcript whose only freedom is which records are selected. This module
 owns those counts: the request, subagent, tool, and user-input groups as
 one dataclass each (see each dataclass's ``Attributes`` for the exact
 populations), the turn count as the standalone ``turn_count`` function,
-and the per-input ``BucketedInput`` bucket-and-length series the
-user-input metric folds without re-reading records.
+and the per-prompt ``BucketedPrompt`` bucket-and-length series the
+turn-prompt metric folds without re-reading records.
 
 The request, subagent, and tool counts share their selection rules with
 the token and reliability folds rather than redefining them: the main-call
@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..buckets import classify_bucket
-from ..conversation import STEER_FATE_DELIVERED, SteerEvent
+from ..conversation import STEER_FATE_ABANDONED, STEER_FATE_DELIVERED, SteerEvent
 from ..prompts import is_model_invoked_skill_rendering
 from ..schema import (
     AGENT_TOOL_NAME,
@@ -35,7 +35,6 @@ from ..schema import (
     Record,
     assistant_content_blocks,
     is_synthetic_assistant,
-    queue_record_content,
     user_content_blocks,
     user_prompt_text,
 )
@@ -103,13 +102,13 @@ class ToolCounts:
 
 
 @dataclass(frozen=True)
-class BucketedInput:
-    """One user input reduced to its bucket label and character length.
+class BucketedPrompt:
+    """One turn prompt reduced to its bucket label and character length.
 
     Attributes:
-        bucket: The input-size bucket constant (``protocol`` / ``short`` /
-            ``standard``) the input's text classified into.
-        length: The character length of the input's text.
+        bucket: The prompt-size bucket constant (``protocol`` / ``short`` /
+            ``standard``) the prompt's text classified into.
+        length: The character length of the prompt's text.
     """
 
     bucket: str
@@ -118,27 +117,22 @@ class BucketedInput:
 
 @dataclass(frozen=True)
 class UserInputCounts:
-    """User-input count block plus the per-input bucket-and-length series.
+    """User-input counts plus the per-prompt bucket-and-length series.
 
     Attributes:
         turn_prompt_count: Number of turn-starting user prompts.
         steer_delivered_count: Steers whose queued content reached the
             model.
-        steer_abandoned_count: Steers cancelled before delivery.
-        steer_attempted_count:
-            ``steer_delivered_count + steer_abandoned_count``.
-        turn_prompt_inputs: One ``BucketedInput`` per turn-starting prompt,
+        steer_abandoned_count: Steers not delivered because they were
+            cancelled or remained unresolved when the conversation ended.
+        turn_prompt_inputs: One ``BucketedPrompt`` per turn-starting prompt,
             in turn order.
-        delivered_steer_inputs: One ``BucketedInput`` per delivered steer,
-            in steer order.
     """
 
     turn_prompt_count: int
     steer_delivered_count: int
     steer_abandoned_count: int
-    steer_attempted_count: int
-    turn_prompt_inputs: tuple[BucketedInput, ...]
-    delivered_steer_inputs: tuple[BucketedInput, ...]
+    turn_prompt_inputs: tuple[BucketedPrompt, ...]
 
 
 def compute_request_counts(records: Iterable[Record]) -> RequestCounts:
@@ -264,12 +258,12 @@ def compute_user_input_counts(
     steer_events: Iterable[SteerEvent],
     short_threshold: int,
 ) -> UserInputCounts:
-    """Compute user-input counts and the per-input bucket-and-length series.
+    """Compute user-input counts and the turn-prompt bucket series.
 
-    The turn-prompt and delivered-steer populations are each reduced to a
-    ``BucketedInput`` series here, in the data layer, so the user-input
-    metric folds shares and magnitudes without reading records or calling
-    the schema extractors.
+    Turn prompts are reduced to a ``BucketedPrompt`` series here, in the
+    data layer, so the metric folds shares and magnitudes without reading
+    records or calling the schema extractors. Steers retain only their
+    disjoint delivered and abandoned counts.
 
     Args:
         turns: Turns whose starting prompts make up the turn-prompt
@@ -284,38 +278,27 @@ def compute_user_input_counts(
     turn_list = list(turns)
     user_events = [e for e in steer_events if e.is_user_authored]
     delivered_events = [e for e in user_events if e.fate == STEER_FATE_DELIVERED]
-    abandoned_events = [e for e in user_events if e.fate != STEER_FATE_DELIVERED]
+    abandoned_events = [e for e in user_events if e.fate == STEER_FATE_ABANDONED]
     turn_prompt_inputs = tuple(
-        _bucketed_input(_text_of_turn_prompt(turn.starting_prompt), short_threshold)
+        _bucketed_prompt(_text_of_turn_prompt(turn.starting_prompt), short_threshold)
         for turn in turn_list
-    )
-    delivered_steer_inputs = tuple(
-        _bucketed_input(_text_of_steer(event), short_threshold) for event in delivered_events
     )
     return UserInputCounts(
         turn_prompt_count=len(turn_list),
         steer_delivered_count=len(delivered_events),
         steer_abandoned_count=len(abandoned_events),
-        steer_attempted_count=len(delivered_events) + len(abandoned_events),
         turn_prompt_inputs=turn_prompt_inputs,
-        delivered_steer_inputs=delivered_steer_inputs,
     )
 
 
-def _bucketed_input(text: str, short_threshold: int) -> BucketedInput:
-    """Reduce an input's text to its bucket label and character length."""
-    return BucketedInput(bucket=classify_bucket(text, short_threshold), length=len(text))
+def _bucketed_prompt(text: str, short_threshold: int) -> BucketedPrompt:
+    """Reduce a turn prompt to its bucket label and character length."""
+    return BucketedPrompt(bucket=classify_bucket(text, short_threshold), length=len(text))
 
 
 def _text_of_turn_prompt(record: Record) -> str:
     """Return the prompt text used for bucket classification on a turn-starter."""
     return user_prompt_text(record)
-
-
-def _text_of_steer(event: SteerEvent) -> str:
-    """Return the queued content used for bucket classification on a steer."""
-    content = queue_record_content(event.enqueue_record)
-    return content if content is not None else ""
 
 
 def _tool_result_blocks(record: Record) -> list[dict[str, Any]]:

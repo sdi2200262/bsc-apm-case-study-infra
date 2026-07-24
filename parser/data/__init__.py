@@ -17,7 +17,7 @@ Submodules:
 - ``subagent_models``: sibling subagent model index and fallback resolver.
 - ``commands``: framework, role, and phase command vocabulary.
 - ``prompts``: user-record predicates.
-- ``buckets``: input-size bucket classifier.
+- ``buckets``: turn-prompt content-bucket classifier.
 - ``apm_roles`` / ``speckit_phases``: framework role and phase assignment.
 - ``turns``: turn derivation.
 - ``session``: ``Session`` assembly and the session identity facts.

@@ -4,11 +4,10 @@
 
 The three output artifacts carry bare ``name: value`` leaves. The
 description of each leaf, its kind (whether the data layer read it or the
-metrics layer derived it), its analysis label (whether it drives a
-hypothesis test, decomposes one, or is descriptive only), and a one-line
-formula for the metrics, lives here and nowhere else. ``--schema`` writes
-this map once to ``parser_schema.json``; the per-session artifacts do not
-repeat it.
+metrics layer derived it), its reporting label (whether it is a study
+measure, decomposes one, or supplies context only), and a one-line formula
+for the metrics, lives here and nowhere else. ``--schema`` writes this map
+once to ``parser_schema.json``; the per-session artifacts do not repeat it.
 
 This module is a root leaf: it imports nothing from the ``data``,
 ``metrics``, or ``report`` layers, so the layers and the report assembler
@@ -32,9 +31,9 @@ class FieldSpec:
         kind: ``"data"`` when the data layer read, aggregated, or counted
             the value; ``"metric"`` when the metrics layer derived it from
             a study-defined formula.
-        label: ``"primary"`` for a hypothesis-tested endpoint,
-            ``"secondary"`` for a decomposition of a Primary, and
-            ``"supplementary"`` for a descriptive value that is not tested.
+        label: ``"primary"`` for a directly reported study measure,
+            ``"secondary"`` for a decomposition of a primary measure, and
+            ``"supplementary"`` for an operational or contextual value.
         formula: One-line description of the metric's computation, set for
             metrics and ``None`` for data leaves.
     """
@@ -130,32 +129,16 @@ CONTRACT: dict[str, FieldSpec] = {
     ),
     "turn_prompt_count": FieldSpec(kind="data", label="primary"),
     "steer_delivered_count": FieldSpec(kind="data", label="primary"),
-    "steer_attempted_count": FieldSpec(kind="data", label="primary"),
-    "steer_abandoned_count": FieldSpec(kind="data", label="secondary"),
+    "steer_abandoned_count": FieldSpec(kind="data", label="primary"),
     "turn_prompts_bucket_shares": FieldSpec(
         kind="metric",
         label="primary",
         formula="count per bucket over the turn-prompt population",
     ),
-    "steer_delivered_bucket_shares": FieldSpec(
-        kind="metric",
-        label="primary",
-        formula="count per bucket over the delivered-steer population",
-    ),
-    "all_inputs_bucket_shares": FieldSpec(
-        kind="metric",
-        label="primary",
-        formula="count per bucket over the union of turn prompts and delivered steers",
-    ),
     "turn_prompts_magnitude_by_bucket": FieldSpec(
         kind="metric",
         label="primary",
         formula="mean character length per bucket over the turn-prompt population",
-    ),
-    "steer_delivered_magnitude_by_bucket": FieldSpec(
-        kind="metric",
-        label="primary",
-        formula="mean character length per bucket over the delivered-steer population",
     ),
     "tool_success_rate": FieldSpec(
         kind="metric",

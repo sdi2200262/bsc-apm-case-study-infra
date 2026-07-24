@@ -251,8 +251,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_SHORT_THRESHOLD,
         help=(
             "Upper bound (exclusive) on text length for the 'short' "
-            "input bucket, in characters. Affects the user-input "
-            "dimension's bucket distributions and magnitudes."
+            "turn-prompt bucket, in characters. Affects the turn-prompt "
+            "bucket distributions and magnitudes."
         ),
     )
     parser.add_argument(

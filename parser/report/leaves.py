@@ -18,7 +18,7 @@ from ..data.aggregate.counts import RequestCounts, SubagentCounts, ToolCounts, U
 from ..data.aggregate.tokens import TokenData
 from ..metrics.cost import CostMetrics
 from ..metrics.time import TimeMetrics
-from ..metrics.user_input import UserInputShares
+from ..metrics.user_input import TurnPromptBuckets
 
 _TOKEN_CATEGORIES: tuple[str, ...] = ("input", "output", "cache_read", "cache_5m", "cache_1h")
 
@@ -103,13 +103,12 @@ def user_input_count_leaves(counts: UserInputCounts) -> dict[str, int]:
         counts: The scope's user-input counts.
 
     Returns:
-        The four turn-prompt and steer counts.
+        The turn-prompt count and the two disjoint steer counts.
     """
     return {
         "turn_prompt_count": counts.turn_prompt_count,
         "steer_delivered_count": counts.steer_delivered_count,
         "steer_abandoned_count": counts.steer_abandoned_count,
-        "steer_attempted_count": counts.steer_attempted_count,
     }
 
 
@@ -220,19 +219,16 @@ def time_leaves_role(metrics: TimeMetrics, turn_count: int) -> dict[str, float]:
     }
 
 
-def user_input_share_leaves(shares: UserInputShares) -> dict[str, Any]:
-    """Render the per-scope user-input bucket-distribution metric leaves.
+def turn_prompt_bucket_leaves(buckets: TurnPromptBuckets) -> dict[str, Any]:
+    """Render the per-scope turn-prompt bucket metric leaves.
 
     Args:
-        shares: The scope's user-input shares and magnitudes.
+        buckets: The scope's turn-prompt bucket shares and magnitudes.
 
     Returns:
-        The five bucket-share and magnitude metric leaves.
+        The bucket-share and magnitude metric leaves.
     """
     return {
-        "turn_prompts_bucket_shares": shares.turn_prompts_bucket_shares,
-        "steer_delivered_bucket_shares": shares.steer_delivered_bucket_shares,
-        "all_inputs_bucket_shares": shares.all_inputs_bucket_shares,
-        "turn_prompts_magnitude_by_bucket": shares.turn_prompts_magnitude_by_bucket,
-        "steer_delivered_magnitude_by_bucket": shares.steer_delivered_magnitude_by_bucket,
+        "turn_prompts_bucket_shares": buckets.turn_prompts_bucket_shares,
+        "turn_prompts_magnitude_by_bucket": buckets.turn_prompts_magnitude_by_bucket,
     }
