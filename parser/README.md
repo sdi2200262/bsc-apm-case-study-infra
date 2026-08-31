@@ -48,6 +48,10 @@ python -m parser <submission-path> --framework {apm,speckit} --process
 python -m parser.sanitize <submission-path>
 python -m parser.sanitize <submission-path> --unsanitize
 
+# Seal one archive to an explicit destination, then restore it
+python -m parser.sanitize dataset.zip --output dataset.enc
+python -m parser.sanitize dataset.enc --unsanitize --output restored-dataset.zip
+
 # Full option list
 python -m parser --help
 ```
@@ -64,7 +68,10 @@ it shares none of the parser's framework, rate-table, or session
 machinery. It walks a directory recursively and seals every file beneath
 it (the transcripts, the `subagents/` and `tool-results/` contents, and
 the `solution.patch`), or seals a single file when given one; `--unsanitize`
-restores each sealed file to its original name in place.
+restores each sealed file to its original name in place. `--output` gives a
+single input file an explicit destination and rejects an existing destination.
+Each sealed file carries an authentication tag, so a wrong secret or modified
+ciphertext fails before plaintext is written.
 
 ## Environment variables
 
