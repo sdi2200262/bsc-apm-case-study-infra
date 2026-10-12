@@ -40,7 +40,16 @@ before grading.
 
 ## Quick start
 
+The package runs without installation. It needs the prerequisites above
+and its Python dependencies. Invoke it as a module from the repository
+root, the directory that holds `grader/`.
+
 ```bash
+# Install the Python dependencies from the repository root
+cd bsc-apm-case-study-infra
+uv venv && . .venv/bin/activate
+uv pip install requests urllib3 pyyaml python-dateutil jsonschema
+
 # Bring the grading environment up (see ../grader-env/)
 ~/.bsc-apm-grader-env/install
 ~/.bsc-apm-grader-env/scripts/up
