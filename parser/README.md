@@ -23,11 +23,15 @@ schema authority; each module's docstring carries the detail.
 
 ## Quick start
 
-The package runs without installation; invoke it as a module from this
-directory so it resolves on the import path.
+The package runs without installation. It needs Python 3.12+ with PyYAML,
+and python-dotenv to read a `.env`. Invoke it as a module from the
+repository root, the directory that holds `parser/`.
 
 ```bash
-cd bsc-apm-case-study-infra/parser
+# Install the Python dependencies from the repository root
+cd bsc-apm-case-study-infra
+python3 -m venv .venv && . .venv/bin/activate
+pip install pyyaml python-dotenv
 
 # Build the data and metrics artifacts into an output directory
 python -m parser <submission-path> --framework {apm,speckit} --metrics -o out_dir
@@ -58,8 +62,8 @@ python -m parser --help
 
 `<submission-path>` is a single `*.jsonl` file (development convenience)
 or a directory of them; sibling `<sessionId>/subagents/` and
-`<sessionId>/tool-results/` subdirectories handled accordingly.
-`--framework` is required for every mode and never inferred from file
+`<sessionId>/tool-results/` subdirectories are handled accordingly.
+`--framework` is required for every mode except `--schema` and never inferred from file
 content, so a non-protocol opening prompt cannot silently mis-classify a
 session.
 
@@ -76,8 +80,9 @@ ciphertext fails before plaintext is written.
 ## Environment variables
 
 - **CC_PARSER_SECRET**, required by `python -m parser.sanitize`, must match
-  across sealing and restoring. Read from the environment or a
-  `.env` entry of the same name.
+  across sealing and restoring. Read from the environment or, with
+  python-dotenv installed, a `.env` entry of the same name in `parser/`
+  or a directory above it.
 - **CC_PARSER_RATE_TABLE**, optional, overrides the rate-table YAML path
   so an older session can re-run against historical rates without
   editing the canonical `parser/rates.yaml`.
