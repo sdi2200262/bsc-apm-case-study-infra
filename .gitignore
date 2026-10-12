@@ -6,6 +6,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Local secrets
+.env
+
 # Python virtual environments
 .venv/
 venv/
