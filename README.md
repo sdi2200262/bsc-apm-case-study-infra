@@ -16,11 +16,12 @@ The task spec, participant package, and containerised testing environment ship f
 - **[grader-env/README.md](grader-env/README.md)**: the grading environment, its seed, and how it diverges from the participant mock.
 - **[parser/README.md](parser/README.md)**: the transcript parser and its CLI surface.
 
-## Related
+## Related repositories
 
-- [bsc-apm-thesis](https://github.com/sdi2200262/bsc-apm-thesis): thesis LaTeX source.
-- [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task): task specification, participant package, and testing environment.
-- [bsc-apm-case-study-data](https://github.com/sdi2200262/bsc-apm-case-study-data): participant submissions.
+- [bsc-apm-thesis](https://github.com/sdi2200262/bsc-apm-thesis): thesis source, analysis scripts, and generated results.
+- [bsc-apm-case-study-task](https://github.com/sdi2200262/bsc-apm-case-study-task): task, participant package, and testing environment.
+- [bsc-apm-case-study-data](https://github.com/sdi2200262/bsc-apm-case-study-data): encrypted study dataset.
+- [agentic-project-management](https://github.com/sdi2200262/agentic-project-management): the APM framework.
 
 ## License
 
@@ -28,4 +29,7 @@ GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 ---
 
-*Part of the BSc APM Case Study evaluating the Agentic Project Management (APM) framework, Department of Informatics and Telecommunications, University of Athens.*
+*Part of the BSc thesis "Agentic Project Management: A Spec-Driven Multi-Agent Framework for
+AI-Assisted Software Engineering" by Konstantinos Chaidemenos, supervised by Thanassis Avgerinos,
+Department of Informatics and Telecommunications, National and Kapodistrian University of Athens,
+2026.*
